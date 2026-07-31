@@ -1,0 +1,1546 @@
+<!DOCTYPE html>
+<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word">
+<head>
+<meta charset="utf-8" />
+<title>DEEP ALGORITHMS IAM / PAM Console — User Manual</title>
+<style>
+@page { size: Letter; margin: 20mm 18mm; }
+body { font-family: Georgia, "Times New Roman", serif; font-size: 11pt; line-height: 1.55; color: #1b1f27; margin: 0 auto; max-width: 190mm; padding: 24px; background: #ffffff; }
+h1, h2, h3, h4 { font-family: Arial, Helvetica, sans-serif; color: #0f172a; line-height: 1.25; }
+h1 { font-size: 26pt; margin: 0 0 6px; }
+h2 { font-size: 17pt; margin: 34px 0 8px; border-bottom: 2px solid #0ea5e9; padding-bottom: 5px; page-break-after: avoid; }
+h3 { font-size: 13pt; margin: 22px 0 6px; page-break-after: avoid; }
+h4 { font-size: 11.5pt; margin: 16px 0 4px; page-break-after: avoid; }
+p { margin: 0 0 10px; }
+ol, ul { margin: 0 0 12px; padding-left: 24px; }
+li { margin-bottom: 5px; }
+table { border-collapse: collapse; width: 100%; margin: 10px 0 16px; font-size: 10pt; }
+th, td { border: 1px solid #c9d1dc; padding: 6px 9px; text-align: left; vertical-align: top; }
+th { background: #eef4f9; font-family: Arial, Helvetica, sans-serif; font-size: 9.5pt; }
+code { font-family: "Courier New", monospace; font-size: 10pt; background: #f2f5f8; padding: 1px 3px; }
+.shot { border: 1px dashed #7f93a8; background: #f7fafc; padding: 14px 16px; margin: 12px 0 18px; font-family: Arial, Helvetica, sans-serif; font-size: 10pt; color: #33465c; }
+.shot .line { font-weight: bold; color: #0f172a; }
+.shot .space { display: block; height: 120px; border: 1px solid #dde5ee; background: #ffffff; margin-top: 10px; }
+.note { border-left: 4px solid #0ea5e9; background: #f2f9fd; padding: 10px 14px; margin: 12px 0 16px; font-size: 10.5pt; }
+.warn { border-left: 4px solid #d97706; background: #fdf7ee; padding: 10px 14px; margin: 12px 0 16px; font-size: 10.5pt; }
+.term { border: 1px solid #d7e0ea; background: #fbfdfe; padding: 10px 14px; margin: 12px 0 16px; font-size: 10.5pt; }
+.cover { text-align: center; padding: 60px 0 40px; border-bottom: 3px solid #0f172a; margin-bottom: 30px; }
+.cover .sub { font-family: Arial, Helvetica, sans-serif; font-size: 13pt; color: #44536a; margin-top: 10px; }
+.cover .meta { font-family: Arial, Helvetica, sans-serif; font-size: 10pt; color: #6b7a90; margin-top: 24px; }
+.toc { font-family: Arial, Helvetica, sans-serif; font-size: 10.5pt; }
+.toc li { margin-bottom: 3px; }
+.pagebreak { page-break-before: always; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <h1>DEEP ALGORITHMS</h1>
+  <div class="sub">IAM &amp; PAM Console — Complete User Manual and Client Guide</div>
+  <div class="meta">
+    Identity &amp; Access Management (IAM) · Privileged Access Management (PAM)<br />
+    Prepared for clients, new administrators and first-time users<br />
+    Document version 1.0
+  </div>
+</div>
+
+<h2 id="toc">Table of Contents</h2>
+<div class="toc">
+<ol>
+  <li>About This Manual</li>
+  <li>Understanding the Platform</li>
+  <li>Getting Access to the Console
+    <ol>
+      <li>Registering a Company Tenant</li>
+      <li>Signing In</li>
+      <li>Two-Factor Verification at Sign-In</li>
+      <li>Forgotten Password and Password Reset</li>
+      <li>Signing Out</li>
+    </ol>
+  </li>
+  <li>Finding Your Way Around
+    <ol>
+      <li>The Screen Layout</li>
+      <li>The Top Bar</li>
+      <li>The Sidebar</li>
+      <li>Global Search (Command Palette)</li>
+    </ol>
+  </li>
+  <li>The Dashboard</li>
+  <li>Users</li>
+  <li>User Details</li>
+  <li>Resources</li>
+  <li>Roles</li>
+  <li>Role Details</li>
+  <li>Policies</li>
+  <li>The Policy Editor</li>
+  <li>Privileged Access Management (PAM) — Overview</li>
+  <li>PAM — Audit Logs</li>
+  <li>PAM — Alerts</li>
+  <li>My Profile</li>
+  <li>Multi-Factor Authentication</li>
+  <li>Active Sessions</li>
+  <li>Features You Will See on Every Page</li>
+  <li>Additional Pages Reachable by Direct Link</li>
+  <li>Common Tasks — Quick Reference</li>
+  <li>Troubleshooting</li>
+  <li>Glossary of Terms</li>
+</ol>
+</div>
+
+<div class="pagebreak"></div>
+<h2 id="s1">1. About This Manual</h2>
+
+<p>This manual explains how to use the DEEP ALGORITHMS IAM &amp; PAM Console from beginning to end. It assumes you have never seen the platform before. Every page is described in plain language, every button is named exactly as it appears on screen, and every task is written as a numbered list of steps you can follow in order.</p>
+
+<h3>1.1 Who should read this</h3>
+<ul>
+  <li><strong>New administrators</strong> who will create users, grant access and review security activity.</li>
+  <li><strong>Client teams</strong> evaluating or adopting the platform.</li>
+  <li><strong>Auditors and reviewers</strong> who need to read access records and denial reports.</li>
+</ul>
+
+<h3>1.2 How to read the instructions</h3>
+<ul>
+  <li>Text in <strong>bold</strong> is something you can see and click on screen, such as a button or a tab.</li>
+  <li>Text in <code>this style</code> is a value you type or copy, such as an identifier or a web address.</li>
+  <li>Numbered lists are step-by-step procedures. Follow them from top to bottom.</li>
+  <li>The first time a technical word appears, it is explained in a box like the one below. All terms are also collected in the Glossary at the end.</li>
+</ul>
+
+<div class="term"><strong>Console</strong> — the word used in this manual for the website itself: the set of web pages you sign in to in order to manage identity, access and security records.</div>
+
+<h3>1.3 About the screenshots</h3>
+<p>Every major page and important screen in this manual has a screenshot placeholder. If you are able to add screenshots of that page, that is ideal; otherwise the blank space below each placeholder line is reserved so that images can be inserted later without changing the layout of the document.</p>
+
+<div class="shot">
+  <span class="line">[Screenshot Placeholder: Insert screenshot of the Console sign-in page here]</span><br />
+  Suggested shot: the full sign-in screen, showing the dark left panel and the white sign-in form on the right.
+  <span class="space"></span>
+</div>
+
+<h3>1.4 Printing and sharing</h3>
+<p>This document is formatted for standard Letter paper and can be printed or shared as a PDF without further adjustment. Section headings, tables and step lists are kept together on the page wherever possible.</p>
+
+<div class="pagebreak"></div>
+<h2 id="s2">2. Understanding the Platform</h2>
+
+<p>The console does two related jobs. Understanding the difference between them makes the rest of the manual much easier to follow.</p>
+
+<h3>2.1 IAM — Identity and Access Management</h3>
+<p>IAM answers the question <em>“who exists, and what are they allowed to do?”</em> In the IAM area you create people (users), define groupings of permissions (roles), write the rules that decide access (policies), and register the systems being protected (resources).</p>
+
+<h3>2.2 PAM — Privileged Access Management</h3>
+<p>PAM answers the question <em>“what actually happened?”</em> In the PAM area you read the record of every sign-in and every access decision (Audit Logs), and you review the access attempts that were refused (Alerts).</p>
+
+<h3>2.3 Key terms you will meet immediately</h3>
+
+<div class="term"><strong>Tenant</strong> — a completely separate workspace for one company. Your users, roles, policies and security records live inside your tenant and are never mixed with another company's. A tenant is also called an <em>account</em>.</div>
+
+<div class="term"><strong>Account ID</strong> — the identifier of your tenant, usually shown in the form <code>ACC-XXXXXXXX</code>. You need it every time you sign in, and it is displayed in the top bar while you work.</div>
+
+<div class="term"><strong>User</strong> — one person's identity record inside your tenant. A user has a username, an email address, a status (for example Active or Disabled), and whatever access has been granted to them.</div>
+
+<div class="term"><strong>Role</strong> — a collection of permissions that can be granted to a user as a single unit. Instead of granting twenty individual permissions to twenty people, you attach the permissions to one role and assign that role to the people who need it. Removing the role removes all of those permissions at once.</div>
+
+<div class="term"><strong>Policy</strong> — a document containing rules. Each rule states an <em>effect</em> (Allow or Deny), one or more <em>actions</em> (what may be done, for example <code>iam:user:Read</code>) and one or more <em>resources</em> (what it may be done to). Policies are attached to roles, or directly to individual users.</div>
+
+<div class="term"><strong>Resource</strong> — a system, application, dataset or service that the platform protects. Each resource is registered with a stable identifier called an <strong>ARN</strong> (for example <code>iam:app/my-app</code>), which policies refer to.</div>
+
+<div class="term"><strong>Permission decision</strong> — every time someone tries to do something, the platform evaluates the relevant policies and returns either <strong>Allow</strong> or <strong>Deny</strong>. A Deny rule always wins over an Allow rule.</div>
+
+<h3>2.4 How the pieces fit together</h3>
+<ol>
+  <li>You register a <strong>tenant</strong> for your company. This also creates the first administrator.</li>
+  <li>You register the <strong>resources</strong> you want to protect, so policies have something to refer to.</li>
+  <li>You write <strong>policies</strong> that state what may and may not be done to those resources.</li>
+  <li>You create <strong>roles</strong> and attach the policies to them.</li>
+  <li>You create <strong>users</strong> and assign the roles to them. Where a single person needs an exception, you attach a policy directly to that user.</li>
+  <li>You review activity in <strong>PAM → Audit Logs</strong>, and investigate refusals in <strong>PAM → Alerts</strong>.</li>
+</ol>
+
+<div class="pagebreak"></div>
+<h2 id="s3">3. Getting Access to the Console</h2>
+
+<h3 id="s31">3.1 Registering a Company Tenant</h3>
+<p>If your company does not yet have a workspace on the platform, the first step is to register a tenant. This is a public page — you do not need to be signed in to use it.</p>
+
+<div class="shot">
+  <span class="line">[Screenshot Placeholder: Insert screenshot of the Register Tenant page here]</span><br />
+  Suggested shot: the registration form showing the Company name, Domain, Admin email, First name and Last name fields, with the <strong>Register company</strong> button.
+  <span class="space"></span>
+</div>
+
+<h4>What this page does</h4>
+<p>It creates two things at once: an isolated tenant for your company, and a root administrator account inside it. The administrator's password is generated by the platform and shown only once.</p>
+
+<h4>Steps</h4>
+<ol>
+  <li>Open the sign-in page and select <strong>Register Tenant</strong> at the bottom of the form (the direct address is <code>/register-tenant</code>).</li>
+  <li>In <strong>Company name</strong>, type your organisation's name, for example <code>Acme Corporation</code>.</li>
+  <li>In <strong>Domain</strong>, type your company's internet domain, for example <code>acme.com</code>. It must be a valid domain name.</li>
+  <li>In <strong>Admin email</strong>, type the email address of the person who will be the first administrator.</li>
+  <li>Fill in <strong>First name</strong> and <strong>Last name</strong> for that administrator.</li>
+  <li>Select <strong>Register company</strong>.</li>
+  <li>Wait for the page to finish. The button shows <em>Registering…</em> while the request is in progress.</li>
+  <li>When registration succeeds, the page changes to <strong>Tenant registered</strong> and a spreadsheet of credentials downloads automatically to your computer.</li>
+  <li>Read the values displayed on screen and confirm they match the downloaded file. Six values are provided: <code>account_id</code>, <code>email</code>, <code>password</code>, <code>company_name</code>, <code>domain</code> and <code>tenant_id</code>.</li>
+  <li>Store the file somewhere safe and private.</li>
+  <li>Select <strong>Continue to sign in</strong>.</li>
+</ol>
+
+<div class="warn"><strong>Important:</strong> the administrator password is issued once and is never shown again. If the automatic download did not start, select <strong>Download again</strong> while the result is still on screen. Once you leave the page, the password cannot be retrieved.</div>
+
+<div class="shot">
+  <span class="line">[Screenshot Placeholder: Insert screenshot of the Tenant registered confirmation showing the one-time credentials here]</span>
+  <span class="space"></span>
+</div>
+
+<h4>If registration fails</h4>
+<ol>
+  <li>Read the red message shown at the top of the form — it explains what went wrong.</li>
+  <li>Check that the domain is spelled correctly and that the email address is valid.</li>
+  <li>Correct the highlighted fields and select <strong>Register company</strong> again.</li>
+</ol>
+
+<h3 id="s32">3.2 Signing In</h3>
+
+<div class="shot">
+  <span class="line">[Screenshot Placeholder: Insert screenshot of the Sign in page here]</span><br />
+  Suggested shot: the form showing the Username, Password and Account ID (tenant) fields, the <strong>Sign in securely</strong> button, the <strong>Sign in with Microsoft</strong> button and the <strong>Register Tenant</strong> link.
+  <span class="space"></span>
+</div>
+
+<h4>What you need before you start</h4>
+<ul>
+  <li>Your <strong>username</strong> (or email address).</li>
+  <li>Your <strong>password</strong>.</li>
+  <li>Your <strong>Account ID</strong> — the tenant identifier, for example <code>ACC-1A2B3C4D</code>. If you do not know it, ask your administrator, or look in the credentials spreadsheet produced when the tenant was registered.</li>
+</ul>
+
+<h4>Steps — signing in with a username and password</h4>
+<ol>
+  <li>Open the console address in your web browser. The sign-in page appears.</li>
+  <li>In <strong>Username</strong>, type your username or email address.</li>
+  <li>In <strong>Password</strong>, type your password.</li>
+  <li>In <strong>Account ID (tenant)</strong>, type your tenant identifier.</li>
+  <li>Select <strong>Sign in securely</strong>. The button shows <em>Signing in…</em> while it works.</li>
+  <li>If your account does not use two-factor verification, you are taken straight to the Dashboard and a short confirmation message appears.</li>
+  <li>If your account does use two-factor verification, continue with section 3.3.</li>
+</ol>
+
+<h4>Steps — signing in with your company account (single sign-on)</h4>
+<p>Single sign-on lets you use your existing company credentials instead of a separate password.</p>
+<ol>
+  <li>On the sign-in page, select <strong>Sign in with Microsoft</strong> below the divider marked <em>or</em>.</li>
+  <li>Your browser is redirected to your company's sign-in screen. Complete it there.</li>
+  <li>You are returned to the console and taken to the Dashboard.</li>
+  <li>If the redirect does not complete, a message appears explaining that the sign-in could not be started. Try again, or sign in with your username and password instead.</li>
+</ol>
+
+<div class="note">If your details are not accepted, the page shows a short message such as <em>Sign-in failed. Check your details and try again.</em> For security, the platform never states which of the three fields was wrong. Check all three, including the Account ID.</div>
+
+<h3 id="s33">3.3 Two-Factor Verification at Sign-In</h3>
+
+<div class="term"><strong>Multi-factor authentication (MFA)</strong> — a second proof of identity in addition to your password, normally a six-digit code from an authenticator app on your phone. It means a stolen password alone is not enough to access your account.</div>
+
+<div class="shot">
+  <span class="line">[Screenshot Placeholder: Insert screenshot of the Two-factor verification page here]</span><br />
+  Suggested shot: the small card titled <strong>Two-factor verification</strong> with the Authentication code field and the <strong>Verify &amp; sign in</strong> button.
+  <span class="space"></span>
+</div>
+
+<h4>Steps</h4>
+<ol>
+  <li>After entering your password, the <strong>Two-factor verification</strong> screen appears.</li>
+  <li>Open your authenticator app on your phone and find the entry for this console.</li>
+  <li>Type the current six-digit code into <strong>Authentication code</strong>.</li>
+  <li>Select <strong>Verify &amp; sign in</strong>.</li>
+  <li>You are taken to the Dashboard.</li>
+</ol>
+
+<h4>If verification does not work</h4>
+<ol>
+  <li>Codes expire after a short time. Wait for the app to show a new code and type that one.</li>
+  <li>If you have lost your phone, use one of the backup codes you saved when you first set up two-factor verification (see section 17).</li>
+  <li>If the page says your session expired, select <strong>Back to login</strong> and sign in again from the beginning.</li>
+</ol>
+
+<h3 id="s34">3.4 Forgotten Password and Password Reset</h3>
+
+<div class="shot">
+  <span class="line">[Screenshot Placeholder: Insert screenshot of the Reset your password page here]</span>
+  <span class="space"></span>
+</div>
+
+<h4>Steps — requesting a reset link</h4>
+<ol>
+  <li>On the sign-in page, select <strong>Forgot password?</strong>.</li>
+  <li>The <strong>Reset your password</strong> page appears.</li>
+  <li>Type your email address in the <strong>Email</strong> field.</li>
+  <li>Select <strong>Send reset link</strong>.</li>
+  <li>A confirmation appears stating that if an account exists for that address, a reset link is on its way. For security, the page does not reveal whether the address is registered.</li>
+  <li>Check your email inbox and open the link in the message.</li>
+</ol>
+
+<h4>Steps — choosing a new password</h4>
+<ol>
+  <li>Opening the emailed link brings you to the <strong>Choose a new password</strong> page.</li>
+  <li>Type your new password in <strong>New password</strong>.</li>
+  <li>Type exactly the same password again in <strong>Confirm new password</strong>.</li>
+  <li>Select <strong>Reset password</strong>.</li>
+  <li>A confirmation appears and you are returned to the sign-in page. Sign in with the new password.</li>
+</ol>
+
+<div class="warn">If the two passwords do not match, a message says <em>Passwords do not match</em> and nothing is saved. If the page reports a missing or invalid reset token, the link has expired — request a new one from <strong>Forgot password?</strong>.</div>
+
+<h3 id="s35">3.5 Signing Out</h3>
+<ol>
+  <li>Select your name or initials at the top-right corner of the screen.</li>
+  <li>In the menu that opens, select <strong>Sign out</strong> (shown in red).</li>
+  <li>A confirmation message appears and you are returned to the sign-in page.</li>
+</ol>
+
+<div class="pagebreak"></div>
+<h2 id="s4">4. Finding Your Way Around</h2>
+
+<h3 id="s41">4.1 The Screen Layout</h3>
+<p>Once you are signed in, every page uses the same three-part layout:</p>
+<ol>
+  <li><strong>The top bar</strong> — a thin fixed strip across the whole width of the screen. It never scrolls away.</li>
+  <li><strong>The sidebar</strong> — a vertical menu down the left-hand side, below the top bar.</li>
+  <li><strong>The working area</strong> — everything to the right of the sidebar. This is where the page you selected is displayed.</li>
+</ol>
+
+<div class="shot">
+  <span class="line">[Screenshot Placeholder: Insert screenshot of the overall console layout here]</span><br />
+  Suggested shot: the Dashboard with the top bar and sidebar both visible, so the three regions can be labelled.
+  <span class="space"></span>
+</div>
+
+<h3 id="s42">4.2 The Top Bar</h3>
+
+<div class="shot">
+  <span class="line">[Screenshot Placeholder: Insert screenshot of the Top bar here]</span><br />
+  Suggested shot: a close view of the full top bar from the logo on the left to the profile name on the right.
+  <span class="space"></span>
+</div>
+
+<p>Reading the top bar from left to right:</p>
+
+<table>
+  <tr><th style="width:28%">Item</th><th>What it does</th></tr>
+  <tr><td><strong>Menu button</strong> (three lines)</td><td>Appears on small screens and tablets only. Opens the sidebar as a slide-out drawer.</td></tr>
+  <tr><td><strong>Logo</strong></td><td>Returns you to the Dashboard from anywhere in the console.</td></tr>
+  <tr><td><strong>Product switcher</strong> (<strong>IAM</strong> · <strong>PAM</strong>)</td><td>Switches the whole working context. The selected product is highlighted and underlined, and the sidebar below changes to that product's menu. <strong>IAM</strong> opens the Dashboard; <strong>PAM</strong> opens Audit Logs.</td></tr>
+  <tr><td><strong>Search…</strong> (with the <code>⌘K</code> hint)</td><td>Opens the global search box. On small screens this becomes a magnifying-glass button. See section 4.4.</td></tr>
+  <tr><td><strong>Tenant chip</strong></td><td>Shows the Account ID of the tenant you are working in. Visible on wide screens.</td></tr>
+  <tr><td><strong>MFA off</strong> (amber)</td><td>Only appears if your own account has no second factor. Selecting it takes you to the Multi-Factor Authentication page so you can enable it.</td></tr>
+  <tr><td><strong>Bell</strong> (notifications)</td><td>Shows how many refused access attempts have been recorded since you last reviewed them. The bell turns red and shows a number when something is unread. Selecting it opens <strong>PAM → Alerts</strong> and clears the count.</td></tr>
+  <tr><td><strong>Profile</strong> (initials and name)</td><td>Opens your account menu. See below.</td></tr>
+</table>
+
+<h4>The profile menu</h4>
+<p>Selecting your name opens a panel showing your username, email address, an account-type label (<strong>Admin</strong> or <strong>User</strong>) and your Account ID, followed by these choices:</p>
+<ol>
+  <li><strong>My profile</strong> — your own details and password (section 16).</li>
+  <li><strong>Multi-factor authentication</strong> — set up or manage your second factor (section 17).</li>
+  <li><strong>Active sessions</strong> — see and end the devices signed in to your account (section 18).</li>
+  <li><strong>Sign out</strong> — ends this session and returns you to the sign-in page.</li>
+</ol>
+<p>You can move through this menu with the up and down arrow keys, choose an item with Enter, and close it with Escape.</p>
+
+<div class="shot">
+  <span class="line">[Screenshot Placeholder: Insert screenshot of the profile menu opened from the top bar here]</span>
+  <span class="space"></span>
+</div>
+
+<h3 id="s43">4.3 The Sidebar</h3>
+<p>The sidebar is the menu you will use most. Its contents depend on which product is selected in the top bar.</p>
+
+<h4>When IAM is selected</h4>
+<table>
+  <tr><th style="width:26%">Section</th><th style="width:26%">Menu item</th><th>Opens</th></tr>
+  <tr><td>Overview</td><td><strong>Dashboard</strong></td><td>The landing page: security posture, open findings and recent activity (section 5).</td></tr>
+  <tr><td>Identity</td><td><strong>Users</strong></td><td>The directory of people in your tenant (section 6).</td></tr>
+  <tr><td>Identity</td><td><strong>Resources</strong></td><td>The registry of protected systems (section 8).</td></tr>
+  <tr><td>Access Control</td><td><strong>Roles (RBAC)</strong></td><td>Roles and what they grant (section 9).</td></tr>
+  <tr><td>Access Control</td><td><strong>Policies (PBAC)</strong></td><td>Access rules (section 11).</td></tr>
+</table>
+
+<h4>When PAM is selected</h4>
+<table>
+  <tr><th style="width:26%">Section</th><th style="width:26%">Menu item</th><th>Opens</th></tr>
+  <tr><td>Privileged Access</td><td><strong>Audit Logs</strong></td><td>The full record of sign-ins and access decisions (section 14).</td></tr>
+  <tr><td>Privileged Access</td><td><strong>Alerts</strong></td><td>Analysis of refused access attempts (section 15).</td></tr>
+</table>
+
+<div class="shot">
+  <span class="line">[Screenshot Placeholder: Insert screenshot of the IAM sidebar here]</span><br />
+  Suggested shot: the expanded sidebar showing the Overview, Identity and Access Control sections.
+  <span class="space"></span>
+</div>
+
+<div class="shot">
+  <span class="line">[Screenshot Placeholder: Insert screenshot of the PAM sidebar here]</span><br />
+  Suggested shot: the sidebar after selecting PAM, showing Audit Logs and Alerts.
+  <span class="space"></span>
+</div>
+
+<h4>Using the sidebar</h4>
+<ol>
+  <li>Select any menu item to open that page. The item you are on is tinted and marked with a coloured bar on its left edge.</li>
+  <li>To make the sidebar narrower and give the working area more room, select the arrow button at the very bottom of the sidebar. It collapses to a narrow strip of icons.</li>
+  <li>While collapsed, rest your mouse pointer on an icon to see its name.</li>
+  <li>Select the same button again to expand the sidebar. Your choice is remembered the next time you sign in.</li>
+  <li>On a phone or small tablet, open the sidebar with the menu button in the top bar, and close it by selecting the <strong>X</strong>, tapping outside it, pressing Escape, or simply choosing a page.</li>
+</ol>
+<p>The label at the bottom of the sidebar tells you which product you are in: <strong>IAM Control Center</strong> or <strong>PAM Console</strong>.</p>
+
+<h3 id="s44">4.4 Global Search (Command Palette)</h3>
+<p>Global search is the fastest way to reach a specific user, role or policy without navigating menus.</p>
+
+<div class="shot">
+  <span class="line">[Screenshot Placeholder: Insert screenshot of the global search palette here]</span><br />
+  Suggested shot: the search box open over the page, with grouped results under <em>Go to</em>, <em>Users</em>, <em>Roles</em> and <em>Policies</em>.
+  <span class="space"></span>
+</div>
+
+<h4>Steps</h4>
+<ol>
+  <li>Select <strong>Search…</strong> in the top bar, or press <code>Ctrl</code>+<code>K</code> (on a Mac, <code>Command</code>+<code>K</code>).</li>
+  <li>Start typing part of a name, email address, role name or policy name.</li>
+  <li>Results are grouped: <strong>Go to</strong> (pages), <strong>Users</strong>, <strong>Roles</strong> and <strong>Policies</strong>.</li>
+  <li>Move through results with the up and down arrow keys.</li>
+  <li>Press <code>Enter</code>, or select a result with the mouse, to open it.</li>
+  <li>Press <code>Escape</code> to close the search without going anywhere.</li>
+</ol>
+<p>The line at the bottom of the panel reminds you of these keys and shows how many results were found.</p>
+
+<div class="pagebreak"></div>
+<h2 id="s5">5. The Dashboard</h2>
+
+<p><strong>How to get there:</strong> select <strong>IAM</strong> in the top bar, then <strong>Dashboard</strong> in the sidebar; or select the logo from any page. The web address is <code>/</code>.</p>
+
+<div class="shot">
+  <span class="line">[Screenshot Placeholder: Insert screenshot of the Dashboard here]</span><br />
+  Suggested shot: the whole Dashboard, showing the welcome header, the Security posture and Attention required panels side by side, and the panels below them.
+  <span class="space"></span>
+</div>
+
+<h3>5.1 What this page is for</h3>
+<p>The Dashboard is your starting point. It answers four questions in order: is my tenant secure, what must I fix, how large is my access footprint, and what has just happened.</p>
+
+<h3>5.2 The page header</h3>
+<p>The header greets you by name and shows three pieces of live context:</p>
+<ul>
+  <li><strong>Posture</strong> — an overall verdict (<em>Healthy</em>, <em>Needs attention</em> or <em>Critical</em>) with a score out of 100.</li>
+  <li><strong>Tenant</strong> — the Account ID you are working in.</li>
+  <li><strong>Baseline controls passing</strong> — for example <em>3 of 4 baseline controls passing</em>.</li>
+</ul>
+<p>Two buttons sit on the right:</p>
+<ol>
+  <li><strong>Refresh</strong> — re-reads every figure on the page. Use it after making changes elsewhere.</li>
+  <li><strong>Manage users</strong> — opens the Users page. This button appears for administrators.</li>
+</ol>
+
+<h3>5.3 The multi-factor warning banner</h3>
+<p>If your own account has no second factor, an amber banner appears at the top of the page. Select <strong>Enable MFA</strong> in the banner to go straight to the setup page. The banner disappears once your second factor is active.</p>
+
+<h3>5.4 Security posture</h3>
+<p>This panel shows a circular score and a checklist of four baseline controls. Each control has a green tick if it passes or a red cross if it does not, a short explanation, and a link that takes you to the page where you can act on it.</p>
+<table>
+  <tr><th style="width:34%">Control</th><th>Passes when…</th><th style="width:20%">Link</th></tr>
+  <tr><td>Multi-factor authentication</td><td>Your account has a second factor enabled.</td><td><strong>Enable MFA</strong> / <strong>Manage</strong></td></tr>
+  <tr><td>Session hygiene</td><td>You have at least one and fewer than ten active sessions.</td><td><strong>Review</strong></td></tr>
+  <tr><td>Role-based access control</td><td>At least one role is defined in the tenant.</td><td><strong>Configure</strong></td></tr>
+  <tr><td>Policy-based access control</td><td>At least one policy exists.</td><td><strong>Configure</strong></td></tr>
+</table>
+<p>The score is simply the share of controls that pass, so fixing one control raises it immediately after you select <strong>Refresh</strong>.</p>
+
+<h3>5.5 Attention required</h3>
+<p>This panel lists the things worth fixing, most serious first, with a coloured dot indicating severity. Typical entries include a missing second factor, an unusually high number of concurrent sessions, no roles configured, or no policies defined. Each row has a button — <strong>Enable</strong>, <strong>Review</strong>, <strong>Configure</strong> or <strong>Create</strong> — that takes you to the right page.</p>
+<p>When nothing needs attention, the panel shows <strong>No open findings</strong> with a green tick.</p>
+
+<h3>5.6 Standing access concentration</h3>
+<p>This panel ranks your roles by how many people hold them, longest bar first. It answers “which role carries most of the access?”, which is the first thing an access reviewer wants to know.</p>
+<ol>
+  <li>Read the bars from top to bottom; the leading role is highlighted in colour.</li>
+  <li>Select any bar to open that role's detail page.</li>
+  <li>Read the footer line for the total number of roles and how many have no assignments at all.</li>
+  <li>Select <strong>All roles</strong> in the panel header to open the full Roles page.</li>
+</ol>
+
+<h3>5.7 Directory composition</h3>
+<p>This panel describes your whole directory, not just one page of it. It shows the total number of identities under management, the percentage that are active, a single bar split into <strong>Active</strong>, <strong>Disabled</strong> and <strong>Other states</strong>, and the exact count and percentage for each. Select <strong>Directory</strong> in the panel header to open the Users page.</p>
+
+<h3>5.8 Recent authorisation activity</h3>
+<p>A short feed of the most recent events. Each row shows the action name, a badge reading <strong>Allowed</strong>, <strong>Denied</strong> or <strong>Info</strong>, the person or system involved, the resource, and the time.</p>
+<ol>
+  <li>Select the circular arrow icon to refresh just this feed.</li>
+  <li>Select any row, or <strong>Open PAM</strong>, to move to the full Audit Logs page.</li>
+  <li>If the feed cannot be loaded, an explanation and a <strong>Retry</strong> button appear in its place.</li>
+</ol>
+
+<h3>5.9 Your account</h3>
+<p>A reference card showing your username, email, account type, whether MFA is enabled, how many sessions are active, when you last signed in, and your tenant. Select <strong>Profile</strong> to open your own profile page.</p>
+
+<div class="pagebreak"></div>
+<h2 id="s6">6. Users</h2>
+
+<p><strong>How to get there:</strong> <strong>IAM</strong> → sidebar → <strong>Identity</strong> → <strong>Users</strong>. The web address is <code>/identity/users</code>.</p>
+
+<div class="shot">
+  <span class="line">[Screenshot Placeholder: Insert screenshot of the Users page showing the list of users and the New user button here]</span>
+  <span class="space"></span>
+</div>
+
+<h3>6.1 What this page is for</h3>
+<p>This is your company directory. Use it to see everyone who exists in the tenant, create new users, temporarily suspend or restore access, and export lists for reporting.</p>
+
+<div class="note">If the page asks you for an Account ID before showing anything, type your tenant identifier (for example <code>ACC-1A2B3C4D</code>) and select <strong>Continue</strong>. The console remembers it afterwards.</div>
+
+<h3>6.2 The page header</h3>
+<p>The header shows the title <strong>Users</strong>, the breadcrumb <em>Identity › Users</em>, your tenant identifier, and two buttons:</p>
+<ul>
+  <li><strong>Export</strong> — downloads the users currently shown in the table as a spreadsheet.</li>
+  <li><strong>New user</strong> — opens the create-user form.</li>
+</ul>
+
+<h3>6.3 The directory summary band</h3>
+<p>Three figures sit above the table. They always describe the <em>whole tenant</em>, not just the page you are looking at:</p>
+<table>
+  <tr><th style="width:24%">Figure</th><th>Meaning</th><th style="width:34%">Selecting it</th></tr>
+  <tr><td><strong>Total users</strong></td><td>Every identity in this tenant.</td><td>Shows all users in the table.</td></tr>
+  <tr><td><strong>Active</strong></td><td>Users who can sign in.</td><td>Filters the table to active users only.</td></tr>
+  <tr><td><strong>Disabled</strong></td><td>Users whose access is suspended.</td><td>Filters the table to disabled users only.</td></tr>
+</table>
+<p>The band and the <strong>All statuses</strong> dropdown always agree — changing one updates the other.</p>
+
+<h3>6.4 Searching and filtering</h3>
+<ol>
+  <li>Type part of a username or email address into <strong>Search username or email…</strong>. The table narrows as you type.</li>
+  <li>To narrow by lifecycle state, open the <strong>All statuses</strong> dropdown and choose a status (Active, Disabled, Locked, Offboarded or Deleted).</li>
+  <li>The line on the right of the toolbar states how many users match your current search and filter — for example <em>18 matching users</em>.</li>
+  <li>To remove everything you have applied, select <strong>Clear filters</strong>.</li>
+</ol>
+
+<h3>6.5 Reading the table</h3>
+<table>
+  <tr><th style="width:22%">Column</th><th>Contains</th></tr>
+  <tr><td><strong>User</strong></td><td>Initials, username and email address.</td></tr>
+  <tr><td><strong>Status</strong></td><td>A coloured badge showing the lifecycle state.</td></tr>
+  <tr><td><strong>Department</strong></td><td>The department recorded on the user, or a dash if empty.</td></tr>
+  <tr><td><strong>Title</strong></td><td>The job title, or a dash if empty.</td></tr>
+  <tr><td><strong>Last sign-in</strong></td><td>The date and time this user last signed in.</td></tr>
+  <tr><td>(actions)</td><td>Buttons for the individual row — see below.</td></tr>
+</table>
+<p>Select any column heading with a sort arrow to order the table by that column; select it again to reverse the order. Select a row anywhere other than the action buttons to open that user's detail page.</p>
+
+<h3>6.6 Row actions</h3>
+<table>
+  <tr><th style="width:26%">Button</th><th>What it does</th></tr>
+  <tr><td><strong>View user</strong> (eye)</td><td>Opens the user's detail page.</td></tr>
+  <tr><td><strong>Disable user</strong></td><td>Immediately suspends the user's access. Shown for active users.</td></tr>
+  <tr><td><strong>Enable user</strong></td><td>Restores access. Shown for users who are not active.</td></tr>
+</table>
+<p>After either action a short confirmation appears, and both the table and the three summary figures update.</p>
+
+<h3>6.7 Creating a user — step by step</h3>
+
+<div class="shot">
+  <span class="line">[Screenshot Placeholder: Insert screenshot of the Create user dialog here]</span><br />
+  Suggested shot: the dialog with First name, Last name, Email, Department and Title fields and the <strong>Create user</strong> button.
+  <span class="space"></span>
+</div>
+
+<ol>
+  <li>Select <strong>New user</strong> at the top-right of the page. The <strong>Create user</strong> dialog opens.</li>
+  <li>In <strong>First name</strong>, type the person's first name. Only the letters A–Z are accepted — no numbers, spaces or punctuation. The field tells you at once if you type something it cannot accept.</li>
+  <li>In <strong>Last name</strong>, type the surname, using letters only.</li>
+  <li>In <strong>Email</strong>, type a valid work email address, for example <code>name@company.com</code>.</li>
+  <li>Optionally fill in <strong>Department</strong> and <strong>Title</strong>. These are useful later, because access rules can refer to them.</li>
+  <li>Select <strong>Create user</strong>.</li>
+  <li>If anything is missing or invalid, a summary of the problems appears at the top of the dialog and the affected fields are highlighted. Correct them and try again.</li>
+  <li>On success the dialog closes and a <strong>User created</strong> window appears showing the generated <strong>Username</strong> and <strong>One-time password</strong>. A spreadsheet containing the same details downloads automatically.</li>
+  <li>Copy or save the credentials and give them to the new user through a secure channel.</li>
+  <li>Select <strong>Done</strong>. The new user now appears in the table.</li>
+</ol>
+
+<div class="warn">The one-time password is shown only in this window. Once you close it, the password cannot be retrieved — the user would need a password reset instead.</div>
+
+<div class="shot">
+  <span class="line">[Screenshot Placeholder: Insert screenshot of the User created one-time credentials window here]</span>
+  <span class="space"></span>
+</div>
+
+<h3>6.8 Working with several users at once</h3>
+<ol>
+  <li>Select the tick box at the left of each row you want to include. To select every row on the page, use the tick box in the table header.</li>
+  <li>A blue bar appears above the table stating how many rows are selected.</li>
+  <li>Choose one of the actions in that bar:
+    <ul>
+      <li><strong>Disable</strong> — suspends all selected users.</li>
+      <li><strong>Enable</strong> — restores all selected users.</li>
+      <li><strong>Export</strong> — downloads the selected users as a spreadsheet.</li>
+    </ul>
+  </li>
+  <li>Wait for the confirmation message. If some users could not be changed, the message tells you how many succeeded and how many failed.</li>
+  <li>Select <strong>Clear</strong> in the blue bar to drop the selection.</li>
+</ol>
+
+<h3>6.9 Exporting the directory</h3>
+<ol>
+  <li>Apply any search or status filter you want reflected in the file.</li>
+  <li>Select <strong>Export</strong> in the page header.</li>
+  <li>A spreadsheet downloads containing Username, Email, Status, Department, Title and Last Login for the rows currently shown.</li>
+</ol>
+
+<h3>6.10 Moving through pages</h3>
+<p>At the foot of the table you will find the range and total (for example <em>11–20 of 348</em>), a <strong>Rows</strong> selector, numbered page buttons and <strong>Prev</strong> / <strong>Next</strong>. Change <strong>Rows</strong> to show more or fewer users per page.</p>
+
+<h3>6.11 When the table is empty</h3>
+<p>If no users match your filters, the page offers <strong>Clear filters</strong>. If the tenant genuinely has no users yet, it offers <strong>New user</strong> instead.</p>
+
+<div class="pagebreak"></div>
+<h2 id="s7">7. User Details</h2>
+
+<p><strong>How to get there:</strong> from the Users page, select a row or its eye button. You can also reach a user from global search or from an event in the audit trail.</p>
+
+<div class="shot">
+  <span class="line">[Screenshot Placeholder: Insert screenshot of the User Details page here]</span><br />
+  Suggested shot: the header with the username, the Edit and Disable buttons, the status badges, and the Profile / Roles / Policies tabs.
+  <span class="space"></span>
+</div>
+
+<h3>7.1 What this page is for</h3>
+<p>This is everything the platform knows about one person, and everything you can change about their access. It is the page you use to grant or remove access for an individual.</p>
+
+<h3>7.2 The header</h3>
+<p>Select <strong>Users</strong> with the back arrow, above the title, to return to the directory. The header shows the username and email, and offers:</p>
+<ul>
+  <li><strong>Edit</strong> — change the person's profile details.</li>
+  <li><strong>Disable</strong> — suspend their access (shown when the user is active).</li>
+  <li><strong>Enable</strong> — restore their access (shown when the user is not active).</li>
+</ul>
+<p>Below the header sit the current status badge, the account type, and the date the record was created.</p>
+
+<h3>7.3 The three tabs</h3>
+<table>
+  <tr><th style="width:22%">Tab</th><th>Shows</th></tr>
+  <tr><td><strong>Profile</strong></td><td>First name, last name, email, department, title and last sign-in.</td></tr>
+  <tr><td><strong>Roles</strong></td><td>Every role assigned to this person. The number beside the tab is the count.</td></tr>
+  <tr><td><strong>Policies</strong></td><td>Effective policies (everything that applies to this person, from any source) and direct policy attachments. The number beside the tab is the count of effective policies.</td></tr>
+</table>
+
+<h3>7.4 Editing profile details</h3>
+<ol>
+  <li>Select <strong>Edit</strong> in the header. The <strong>Edit user</strong> dialog opens with the current values filled in.</li>
+  <li>Change <strong>First name</strong> and <strong>Last name</strong> as needed. Letters and spaces only — numbers and symbols are rejected as you type.</li>
+  <li>Change <strong>Email</strong>, <strong>Department</strong> or <strong>Title</strong> if required.</li>
+  <li>Select <strong>Save</strong>.</li>
+  <li>If a field is invalid, a summary appears at the top of the dialog. Correct the field and save again.</li>
+  <li>On success a confirmation appears, the dialog closes, and the Profile tab shows the new values immediately.</li>
+</ol>
+
+<h3>7.5 Assigning a role</h3>
+<ol>
+  <li>Select the <strong>Roles</strong> tab.</li>
+  <li>Select <strong>Assign</strong>.</li>
+  <li>In the <strong>Role</strong> box, start typing a role name. The list narrows as you type, and roles the person already holds are not offered.</li>
+  <li>Select the role you want.</li>
+  <li>Select <strong>Assign</strong> to confirm.</li>
+  <li>A confirmation appears and the role is listed. The person immediately gains every permission that role grants.</li>
+</ol>
+
+<h3>7.6 Removing a role</h3>
+<ol>
+  <li>On the <strong>Roles</strong> tab, find the role and select <strong>Detach</strong>.</li>
+  <li>A confirmation dialog states which role will be removed. Read it.</li>
+  <li>Select <strong>Detach</strong> to proceed, or <strong>Cancel</strong> to keep the role.</li>
+  <li>The person loses that role's permissions at once, unless another role or a direct policy grants the same thing.</li>
+</ol>
+
+<h3>7.7 Understanding the Policies tab</h3>
+<p>The tab has two parts:</p>
+<ul>
+  <li><strong>Effective Policies</strong> — every policy that applies to this person, however it reached them. Each card shows the policy name and one or more source badges: <strong>Direct</strong> if it was attached to the person, or <em>via &lt;role name&gt;</em> if it comes through a role. Where available, the card also lists the policy identifier, the attachment identifier, who attached it and when.</li>
+  <li><strong>Direct Policy Attachments</strong> — only the policies attached to this person individually. These are the ones you can add and remove here.</li>
+</ul>
+
+<div class="shot">
+  <span class="line">[Screenshot Placeholder: Insert screenshot of the User Details Policies tab here]</span><br />
+  Suggested shot: both cards visible — Effective Policies with source badges, and Direct Policy Attachments with the <strong>Attach</strong> button.
+  <span class="space"></span>
+</div>
+
+<h3>7.8 Attaching a policy directly to a person</h3>
+<ol>
+  <li>On the <strong>Policies</strong> tab, in the <strong>Direct Policy Attachments</strong> card, select <strong>Attach</strong>.</li>
+  <li>In the <strong>Policy</strong> box, type part of a policy name or description and select the policy you want.</li>
+  <li>Optionally set <strong>Expires at</strong> to a date. On that date the attachment is removed automatically. Dates in the past are not accepted. Leave it empty for access with no end date.</li>
+  <li>Select <strong>Attach</strong>.</li>
+  <li>A confirmation appears and the policy is listed in both cards.</li>
+</ol>
+
+<div class="note">Prefer roles for anything more than one person needs. Direct attachments are best kept for genuine exceptions, and are easier to review when they carry an expiry date.</div>
+
+<h3>7.9 Removing a direct policy attachment</h3>
+<ol>
+  <li>In the <strong>Direct Policy Attachments</strong> card, find the policy and select <strong>Detach</strong>.</li>
+  <li>Read the confirmation dialog, which names the policy.</li>
+  <li>Select <strong>Detach policy</strong> to proceed.</li>
+  <li>The permissions granted by that policy are withdrawn, unless a role still grants them.</li>
+</ol>
+
+<h3>7.10 Suspending and restoring one person</h3>
+<ol>
+  <li>Select <strong>Disable</strong> in the header to suspend the account. The person can no longer sign in.</li>
+  <li>Select <strong>Enable</strong> to restore access.</li>
+  <li>A confirmation appears each time and the status badge changes.</li>
+</ol>
+
+<div class="pagebreak"></div>
+<h2 id="s8">8. Resources</h2>
+
+<p><strong>How to get there:</strong> <strong>IAM</strong> → sidebar → <strong>Identity</strong> → <strong>Resources</strong>. The web address is <code>/identity/resources</code>.</p>
+
+<div class="shot">
+  <span class="line">[Screenshot Placeholder: Insert screenshot of the Registered resources page here]</span><br />
+  Suggested shot: the summary band, the search box and the resource table showing names, ARNs and target URLs.
+  <span class="space"></span>
+</div>
+
+<h3>8.1 What this page is for</h3>
+<p>This is the register of the things you protect. Until a system is registered here, policies have no stable name to refer to. Registering a resource does not change the system itself; it records its identity so that access rules can name it.</p>
+
+<div class="term"><strong>ARN</strong> — a short, stable text identifier for a resource, for example <code>iam:app/my-app</code>. Policies match on the ARN, so once a resource is in use its ARN should not be changed.</div>
+
+<div class="term"><strong>Target URL</strong> — the web address of the resource, for example <code>https://api.example.com</code>. It is recorded for reference and appears in the table as a link.</div>
+
+<h3>8.2 The summary band</h3>
+<table>
+  <tr><th style="width:26%">Figure</th><th>Meaning</th></tr>
+  <tr><td><strong>Total resources</strong></td><td>Everything registered in this tenant.</td></tr>
+  <tr><td><strong>Active</strong></td><td>Resources that are taken into account in access decisions.</td></tr>
+  <tr><td><strong>Inactive</strong></td><td>Resources that are registered but not evaluated.</td></tr>
+</table>
+<p>These figures are for information only on this page; they are not filters.</p>
+
+<h3>8.3 Finding a resource</h3>
+<ol>
+  <li>Type into <strong>Search name, type, ARN, URL, env or team…</strong>.</li>
+  <li>The table narrows immediately. The line on the right shows how many of the total are matching.</li>
+  <li>To start again, clear the search box.</li>
+</ol>
+
+<h3>8.4 Reading the table</h3>
+<table>
+  <tr><th style="width:22%">Column</th><th>Contains</th></tr>
+  <tr><td><strong>Resource</strong></td><td>The name, a type badge, and the ARN beneath in a fixed-width font.</td></tr>
+  <tr><td><strong>Target URL</strong></td><td>A link that opens the resource in a new browser tab.</td></tr>
+  <tr><td><strong>Environment</strong></td><td>An optional label such as <em>production</em> or <em>staging</em>.</td></tr>
+  <tr><td><strong>Team</strong></td><td>The owning team, if recorded.</td></tr>
+  <tr><td><strong>Status</strong></td><td><strong>ACTIVE</strong> or <strong>DISABLED</strong>.</td></tr>
+  <tr><td><strong>Created</strong></td><td>When it was registered and by whom.</td></tr>
+</table>
+
+<h3>8.5 Registering a resource — step by step</h3>
+
+<div class="shot">
+  <span class="line">[Screenshot Placeholder: Insert screenshot of the Register resource dialog here]</span>
+  <span class="space"></span>
+</div>
+
+<ol>
+  <li>Select <strong>Register resource</strong> at the top-right of the page.</li>
+  <li>In <strong>Resource name</strong>, type a clear name, for example <code>user-management-api</code>.</li>
+  <li>Choose a <strong>Resource type</strong> from the list: application, api, dataset, database, service or storage. If none fits, choose <strong>Other…</strong> and type your own in <strong>Custom type</strong>.</li>
+  <li>In <strong>ARN</strong>, type the identifier policies will match on, for example <code>iam:app/my-app</code>. Choose it carefully — it should stay the same for the life of the resource.</li>
+  <li>In <strong>Target URL</strong>, type the full web address, beginning with <code>http://</code> or <code>https://</code>.</li>
+  <li>Optionally set <strong>Environment</strong> and <strong>Team</strong> to help you organise the registry.</li>
+  <li>Leave <strong>Active — evaluate this resource in access decisions</strong> ticked unless you are registering something in advance and do not want it evaluated yet.</li>
+  <li>Select <strong>Register resource</strong>.</li>
+  <li>Required fields that are empty or invalid are highlighted with a short message. Correct them and try again.</li>
+  <li>On success a confirmation names the new resource and the table refreshes to include it.</li>
+</ol>
+
+<h3>8.6 Disabling a resource</h3>
+<ol>
+  <li>Find the resource in the table and select the bin icon (<strong>Disable resource</strong>) at the end of its row.</li>
+  <li>Read the confirmation dialog. It explains that policies referring to this ARN stay in place but stop matching.</li>
+  <li>Select <strong>Disable resource</strong> to proceed, or <strong>Cancel</strong> to stop.</li>
+  <li>The table refreshes and the summary figures update.</li>
+</ol>
+
+<div class="warn">This cannot be undone. If in doubt, note the resource's ARN and settings before you disable it.</div>
+
+<h3>8.7 Refreshing the list</h3>
+<p>Select <strong>Refresh</strong> in the page header to re-read the registry. If the list cannot be loaded at all, the page says so and offers <strong>Retry</strong> — this is deliberately different from an empty registry, so you are never misled into thinking you have no resources.</p>
+
+<div class="pagebreak"></div>
+<h2 id="s9">9. Roles</h2>
+
+<p><strong>How to get there:</strong> <strong>IAM</strong> → sidebar → <strong>Access Control</strong> → <strong>Roles (RBAC)</strong>. The web address is <code>/rbac/roles</code>.</p>
+
+<div class="shot">
+  <span class="line">[Screenshot Placeholder: Insert screenshot of the Roles page here]</span><br />
+  Suggested shot: the role table showing Role, Type, Assigned users, Policies and Status, with the <strong>New role</strong> button.
+  <span class="space"></span>
+</div>
+
+<div class="term"><strong>RBAC (role-based access control)</strong> — granting access by giving people roles, rather than by granting permissions to each person individually. It is the most reliable way to keep access consistent and reviewable.</div>
+
+<h3>9.1 What this page is for</h3>
+<p>It lists every role in your tenant so you can compare them at a glance: what type they are, how many people hold them, how many policies they carry and whether they are active.</p>
+
+<h3>9.2 Reading the table</h3>
+<table>
+  <tr><th style="width:24%">Column</th><th>Contains</th></tr>
+  <tr><td><strong>Role</strong></td><td>The role name and its description. A shield icon marks platform-managed roles.</td></tr>
+  <tr><td><strong>Type</strong></td><td><strong>SYSTEM</strong> for roles managed by the platform, <strong>CUSTOM</strong> for roles you create.</td></tr>
+  <tr><td><strong>Assigned users</strong></td><td>How many people hold this role. A dash means the count was not reported.</td></tr>
+  <tr><td><strong>Policies</strong></td><td>How many policies are attached to the role.</td></tr>
+  <tr><td><strong>Status</strong></td><td><strong>ACTIVE</strong> or <strong>DISABLED</strong>.</td></tr>
+</table>
+
+<h3>9.3 Finding a role</h3>
+<ol>
+  <li>Type into <strong>Search roles…</strong>. Names, descriptions and types are all searched.</li>
+  <li>The count on the right shows how many of the total are matching.</li>
+  <li>If nothing matches, select <strong>Clear search</strong>.</li>
+</ol>
+
+<h3>9.4 Opening a role</h3>
+<p>Select the row, or the arrow button at the end of it, to open the role's detail page (section 10).</p>
+
+<h3>9.5 Creating a role — step by step</h3>
+
+<div class="shot">
+  <span class="line">[Screenshot Placeholder: Insert screenshot of the Create role dialog here]</span>
+  <span class="space"></span>
+</div>
+
+<ol>
+  <li>Select <strong>New role</strong> at the top-right.</li>
+  <li>In <strong>Role name</strong>, type a name of at least three characters. Lowercase, hyphenated names such as <code>platform-operator</code> read best in policy documents and audit records. A name already in use is rejected.</li>
+  <li>In <strong>Description</strong>, describe in one sentence what the role is allowed to do. Reviewers rely on this.</li>
+  <li>Leave <strong>Role type</strong> as <strong>CUSTOM</strong> unless you have been told to create a platform-managed role.</li>
+  <li>Optionally choose a <strong>Parent role</strong>. The new role then inherits every policy attached to that parent, on top of anything you attach directly.</li>
+  <li>Select <strong>Create role</strong>.</li>
+  <li>Problems are listed at the top of the dialog. Correct them and try again.</li>
+  <li>On success a confirmation appears and the new role is in the table. It grants nothing yet — attach policies to it next (section 10.5).</li>
+</ol>
+
+<h3>9.6 When there are no roles</h3>
+<p>An empty tenant shows <strong>No roles yet</strong> with a <strong>New role</strong> button. This also causes the Dashboard's role-based access control check to fail, which is why creating your first role early is worthwhile.</p>
+
+<div class="pagebreak"></div>
+<h2 id="s10">10. Role Details</h2>
+
+<p><strong>How to get there:</strong> from the Roles page, select any role. You can also reach a role from the Dashboard's concentration panel or from global search.</p>
+
+<div class="shot">
+  <span class="line">[Screenshot Placeholder: Insert screenshot of the Role Details page here]</span><br />
+  Suggested shot: the header, the summary cards for Assigned Users and Attached Policies, and the two cards below them.
+  <span class="space"></span>
+</div>
+
+<h3>10.1 What this page is for</h3>
+<p>It answers three questions about one role: who holds it, which policies it carries, and what it actually lets people do.</p>
+
+<h3>10.2 The header and summary cards</h3>
+<p>Select <strong>Roles</strong> with the back arrow to return to the list. The header shows the role name and description, with two buttons:</p>
+<ul>
+  <li><strong>Edit</strong> — change the description or the parent role.</li>
+  <li><strong>Disable</strong> — take the role out of service.</li>
+</ul>
+<p>Beneath the header, summary cards show <strong>Assigned Users</strong>, <strong>Attached Policies</strong> and — if the role inherits from another — <strong>Inherits From</strong>.</p>
+
+<h3>10.3 Assigned users</h3>
+<p>The left-hand card lists everyone holding the role, showing their username, email and (if they are not active) their status.</p>
+
+<h4>To assign someone</h4>
+<ol>
+  <li>Select <strong>Assign</strong> in the card header.</li>
+  <li>In the <strong>User</strong> box, type part of a name or email. The tenant directory narrows as you type, and people who already hold the role are not offered.</li>
+  <li>Select the person you want.</li>
+  <li>Select <strong>Assign</strong> to confirm.</li>
+  <li>A confirmation appears and the list and counts update.</li>
+</ol>
+
+<h4>To remove someone</h4>
+<ol>
+  <li>Select the bin icon on that person's row.</li>
+  <li>Read the confirmation dialog. It names the role and the person, and warns that they lose every permission the role grants unless another role or a direct policy provides it.</li>
+  <li>Select <strong>Detach role</strong> to proceed.</li>
+  <li>A confirmation appears and the card refreshes.</li>
+</ol>
+
+<h3>10.4 Attached policies</h3>
+<p>The right-hand card lists the policies the role carries, with their names and descriptions.</p>
+
+<h4>To attach a policy</h4>
+<ol>
+  <li>Select <strong>Attach</strong> in the card header.</li>
+  <li>In the <strong>Policy</strong> box, type part of a policy name or description and select the one you want. Policies already attached are not offered.</li>
+  <li>Select <strong>Attach</strong>.</li>
+  <li>Every person holding this role immediately gains the permissions the policy grants.</li>
+</ol>
+
+<h4>To detach a policy</h4>
+<ol>
+  <li>Select the bin icon on the policy's row.</li>
+  <li>Read the confirmation, which warns that everyone holding the role loses those permissions.</li>
+  <li>Select <strong>Detach policy</strong> to proceed.</li>
+</ol>
+
+<h3>10.5 Effective permissions</h3>
+<p>Below the two cards, the <strong>Effective permissions</strong> table resolves every attached policy into the concrete permissions the role grants. Each line shows:</p>
+<table>
+  <tr><th style="width:18%">Column</th><th>Meaning</th></tr>
+  <tr><td><strong>Effect</strong></td><td><strong>ALLOW</strong> or <strong>DENY</strong>. Deny lines are listed first, because a Deny always decides the outcome.</td></tr>
+  <tr><td><strong>Action</strong></td><td>The permission, for example <code>iam:user:Read</code>. Lines marked <em>conditional</em> only apply when extra conditions are met.</td></tr>
+  <tr><td><strong>Resource</strong></td><td>What the permission applies to. An asterisk means everything.</td></tr>
+  <tr><td><strong>From policy</strong></td><td>Which policy contributed the line.</td></tr>
+</table>
+<p>If no policies are attached, the panel states that the role grants nothing on its own. If some policies could not be read, a note below the table says so, so you know the list may be incomplete.</p>
+
+<div class="shot">
+  <span class="line">[Screenshot Placeholder: Insert screenshot of the Effective permissions table on the Role Details page here]</span>
+  <span class="space"></span>
+</div>
+
+<h3>10.6 Editing a role</h3>
+<ol>
+  <li>Select <strong>Edit</strong> in the header.</li>
+  <li>Change the <strong>Description</strong>, and choose or clear the <strong>Parent role</strong>.</li>
+  <li>Select <strong>Save</strong>.</li>
+  <li>A confirmation appears and the page reloads its figures.</li>
+</ol>
+
+<h3>10.7 Disabling a role</h3>
+<ol>
+  <li>Select <strong>Disable</strong> in the header.</li>
+  <li>Read the confirmation: everyone assigned this role loses its permissions.</li>
+  <li>Select the confirm button to proceed. You are returned to the Roles list.</li>
+</ol>
+
+<div class="pagebreak"></div>
+<h2 id="s11">11. Policies</h2>
+
+<p><strong>How to get there:</strong> <strong>IAM</strong> → sidebar → <strong>Access Control</strong> → <strong>Policies (PBAC)</strong>. The web address is <code>/pbac/policies</code>.</p>
+
+<div class="shot">
+  <span class="line">[Screenshot Placeholder: Insert screenshot of the Policies page here]</span><br />
+  Suggested shot: the policy table with names, System badges and Status, plus the <strong>New policy</strong> button.
+  <span class="space"></span>
+</div>
+
+<div class="term"><strong>PBAC (policy-based access control)</strong> — writing access rules as documents that can take attributes and conditions into account, rather than fixed permission lists. It allows rules such as “allow only people in the engineering department”.</div>
+
+<h3>11.1 What this page is for</h3>
+<p>It lists every access rule document in your tenant. From here you can open one to edit it, disable one that should no longer apply, or create a new one.</p>
+
+<h3>11.2 Reading the table</h3>
+<table>
+  <tr><th style="width:24%">Column</th><th>Contains</th></tr>
+  <tr><td><strong>Policy</strong></td><td>The policy name, a <strong>System</strong> badge where the platform manages it, and the description.</td></tr>
+  <tr><td><strong>Status</strong></td><td><strong>ACTIVE</strong> or <strong>DISABLED</strong>.</td></tr>
+  <tr><td>(actions)</td><td><strong>Edit policy</strong> (pencil) and, for policies you own, <strong>Disable policy</strong>.</td></tr>
+</table>
+<p>System policies are protected: no disable button is offered for them.</p>
+
+<h3>11.3 Finding and opening a policy</h3>
+<ol>
+  <li>Type into <strong>Search policies…</strong> — names and descriptions are searched.</li>
+  <li>Select a row, or the pencil button, to open the policy in the editor (section 12).</li>
+</ol>
+
+<h3>11.4 Creating a policy</h3>
+<ol>
+  <li>Select <strong>New policy</strong> at the top-right. The policy editor opens with an empty document.</li>
+  <li>Follow the steps in section 12.</li>
+</ol>
+
+<h3>11.5 Disabling a policy</h3>
+<ol>
+  <li>Select the <strong>Disable policy</strong> button on the policy's row.</li>
+  <li>Read the confirmation carefully. It explains that the policy stops being evaluated immediately, and that requests which relied on it for an Allow decision will start to be denied. Existing sessions are not ended.</li>
+  <li>Select <strong>Disable policy</strong> to proceed, or <strong>Cancel</strong>.</li>
+  <li>A confirmation appears and the list refreshes.</li>
+</ol>
+
+<div class="note">Before disabling a policy, open it and read <strong>Attached entities</strong> (section 12.8) to see which roles depend on it. That is the quickest way to understand who will be affected.</div>
+
+<div class="pagebreak"></div>
+<h2 id="s12">12. The Policy Editor</h2>
+
+<p><strong>How to get there:</strong> select a policy on the Policies page, or select <strong>New policy</strong>.</p>
+
+<div class="shot">
+  <span class="line">[Screenshot Placeholder: Insert screenshot of the Policy editor page here]</span><br />
+  Suggested shot: the whole editor — Policy information, Identifiers &amp; shape, What this policy grants, and the first statement card.
+  <span class="space"></span>
+</div>
+
+<h3>12.1 How the page is organised</h3>
+<p>The editor reads top to bottom in the order the questions arise:</p>
+<ol>
+  <li><strong>Policy information</strong> — what this policy is called and why it exists.</li>
+  <li><strong>Identifiers &amp; shape</strong> — its fixed identifiers and a summary of its size.</li>
+  <li><strong>What this policy grants</strong> — a plain table an auditor can read.</li>
+  <li><strong>Statements</strong> — the editable rules, one card each.</li>
+  <li><strong>Policy document</strong> — exactly what will be stored.</li>
+  <li><strong>Attached entities</strong> — who is affected today.</li>
+</ol>
+<p>A bar stays visible at the bottom of the screen telling you whether you have unsaved changes.</p>
+
+<h3>12.2 Policy information</h3>
+<ol>
+  <li>In <strong>Policy name</strong>, type a name. Lowercase hyphenated names such as <code>finance-read-only</code> read best in audit records. This field is required.</li>
+  <li>In <strong>Description</strong>, explain why the policy exists and who it is for. Reviewers see this first.</li>
+  <li><strong>Document version</strong> is filled in for you and rarely needs changing.</li>
+</ol>
+
+<h3>12.3 Identifiers &amp; shape</h3>
+<p>This panel is read-only. It shows the policy identifier (assigned when you create the policy), whether it is a system or custom policy, its status, when it was created and last updated, and then a short summary: how many statements it has, how many are Allow and how many are Deny, how many distinct actions it names, and how many resources it covers. If it includes a wildcard, this panel says so.</p>
+
+<h3>12.4 What this policy grants</h3>
+<p>A table with one line per action, listing <strong>Effect</strong>, <strong>Action</strong>, <strong>Resource</strong> and the <strong>Statement</strong> that produced it. Deny lines come first, because they decide the outcome. Use this to check your intent before you save.</p>
+
+<h3>12.5 Statements — the rules themselves</h3>
+
+<div class="term"><strong>Statement</strong> — one rule inside a policy. It says whether to Allow or Deny, what actions it covers, which resources it applies to, and optionally under what conditions.</div>
+
+<p>Each statement is a separate card. Its header shows the statement number, its name, an <strong>Incomplete</strong> badge if it is missing an action or a resource, a <strong>Conditional</strong> badge if it has conditions, and an <strong>Allow / Deny</strong> switch.</p>
+
+<h4>To fill in a statement</h4>
+<ol>
+  <li>Set the effect using the <strong>Allow</strong> / <strong>Deny</strong> switch in the card header.</li>
+  <li>In <strong>Action</strong>, type one or more permissions separated by commas, for example <code>iam:user:Read, iam:user:List</code>. A value such as <code>iam:*</code> covers a whole service.</li>
+  <li>In <strong>Resource</strong>, select from the registry list. Type to search by name or ARN, and choose as many as apply. Choose <strong>All resources (*)</strong> for a wildcard. Values not in the registry are marked <em>CUSTOM</em> but remain usable.</li>
+  <li>Optionally give the statement an ID in <strong>Statement ID</strong> — a short label such as <code>AllowFinanceRead</code> that appears in decision records.</li>
+  <li>Optionally add a <strong>Condition</strong> in JSON, for example <code>{ "StringEquals": { "user.department": "engineering" } }</code>. It must be valid JSON.</li>
+</ol>
+
+<h4>To manage statements</h4>
+<ul>
+  <li><strong>Add statement</strong> — adds another empty card.</li>
+  <li>The copy icon on a card duplicates that statement.</li>
+  <li>The bin icon removes it. A policy always keeps at least one card.</li>
+</ul>
+
+<div class="warn">If a policy grants a wildcard action or resource, an amber notice appears near the top of the page. A wildcard matches everything it covers, including things added in future — scope it to named resources where the intent is narrower.</div>
+
+<h3>12.6 Editing the document directly</h3>
+<ol>
+  <li>Select <strong>Edit as JSON</strong>. The current document appears in a text box.</li>
+  <li>Edit it directly.</li>
+  <li>Select <strong>Back to form</strong>. The document is read back into the statement cards.</li>
+  <li>If the text is not valid JSON, a message tells you so and the form is left untouched. Correct the text and try again.</li>
+</ol>
+
+<h3>12.7 Policy document</h3>
+<p>This panel shows exactly what will be stored and evaluated. Select <strong>Copy</strong> to place it on your clipboard — useful for change tickets and reviews.</p>
+
+<h3>12.8 Attached entities</h3>
+<p>For a saved policy, this panel lists the roles that inherit the policy today, with the number of users each role has. Select a role to open it. If the policy is attached to no role, the panel says so. A note appears if only the first roles could be checked.</p>
+<p>Select <strong>Attach to user</strong> here (or in the page header) to grant the policy to one person directly:</p>
+<ol>
+  <li>Select <strong>Attach to user</strong>.</li>
+  <li>In the <strong>User</strong> box, type part of a name or email and select the person.</li>
+  <li>Optionally set <strong>Expires at</strong>. Past dates are not accepted.</li>
+  <li>Select <strong>Attach</strong>.</li>
+</ol>
+
+<h3>12.9 Saving your work</h3>
+<ol>
+  <li>Check the bar at the bottom of the screen. It reads either <em>Unsaved changes</em> with the number of statements ready to save, or a confirmation that there is nothing to save.</li>
+  <li>Select <strong>Create policy</strong> (new policy) or <strong>Save changes</strong> (existing policy). The same button is available in the page header.</li>
+  <li>If something is wrong — a missing name, a statement with no action or resource, or an invalid condition — a message explains exactly what to fix. Correct it and save again.</li>
+  <li>On success a confirmation appears and you are returned to the Policies list.</li>
+  <li>To abandon your changes, select <strong>Cancel</strong>.</li>
+</ol>
+
+<div class="pagebreak"></div>
+<h2 id="s13">13. Privileged Access Management (PAM) — Overview</h2>
+
+<p><strong>How to get there:</strong> select <strong>PAM</strong> in the top bar. The sidebar changes to show <strong>Audit Logs</strong> and <strong>Alerts</strong>.</p>
+
+<h3>13.1 Why there are two pages</h3>
+<table>
+  <tr><th style="width:24%">Page</th><th>Job</th><th>Use it when…</th></tr>
+  <tr><td><strong>Audit Logs</strong></td><td>Investigation. Filter, scan and inspect individual events.</td><td>You need to know exactly what one person or one system did, and when.</td></tr>
+  <tr><td><strong>Alerts</strong></td><td>Analysis. Understand refused access attempts as a whole.</td><td>You want to know what is being denied, to whom, and where it is concentrating.</td></tr>
+</table>
+
+<h3>13.2 Terms used across both pages</h3>
+<div class="term"><strong>Audit log</strong> — the permanent record of what happened. Each entry is called an <em>event</em>.</div>
+<div class="term"><strong>Authentication (AuthN)</strong> — proving who you are, such as signing in or entering a verification code. These events record <strong>SUCCESS</strong> or <strong>FAILURE</strong>.</div>
+<div class="term"><strong>Authorisation (AuthZ)</strong> — deciding whether an identity may do something. These events record <strong>ALLOW</strong> or <strong>DENY</strong>.</div>
+<div class="term"><strong>Successful</strong> — in this console, an event that either authenticated successfully or was allowed. <strong>Denied / failed</strong> covers both a failed sign-in and a refused access decision.</div>
+<div class="term"><strong>Principal</strong> — the person or system that performed the action.</div>
+
+<div class="pagebreak"></div>
+<h2 id="s14">14. PAM — Audit Logs</h2>
+
+<p><strong>How to get there:</strong> <strong>PAM</strong> → sidebar → <strong>Audit Logs</strong>. The web address is <code>/pam/audit-logs</code>.</p>
+
+<div class="shot">
+  <span class="line">[Screenshot Placeholder: Insert screenshot of the PAM Audit Logs page here]</span><br />
+  Suggested shot: the live controls, the five-figure scope band, the filter bar, and the event feed with the detail panel on the right.
+  <span class="space"></span>
+</div>
+
+<h3>14.1 What this page is for</h3>
+<p>It is the evidence trail for your tenant. You filter it down to the events you care about, scan the list, then select one event to see everything recorded about it.</p>
+
+<h3>14.2 The live controls (top strip)</h3>
+<table>
+  <tr><th style="width:28%">Control</th><th>What it does</th></tr>
+  <tr><td><strong>Auto-refresh</strong></td><td>Turns automatic updating on. The button then reads <strong>Live · 30s</strong>, meaning the page re-reads itself every 30 seconds. Select it again to pause.</td></tr>
+  <tr><td>Circular arrow</td><td>Refreshes once, immediately.</td></tr>
+  <tr><td><strong>Export CSV</strong></td><td>Downloads the events currently listed as a spreadsheet file containing Time, Type, User, Action, Decision, Resource, Status and IP.</td></tr>
+  <tr><td>Right-hand text</td><td>Tells you when the page last refreshed.</td></tr>
+</table>
+
+<h3>14.3 The scope band</h3>
+<p>Five figures describe everything matching your current filters — not just the page in view:</p>
+<table>
+  <tr><th style="width:26%">Figure</th><th>Meaning</th></tr>
+  <tr><td><strong>Events in scope</strong></td><td>All events matching the current filters.</td></tr>
+  <tr><td><strong>Authentication</strong></td><td>Sign-in and session events within that scope.</td></tr>
+  <tr><td><strong>Authorisation</strong></td><td>Access decisions within that scope.</td></tr>
+  <tr><td><strong>Successful</strong></td><td>Sign-ins that succeeded and access that was allowed.</td></tr>
+  <tr><td><strong>Denied / failed</strong></td><td>Sign-ins that failed and access that was denied.</td></tr>
+</table>
+<p>Where a figure has been worked out from a bounded set of the most recent matching events rather than a whole-set total, the hint text under the figure says so, so you always know what the number covers. A figure the platform cannot supply at all is shown as a dash rather than a possibly wrong number.</p>
+
+<h3>14.4 Filtering the trail</h3>
+<ol>
+  <li><strong>Decision.</strong> Use the segmented control to choose <strong>All</strong>, <strong>Denied</strong> or <strong>Success</strong>. Each option carries its own count so you can see how much evidence exists before you open it.</li>
+  <li><strong>Text search.</strong> Type a principal, action or resource into <strong>Search principal, action or resource…</strong>, then press <code>Enter</code> or select <strong>Apply</strong>. Search is applied on demand, not on every keystroke.</li>
+  <li><strong>Log type.</strong> Choose <strong>All types</strong>, <strong>AuthN</strong> (sign-in events) or <strong>AuthZ</strong> (access decisions).</li>
+  <li><strong>Date range.</strong> Set <strong>From</strong> and <strong>To</strong> to restrict the period.</li>
+  <li>On a small screen, select <strong>More filters</strong> to reveal log type and dates.</li>
+  <li>Everything you have applied is echoed below the bar as removable chips under the heading <em>Applied</em>. Select the small <strong>X</strong> on a chip to clear just that one.</li>
+  <li>Select <strong>Reset</strong> to clear all filters at once. Your rows-per-page choice is kept.</li>
+</ol>
+
+<div class="shot">
+  <span class="line">[Screenshot Placeholder: Insert screenshot of the Audit Logs filter bar with applied filter chips here]</span>
+  <span class="space"></span>
+</div>
+
+<h3>14.5 Reading the event feed</h3>
+<p>The feed is the left-hand column. Its header names the feed and shows the number of matching events. Each row carries:</p>
+<ul>
+  <li>A coloured bar on the left edge — red for a denial, green for an allowed action, blue for an access decision, grey for a sign-in event — so you can judge a page at a glance.</li>
+  <li>The action name, and a badge reading <strong>Denied</strong>, <strong>Allowed</strong>, <strong>AuthZ</strong> or <strong>AuthN</strong>.</li>
+  <li>The principal, an arrow, and the resource involved.</li>
+  <li>The date and time on the right.</li>
+</ul>
+<p>While a refresh is in progress, a small <em>Refreshing</em> indicator appears in the feed header.</p>
+
+<h4>Moving through events</h4>
+<ol>
+  <li>Use the range, page numbers and <strong>Prev</strong> / <strong>Next</strong> at the foot of the feed.</li>
+  <li>Change <strong>Rows</strong> to 10, 20, 50 or 100. Use 10 to read an incident line by line, 100 to scan a burst of activity.</li>
+</ol>
+
+<h3>14.6 Inspecting one event</h3>
+<ol>
+  <li>Select any row in the feed. Its details appear in the panel on the right. On a narrow screen the panel replaces the feed and offers <strong>Back to feed</strong>.</li>
+  <li>Read the header: the action name, the time, and a red or green icon showing the outcome.</li>
+  <li>Read the badges: the decision, whether it was an authentication or authorisation event, and the short event identifier.</li>
+  <li>Under <strong>Principal &amp; target</strong>, read the principal, email, user identifier, IP address and resource. Select the small copy icon next to an identifier to copy it — useful when raising a ticket.</li>
+  <li>Read <strong>User agent</strong> for the browser or client used, where recorded.</li>
+  <li>For a refused event, read <strong>Matched policies</strong> — the rules that produced the decision, each with its effect. This is the “why” behind a denial.</li>
+  <li>Select <strong>Raw event payload</strong> to expand the complete technical record, and select it again to collapse it.</li>
+  <li>Select <strong>View principal</strong> to open that person's user page, or <strong>View resource</strong> to look the resource up in the registry.</li>
+  <li>Select the <strong>X</strong> at the top of the panel to close it.</li>
+</ol>
+
+<div class="shot">
+  <span class="line">[Screenshot Placeholder: Insert screenshot of the event detail panel here]</span><br />
+  Suggested shot: a denied event selected, showing Principal &amp; target, Matched policies and the collapsed Raw event payload.
+  <span class="space"></span>
+</div>
+
+<h3>14.7 Arriving from the Alerts page</h3>
+<p>When you drill into something from Alerts, this page opens with the search term already filled in and the decision filter already set to <strong>Denied</strong>. The applied chips show you exactly what has been pre-set, and <strong>Reset</strong> clears it.</p>
+
+<h3>14.8 If the trail cannot be read</h3>
+<p>If your session is not permitted to read the tenant audit trail, the feed explains this instead of showing an empty list, and no <strong>Retry</strong> button is offered because repeating the same request cannot succeed. Sign out and back in to refresh your access, or ask a root administrator to grant audit access. Automatic refresh stops in this situation so the page does not keep retrying.</p>
+
+<div class="pagebreak"></div>
+<h2 id="s15">15. PAM — Alerts</h2>
+
+<p><strong>How to get there:</strong> <strong>PAM</strong> → sidebar → <strong>Alerts</strong>, or select the bell in the top bar. The web address is <code>/pam/alerts</code>.</p>
+
+<div class="shot">
+  <span class="line">[Screenshot Placeholder: Insert screenshot of the PAM Alerts page here]</span><br />
+  Suggested shot: the volume band, the denial timeline chart, the action-class panel and the three ranked panels.
+  <span class="space"></span>
+</div>
+
+<h3>15.1 What this page is for</h3>
+<p>Every entry on this page is an access attempt that was refused. The page treats denials as evidence to be understood rather than a task list, so it shows you the shape of the problem first — how many, over what period, to whom, and against what — before it shows individual records.</p>
+
+<div class="note">Opening this page counts as reviewing your alerts, so the unread count on the bell in the top bar is cleared.</div>
+
+<h3>15.2 The live controls</h3>
+<ul>
+  <li><strong>Auto-refresh</strong> — when on, the button reads <strong>Live · 60s</strong> and the page updates every 60 seconds. Select again to pause.</li>
+  <li>Circular arrow — refresh once now.</li>
+  <li><strong>Search denials, then press Enter…</strong> — search across principal, action, resource and reason. Press <code>Enter</code> to apply. <strong>Clear</strong> appears once a search is applied.</li>
+  <li>The right-hand text states when the page last refreshed.</li>
+</ul>
+
+<h3>15.3 The volume band</h3>
+<table>
+  <tr><th style="width:26%">Figure</th><th>Meaning</th></tr>
+  <tr><td><strong>Total denials</strong></td><td>Every recorded refusal, or the refusals matching your current search.</td></tr>
+  <tr><td><strong>Last 24 hours</strong></td><td>Denials in the past day, with the 7-day and 30-day figures underneath.</td></tr>
+  <tr><td><strong>Principals denied</strong></td><td>How many distinct identities were refused. The hint states the share held by the single busiest principal.</td></tr>
+  <tr><td><strong>Resources targeted</strong></td><td>How many distinct resources were involved, and how many distinct actions.</td></tr>
+</table>
+
+<h3>15.4 Denial volume over time</h3>
+<ol>
+  <li>Choose a window with the <strong>24h</strong> / <strong>7d</strong> / <strong>30d</strong> control in the panel header.</li>
+  <li>Read the chart. The subtitle states how many denials fall inside the window, out of the total.</li>
+  <li>If the analysis was based on a bounded set of the most recent denials rather than all of them, the subtitle says so.</li>
+  <li>If there were no denials in the window, the panel says so plainly rather than drawing an empty chart.</li>
+</ol>
+
+<h3>15.5 Denials by action class</h3>
+<p>Denials are grouped into three operational classes so you can tell routine refusals from important ones:</p>
+<table>
+  <tr><th style="width:34%">Class</th><th>Contains</th></tr>
+  <tr><td><strong>Privileged operations</strong></td><td>Refusals involving roles, delegation or policy changes. These are the ones to investigate first.</td></tr>
+  <tr><td><strong>Access &amp; policy reads</strong></td><td>Refusals reading policies, resources or groups.</td></tr>
+  <tr><td><strong>Other operations</strong></td><td>Everything else.</td></tr>
+</table>
+<p>The bar at the top of the panel shows the proportions; the list beneath gives the count and percentage for each class.</p>
+
+<h3>15.6 The three ranked panels</h3>
+<table>
+  <tr><th style="width:32%">Panel</th><th>Answers</th></tr>
+  <tr><td><strong>Top denied principals</strong></td><td>Which identities are being refused most.</td></tr>
+  <tr><td><strong>Most targeted resources</strong></td><td>Which systems people are being refused access to.</td></tr>
+  <tr><td><strong>Most denied actions</strong></td><td>Which operations are refused most. Privileged actions are highlighted in red.</td></tr>
+</table>
+
+<h4>To investigate a ranked row</h4>
+<ol>
+  <li>Select the bar for the principal, resource or action you want to look into.</li>
+  <li>The Audit Logs page opens with that term already searched and the decision filter set to <strong>Denied</strong>.</li>
+  <li>Work through the matching events, selecting individual rows for full detail (section 14.6).</li>
+</ol>
+
+<h3>15.7 Recent denials</h3>
+<p>At the foot of the page, a feed lists individual refusals with the same layout as the audit feed. Select a row to open its detail panel on the right — including <strong>Matched policies</strong>, which explains why the request was refused. Page through the list, and change <strong>Rows</strong> to widen or narrow the view.</p>
+<p>If there are no denials at all, the feed shows <strong>All clear</strong>.</p>
+
+<div class="shot">
+  <span class="line">[Screenshot Placeholder: Insert screenshot of the Recent denials feed with an event selected here]</span>
+  <span class="space"></span>
+</div>
+
+<div class="pagebreak"></div>
+<h2 id="s16">16. My Profile</h2>
+
+<p><strong>How to get there:</strong> profile menu (top right) → <strong>My profile</strong>. The web address is <code>/profile</code>.</p>
+
+<div class="shot">
+  <span class="line">[Screenshot Placeholder: Insert screenshot of the My Profile page here]</span>
+  <span class="space"></span>
+</div>
+
+<h3>16.1 What this page shows</h3>
+<p>The left card shows your initials, username and email, your status badge, whether MFA is on or off, and your user type, followed by your email, username, type and last sign-in. The right card, <strong>Profile attributes</strong>, lists the attributes recorded against your identity — these are the values access rules can refer to, such as a department. If none are set, the card says so.</p>
+
+<h3>16.2 Changing your password</h3>
+<ol>
+  <li>Select <strong>Change password</strong> at the bottom of the left card.</li>
+  <li>In <strong>Current password</strong>, type the password you use now.</li>
+  <li>In <strong>New password</strong>, type your new password. It must be at least 10 characters and include an upper-case letter, a lower-case letter, a digit and a special character.</li>
+  <li>Type the same value again in <strong>Confirm new password</strong>.</li>
+  <li>Select <strong>Update password</strong>.</li>
+  <li>If the two new entries do not match, a message says so and nothing is saved.</li>
+  <li>On success a confirmation appears. Sign in again with the new password on your other devices.</li>
+</ol>
+
+<div class="pagebreak"></div>
+<h2 id="s17">17. Multi-Factor Authentication</h2>
+
+<p><strong>How to get there:</strong> profile menu → <strong>Multi-factor authentication</strong>; or select the amber <strong>MFA off</strong> chip in the top bar; or <strong>Enable MFA</strong> on the Dashboard. The web address is <code>/security/mfa</code>.</p>
+
+<div class="shot">
+  <span class="line">[Screenshot Placeholder: Insert screenshot of the Multi-Factor Authentication page here]</span><br />
+  Suggested shot: the Authenticator app card and the About MFA card side by side.
+  <span class="space"></span>
+</div>
+
+<h3>17.1 What this page is for</h3>
+<p>It lets you protect your own account with a time-based code from an authenticator app, and manage that protection afterwards. The badge at the top of the first card shows whether MFA is currently <strong>ACTIVE</strong> or <strong>DISABLED</strong>.</p>
+
+<h3>17.2 Turning on multi-factor authentication</h3>
+<ol>
+  <li>Install an authenticator app on your phone if you do not have one. Any standard app works, for example Google Authenticator or 1Password.</li>
+  <li>On this page, select <strong>Set up authenticator</strong>.</li>
+  <li>A QR code appears. Open your authenticator app, choose to add an account, and scan the code.</li>
+  <li>If you cannot scan, copy the value shown in <strong>Manual key (if you can't scan)</strong> and type it into your app instead.</li>
+  <li>Your app now shows a six-digit code that changes every 30 seconds. Type the current code into <strong>6-digit code</strong>.</li>
+  <li>Select <strong>Verify &amp; enable</strong>.</li>
+  <li>A confirmation appears, the status badge changes to <strong>ACTIVE</strong>, and a list of backup codes is displayed.</li>
+  <li>Save the backup codes now — see 17.3.</li>
+</ol>
+
+<h3>17.3 Saving your backup codes</h3>
+<div class="term"><strong>Backup code</strong> — a single-use code that lets you sign in if you lose access to your authenticator app. Each code works once.</div>
+<ol>
+  <li>In the <strong>Save your backup codes</strong> card, select <strong>Copy</strong> to place all codes on your clipboard.</li>
+  <li>Paste them into a secure password manager or another safe store. Do not leave them in an email or an unprotected file.</li>
+  <li>Close the card when you are finished.</li>
+</ol>
+
+<h3>17.4 Generating new backup codes</h3>
+<ol>
+  <li>Select <strong>Regenerate backup codes</strong>.</li>
+  <li>Type your <strong>Password</strong> and a <strong>Current MFA code</strong> from your app.</li>
+  <li>Select <strong>Regenerate</strong>.</li>
+  <li>A new list appears. The previous codes stop working — replace your saved copy.</li>
+</ol>
+
+<h3>17.5 Turning multi-factor authentication off</h3>
+<ol>
+  <li>Select <strong>Disable MFA</strong>.</li>
+  <li>Type your <strong>Password</strong> and a <strong>Current MFA code</strong>. Both are required.</li>
+  <li>Select <strong>Disable MFA</strong>.</li>
+  <li>A confirmation appears and the status badge changes to <strong>DISABLED</strong>.</li>
+</ol>
+
+<div class="warn">Turning MFA off leaves your account protected by a password alone. The Dashboard will report this as a high-severity finding and the amber <strong>MFA off</strong> chip returns to the top bar.</div>
+
+<div class="pagebreak"></div>
+<h2 id="s18">18. Active Sessions</h2>
+
+<p><strong>How to get there:</strong> profile menu → <strong>Active sessions</strong>. The web address is <code>/security/sessions</code>.</p>
+
+<div class="shot">
+  <span class="line">[Screenshot Placeholder: Insert screenshot of the Active sessions page here]</span><br />
+  Suggested shot: the session list with the current device pinned at the top and the <strong>This device</strong> badge visible.
+  <span class="space"></span>
+</div>
+
+<div class="term"><strong>Session</strong> — one signed-in device. Ending (revoking) a session signs that device out immediately and forces it to authenticate again.</div>
+
+<h3>18.1 What this page shows</h3>
+<p>Every device currently signed in to your account. A summary line above the list gives the total, and how many of those are devices other than the one you are using. Your current device is always shown first, tinted, and marked <strong>This device</strong>.</p>
+<p>Each row shows the browser and operating system, how the session was created (<strong>Password</strong>, <strong>SSO</strong> or <strong>Token</strong>), the IP address, when it was signed in — both in plain language and as an exact time — and when it expires.</p>
+
+<h3>18.2 Ending one session</h3>
+<ol>
+  <li>Find the device you do not recognise or no longer use.</li>
+  <li>Select the sign-out icon at the end of its row.</li>
+  <li>Read the confirmation: the device is signed out immediately and must authenticate again.</li>
+  <li>Select the confirm button. The list refreshes.</li>
+</ol>
+
+<h3>18.3 Ending every other session</h3>
+<ol>
+  <li>Select <strong>Sign out all other sessions</strong> in the page header. It appears only when other sessions exist.</li>
+  <li>Read the confirmation. It states how many sessions will end and confirms you will stay signed in on this device.</li>
+  <li>Select the confirm button.</li>
+  <li>A confirmation appears and only your current session remains.</li>
+</ol>
+
+<div class="note">Reviewing sessions is one of the four baseline controls on the Dashboard. If you have an unusually high number of concurrent sessions, the Dashboard raises it as a finding and links here.</div>
+
+<div class="pagebreak"></div>
+<h2 id="s19">19. Features You Will See on Every Page</h2>
+
+<h3>19.1 The page header</h3>
+<p>Every page opens with the same header: a breadcrumb showing where you are, the page title, a one-line description of what the page covers, live context such as your tenant identifier, and the page's main buttons on the right.</p>
+
+<h3>19.2 Summary bands</h3>
+<p>Several pages show a row of figures above the table. These always describe the whole tenant or the whole filtered set — never just the rows on screen. On the Users page the figures are also filters: selecting one narrows the table to exactly what that figure counts, so any number can be verified by clicking it.</p>
+
+<h3>19.3 Tables</h3>
+<table>
+  <tr><th style="width:26%">Feature</th><th>How to use it</th></tr>
+  <tr><td>Sorting</td><td>Select a column heading that shows a sort arrow. Select again to reverse the order.</td></tr>
+  <tr><td>Row density</td><td>Use the two small icons at the top-right of the table to switch between comfortable and compact rows. Your choice is remembered.</td></tr>
+  <tr><td><strong>Columns</strong></td><td>Select <strong>Columns</strong> to tick the columns you want to see. Select <strong>Show all columns</strong> to restore them. Remembered per table.</td></tr>
+  <tr><td>Selection</td><td>Where available, tick boxes select rows and a blue bar offers actions for the whole selection.</td></tr>
+  <tr><td>Opening a record</td><td>Select the row itself, or the arrow / eye button at the end of the row.</td></tr>
+  <tr><td>Small screens</td><td>Below tablet width, tables become a stacked list of records — no sideways scrolling.</td></tr>
+</table>
+
+<h3>19.4 Pagination</h3>
+<p>Below a table you will see the range and total (for example <em>11–20 of 348</em>), a <strong>Rows</strong> selector, numbered pages and <strong>Prev</strong> / <strong>Next</strong>. On a phone the page numbers become a simple <em>page / total</em> indicator.</p>
+
+<h3>19.5 Search and filters</h3>
+<ul>
+  <li>List pages filter as you type.</li>
+  <li>PAM search fields wait for you to press <code>Enter</code> or select <strong>Apply</strong>, so a long search does not fire a request for every letter.</li>
+  <li>Applied filters are echoed as removable chips wherever several can be combined.</li>
+  <li><strong>Clear filters</strong> or <strong>Reset</strong> always returns you to the unfiltered view.</li>
+</ul>
+
+<h3>19.6 Forms, dialogs and validation</h3>
+<ol>
+  <li>Fields marked as required must be completed before the form will save.</li>
+  <li>Problems appear in two places at once: on the field itself, and in a summary at the top of the dialog — so a long form is easy to correct.</li>
+  <li>Some fields check as you type. Name fields, for example, say immediately if you type a digit or symbol.</li>
+  <li>Buttons show a spinner and a wording change such as <em>Registering…</em> while they work. Do not select them twice.</li>
+  <li>Select <strong>Cancel</strong>, or press <code>Escape</code>, to close a dialog without saving.</li>
+</ol>
+
+<h3>19.7 Confirmation dialogs</h3>
+<p>Anything that removes access asks first, and states the consequence in plain words — for example that everyone holding a role loses the permissions a policy grants. Read the message, then select the coloured confirm button to proceed or <strong>Cancel</strong> to stop.</p>
+
+<h3>19.8 Messages</h3>
+<p>Short messages appear briefly at the edge of the screen to confirm success or report a failure. Longer explanations stay on the page: amber notices warn you about something (a wildcard policy, a missing second factor), and error panels replace content that could not be loaded and offer <strong>Retry</strong>.</p>
+
+<h3>19.9 Status badges</h3>
+<table>
+  <tr><th style="width:26%">Badge</th><th>Meaning</th></tr>
+  <tr><td><strong>ACTIVE</strong> / <strong>ENABLED</strong></td><td>In use and working normally.</td></tr>
+  <tr><td><strong>DISABLED</strong></td><td>Deliberately switched off; can be restored.</td></tr>
+  <tr><td><strong>LOCKED</strong></td><td>Temporarily blocked, usually after repeated failed sign-ins.</td></tr>
+  <tr><td><strong>PENDING_VERIFICATION</strong></td><td>Created but not yet verified.</td></tr>
+  <tr><td><strong>OFFBOARDED</strong></td><td>The person has left and access has been withdrawn.</td></tr>
+  <tr><td><strong>DELETED</strong></td><td>Removed.</td></tr>
+  <tr><td><strong>EXPIRED</strong></td><td>Passed its end date and no longer valid.</td></tr>
+  <tr><td><strong>REVOKED</strong></td><td>Withdrawn before its end date.</td></tr>
+  <tr><td><strong>SUSPENDED</strong></td><td>A tenant that has been put on hold.</td></tr>
+</table>
+
+<h3>19.10 Files the console downloads</h3>
+<table>
+  <tr><th style="width:36%">Where</th><th>What you get</th></tr>
+  <tr><td>Register Tenant → success</td><td>A spreadsheet with the tenant and root administrator credentials.</td></tr>
+  <tr><td>Users → <strong>New user</strong></td><td>A spreadsheet with the new user's username and one-time password.</td></tr>
+  <tr><td>Users → <strong>Export</strong></td><td>A spreadsheet of the users currently shown.</td></tr>
+  <tr><td>Users → selection → <strong>Export</strong></td><td>A spreadsheet of the selected users only.</td></tr>
+  <tr><td>PAM Audit Logs → <strong>Export CSV</strong></td><td>A comma-separated file of the events currently listed.</td></tr>
+</table>
+
+<div class="warn">Credential files contain passwords. Store them in a password manager or an access-controlled location, and delete stray copies from your downloads folder.</div>
+
+<h3>19.11 Keyboard shortcuts</h3>
+<table>
+  <tr><th style="width:26%">Keys</th><th>Action</th></tr>
+  <tr><td><code>Ctrl</code>+<code>K</code> / <code>⌘</code>+<code>K</code></td><td>Open or close global search.</td></tr>
+  <tr><td><code>↑</code> <code>↓</code></td><td>Move through search results or the profile menu.</td></tr>
+  <tr><td><code>Enter</code></td><td>Open the highlighted result, or apply a search.</td></tr>
+  <tr><td><code>Escape</code></td><td>Close search, a menu, a dialog or the mobile sidebar.</td></tr>
+</table>
+
+<div class="pagebreak"></div>
+<h2 id="s20">20. Additional Pages Reachable by Direct Link</h2>
+
+<p>The pages below are part of the console but are not listed in the sidebar in the current build. They are used by administrators for specific tasks and are reached by typing their address, or by following a link from another page. Each one uses the same layout conventions described in section 19.</p>
+
+<table>
+  <tr><th style="width:26%">Page</th><th style="width:24%">Address</th><th>Purpose</th></tr>
+  <tr><td><strong>Service Accounts</strong></td><td><code>/identity/service-accounts</code></td><td>Non-human identities used by software rather than people. Create one with a name and description; open its <strong>Keys</strong>; or delete it, which revokes all of its keys.</td></tr>
+  <tr><td><strong>API Keys</strong></td><td><code>/identity/api-keys</code></td><td>The keys that let software authenticate. Open this page from a service account to generate a key (give it a name and a lifetime in days). The key is shown once and can be copied; you can also revoke a key from the list.</td></tr>
+  <tr><td><strong>Decision Simulator</strong></td><td><code>/pbac/check</code></td><td>Tests what the platform would decide without changing anything. Choose a principal, type an action and a resource ARN, optionally add resource attributes as JSON, then select <strong>Evaluate</strong>. The result shows <strong>ALLOW</strong> or <strong>DENY</strong> with the full decision record.</td></tr>
+  <tr><td><strong>Tenants</strong></td><td><code>/identity/tenants</code></td><td>Registers an additional company or account from inside the console, showing the resulting Account ID, company, domain and status.</td></tr>
+  <tr><td><strong>IAM Control (as a Service)</strong></td><td><code>/integrations/iam-control</code></td><td>Reference information on using the platform's decision service from your own applications.</td></tr>
+  <tr><td><strong>SSO Providers</strong></td><td><code>/settings/sso</code></td><td>Reference information about the single sign-on providers configured for this deployment.</td></tr>
+</table>
+
+<div class="shot">
+  <span class="line">[Screenshot Placeholder: Insert screenshot of the Decision Simulator page here]</span><br />
+  Suggested shot: the form on the left and an ALLOW or DENY result on the right.
+  <span class="space"></span>
+</div>
+
+<div class="note">If you open a page and see a small card asking for an <strong>Account ID</strong>, type your tenant identifier and select <strong>Continue</strong>. Some pages need to know which tenant to work in before they can load anything.</div>
+
+<div class="pagebreak"></div>
+<h2 id="s21">21. Common Tasks — Quick Reference</h2>
+
+<table>
+  <tr><th style="width:38%">I want to…</th><th>Do this</th></tr>
+  <tr><td>Add a new employee</td><td>IAM → Users → <strong>New user</strong> → complete the form → save the one-time credentials → open the user → <strong>Roles</strong> → <strong>Assign</strong>.</td></tr>
+  <tr><td>Stop someone signing in today</td><td>IAM → Users → find them → <strong>Disable user</strong>. Reverse it later with <strong>Enable user</strong>.</td></tr>
+  <tr><td>Give a team access to a new system</td><td>IAM → Resources → <strong>Register resource</strong> → Policies → <strong>New policy</strong> naming that ARN → Roles → open the team's role → <strong>Attach</strong> the policy.</td></tr>
+  <tr><td>Give one person a temporary exception</td><td>IAM → Users → open them → <strong>Policies</strong> → <strong>Attach</strong> → choose the policy → set <strong>Expires at</strong>.</td></tr>
+  <tr><td>See exactly what a role allows</td><td>IAM → Roles → open the role → read <strong>Effective permissions</strong>.</td></tr>
+  <tr><td>Find out who holds a role</td><td>IAM → Roles → open the role → <strong>Assigned users</strong>.</td></tr>
+  <tr><td>Find out who is affected by a policy</td><td>IAM → Policies → open it → <strong>Attached entities</strong>.</td></tr>
+  <tr><td>Investigate a refused request</td><td>PAM → Alerts → select the principal, resource or action → the audit trail opens pre-filtered → select the event → read <strong>Matched policies</strong>.</td></tr>
+  <tr><td>Produce an activity report for a period</td><td>PAM → Audit Logs → set <strong>From</strong> and <strong>To</strong> → <strong>Export CSV</strong>.</td></tr>
+  <tr><td>Check whether the tenant is configured safely</td><td>IAM → Dashboard → read <strong>Security posture</strong> and <strong>Attention required</strong>.</td></tr>
+  <tr><td>Protect my own account</td><td>Profile menu → <strong>Multi-factor authentication</strong> → <strong>Set up authenticator</strong>.</td></tr>
+  <tr><td>Remove a device I do not recognise</td><td>Profile menu → <strong>Active sessions</strong> → revoke that session.</td></tr>
+  <tr><td>Test a rule before relying on it</td><td>Open the Decision Simulator (<code>/pbac/check</code>) and evaluate the principal, action and resource.</td></tr>
+</table>
+
+<div class="pagebreak"></div>
+<h2 id="s22">22. Troubleshooting</h2>
+
+<table>
+  <tr><th style="width:34%">What you see</th><th>What to do</th></tr>
+  <tr><td>Sign-in is refused</td><td>Check all three fields, including the <strong>Account ID</strong>. For security the message does not say which one was wrong. If you have forgotten your password, use <strong>Forgot password?</strong>.</td></tr>
+  <tr><td>The verification code is rejected</td><td>Wait for your app to show a new code and enter that. If your phone is unavailable, use a saved backup code.</td></tr>
+  <tr><td>A page asks for an Account ID</td><td>Type your tenant identifier and select <strong>Continue</strong>. It is remembered afterwards.</td></tr>
+  <tr><td>A list is empty but you expected rows</td><td>Check for applied filters — look for chips or a highlighted summary figure — and select <strong>Clear filters</strong> or <strong>Reset</strong>.</td></tr>
+  <tr><td>A panel says content could not be loaded</td><td>Select <strong>Retry</strong>. If it keeps failing, refresh the page, then contact your administrator.</td></tr>
+  <tr><td>The audit trail says it is not available to this session</td><td>Your session is not permitted to read the tenant trail. Sign out and back in, or ask a root administrator for audit access.</td></tr>
+  <tr><td>A figure shows a dash instead of a number</td><td>The platform could not supply that figure for the current scope. The console shows a dash rather than a number that might be wrong.</td></tr>
+  <tr><td>A count seems to describe only one page</td><td>It does not. Summary bands describe the whole tenant or the whole filtered set; the toolbar line beside a search box is the one that describes your current query.</td></tr>
+  <tr><td>A credentials download did not start</td><td>Use <strong>Download again</strong> or <strong>Copy</strong> while the result is still on screen. Check your browser's download blocker.</td></tr>
+  <tr><td>The one-time password window was closed too early</td><td>The password cannot be recovered. Ask the user to reset their password, or create the record again.</td></tr>
+  <tr><td>A user still has access after a role was removed</td><td>Open the user → <strong>Policies</strong> → <strong>Effective Policies</strong> and look at the source badges. Another role, or a direct attachment, may grant the same permission.</td></tr>
+  <tr><td>A policy has no effect</td><td>Check that it is <strong>ACTIVE</strong>, that its statements are complete (no <strong>Incomplete</strong> badge), that the resource ARN matches a registered and active resource, and that no Deny rule overrides it.</td></tr>
+  <tr><td>The screen looks cramped</td><td>Collapse the sidebar with the arrow button at its foot, and switch the table to compact rows.</td></tr>
+</table>
+
+<div class="pagebreak"></div>
+<h2 id="s23">23. Glossary of Terms</h2>
+
+<table>
+  <tr><th style="width:28%">Term</th><th>Meaning</th></tr>
+  <tr><td><strong>Account ID</strong></td><td>The identifier of your tenant, usually in the form <code>ACC-XXXXXXXX</code>. Required at sign-in.</td></tr>
+  <tr><td><strong>Action</strong></td><td>Something that can be done, named in a policy, for example <code>iam:user:Read</code>.</td></tr>
+  <tr><td><strong>Allow / Deny</strong></td><td>The two possible outcomes of an access decision. A Deny always wins over an Allow.</td></tr>
+  <tr><td><strong>ARN</strong></td><td>The stable text identifier of a registered resource, which policies match on.</td></tr>
+  <tr><td><strong>Attribute</strong></td><td>A fact recorded about an identity or resource, such as a department, that a policy condition can test.</td></tr>
+  <tr><td><strong>Audit log</strong></td><td>The permanent record of sign-ins and access decisions.</td></tr>
+  <tr><td><strong>Authentication (AuthN)</strong></td><td>Proving who you are. Records SUCCESS or FAILURE.</td></tr>
+  <tr><td><strong>Authorisation (AuthZ)</strong></td><td>Deciding whether an identity may do something. Records ALLOW or DENY.</td></tr>
+  <tr><td><strong>Backup code</strong></td><td>A single-use code that lets you sign in when your authenticator app is unavailable.</td></tr>
+  <tr><td><strong>Denial</strong></td><td>An access attempt that was refused. Denials are the subject of the PAM Alerts page.</td></tr>
+  <tr><td><strong>Effective policies</strong></td><td>Everything that applies to one person, whether attached directly or inherited through a role.</td></tr>
+  <tr><td><strong>IAM</strong></td><td>Identity and Access Management — who exists and what they may do.</td></tr>
+  <tr><td><strong>MFA</strong></td><td>Multi-factor authentication — a second proof of identity in addition to a password.</td></tr>
+  <tr><td><strong>PAM</strong></td><td>Privileged Access Management — the record of what happened and the analysis of refusals.</td></tr>
+  <tr><td><strong>Parent role</strong></td><td>A role whose policies are inherited by another role.</td></tr>
+  <tr><td><strong>PBAC</strong></td><td>Policy-based access control — access rules written as documents that can include conditions.</td></tr>
+  <tr><td><strong>Policy</strong></td><td>A document of rules stating what may and may not be done, and to what.</td></tr>
+  <tr><td><strong>Principal</strong></td><td>The person or system that performed an action.</td></tr>
+  <tr><td><strong>RBAC</strong></td><td>Role-based access control — granting access by assigning roles.</td></tr>
+  <tr><td><strong>Resource</strong></td><td>A protected system, application, dataset or service, registered with an ARN.</td></tr>
+  <tr><td><strong>Role</strong></td><td>A collection of permissions granted to users as a single unit.</td></tr>
+  <tr><td><strong>Service account</strong></td><td>An identity used by software rather than a person.</td></tr>
+  <tr><td><strong>Session</strong></td><td>One signed-in device. Revoking it signs that device out.</td></tr>
+  <tr><td><strong>Statement</strong></td><td>One rule inside a policy: an effect, actions, resources and optional conditions.</td></tr>
+  <tr><td><strong>Status badge</strong></td><td>The coloured label showing the state of a record, such as ACTIVE or DISABLED.</td></tr>
+  <tr><td><strong>System policy / system role</strong></td><td>A policy or role managed by the platform. These are protected from routine changes.</td></tr>
+  <tr><td><strong>Tenant</strong></td><td>A separate workspace for one company, containing its own users, roles, policies and records.</td></tr>
+  <tr><td><strong>Wildcard</strong></td><td>The asterisk character, meaning “everything this covers”, including items added later.</td></tr>
+</table>
+
+<h3>End of manual</h3>
+<p>For questions not answered here, contact your platform administrator or your DEEP ALGORITHMS representative. Keep this document with your other onboarding material, and update the screenshot placeholders with images from your own tenant so that new administrators see the console exactly as they will find it.</p>
+
+</body>
+</html>
