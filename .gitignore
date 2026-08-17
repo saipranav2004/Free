@@ -1,0 +1,4 @@
+# Local working copy of UI.zip, extracted for editing/verification.
+# Not tracked: it carries node_modules and build output. The repository
+# tracks the zip artifacts instead.
+UI/
