@@ -3,9 +3,8 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useParams, Link } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import {
-  ArrowLeft,
   Eye,
   History,
   KeyRound,
@@ -33,7 +32,6 @@ import {
   CardTitle,
   CardFooter,
   DetailList,
-  Section,
 } from '../../components/common/Layout'
 import { QueryState } from '../../components/common/QueryState'
 import { Badge } from '../../components/common/Badge'
@@ -230,7 +228,7 @@ function UpdateSecretPanel({ credentialId }) {
 }
 
 export default function CredentialDetailPage() {
-  const { safeId, credentialId } = useParams()
+  const { credentialId } = useParams()
   const queryClient = useQueryClient()
   const [revealOpen, setRevealOpen] = useState(false)
 
@@ -254,20 +252,12 @@ export default function CredentialDetailPage() {
 
   return (
     <div>
-      <Link
-        to={`/vault/${safeId}`}
-        className="mb-4 inline-flex items-center gap-1.5 text-sm text-ink-400 transition-colors hover:text-ink-200"
-      >
-        <ArrowLeft className="h-3.5 w-3.5" strokeWidth={2} /> Back to safe
-      </Link>
-
       <QueryState query={credentialQuery} skeletonRows={5}>
         {(cred) => {
           const overdue = cred.next_rotation_at && new Date(cred.next_rotation_at).getTime() < Date.now()
           return (
             <>
               <PageHeader
-                eyebrow="Vault credential"
                 title={cred.name}
                 description={cred.description || `${cred.account_name} · ${cred.credential_type}`}
                 meta={

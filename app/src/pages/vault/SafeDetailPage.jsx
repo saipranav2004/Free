@@ -2,7 +2,6 @@ import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useParams, Link } from 'react-router-dom'
 import {
-  ArrowLeft,
   Plus,
   FolderTree,
   KeyRound,
@@ -21,6 +20,7 @@ import { getSafe, listFolders, listCredentials } from '../../api/vault'
 import { PageHeader, Card, CardHeader, CardTitle, EmptyState } from '../../components/common/Layout'
 import { QueryState } from '../../components/common/QueryState'
 import { Badge } from '../../components/common/Badge'
+import { StatusDot } from '../../components/ui/bits'
 import { Button } from '../../components/common/Button'
 import { SearchField, SortHeader, RefreshControl } from '../../components/common/TableControls'
 import { Pagination } from '../../components/common/Pagination'
@@ -55,20 +55,24 @@ function rotationHealth(cred) {
   return { tone: 'ink', label: `Due ${formatDate(cred.next_rotation_at)}` }
 }
 
-function StatusBadge({ status }) {
+// Status reads as a dot beside the word, the same mark the grids use, rather
+// than a filled pill. Active is settled (ok), a rotation in flight is the
+// accent, anything else is a quiet hollow ring.
+function credentialStatusTone(status) {
   const s = String(status || '').toLowerCase()
+  if (s === 'active') return 'ok'
+  if (s === 'rotating') return 'accent'
+  return 'muted'
+}
+
+function StatusBadge({ status }) {
   return (
-    <Badge
-      className={
-        s === 'active'
-          ? 'bg-emerald-100 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-500/15 dark:text-emerald-300 dark:ring-emerald-500/30'
-          : s === 'rotating'
-            ? 'bg-blue-100 text-blue-700 ring-blue-600/20 dark:bg-blue-500/15 dark:text-blue-300 dark:ring-blue-500/30'
-            : 'bg-slate-100 text-slate-600 ring-slate-600/20 dark:bg-ink-500/15 dark:text-ink-400 dark:ring-ink-500/30'
-      }
-    >
-      {status || 'unknown'}
-    </Badge>
+    <StatusDot
+      tone={credentialStatusTone(status)}
+      live={String(status || '').toLowerCase() === 'rotating'}
+      label={status || 'unknown'}
+      className="capitalize"
+    />
   )
 }
 
@@ -174,23 +178,15 @@ export default function SafeDetailPage() {
 
   return (
     <div>
-      <Link
-        to="/vault"
-        className="mb-4 inline-flex items-center gap-1.5 text-sm text-ink-400 transition-colors hover:text-ink-200"
-      >
-        <ArrowLeft className="h-3.5 w-3.5" strokeWidth={2} /> Back to safes
-      </Link>
-
       <QueryState query={safeQuery} skeletonRows={3}>
         {(safe) => (
           <PageHeader
-            eyebrow="Vault safe"
             title={safe.name}
             description={safe.description || 'No description set for this safe.'}
             meta={
               <>
                 {safe.is_default && (
-                  <Badge className="bg-blue-50 text-blue-700 ring-blue-600/20 dark:bg-blue-500/15 dark:text-blue-300 dark:ring-blue-500/30">
+                  <Badge className="bg-accent-soft text-accent ring-accent/20">
                     Default safe
                   </Badge>
                 )}
@@ -261,14 +257,14 @@ export default function SafeDetailPage() {
                 className={clsx(
                   'flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm transition-colors',
                   activeFolder === f.key
-                    ? 'bg-blue-50 font-medium text-blue-700 dark:bg-blue-500/[0.12] dark:text-blue-100'
+                    ? 'bg-accent-soft font-medium text-accent'
                     : 'text-ink-300 hover:bg-surface-850 hover:text-ink-50'
                 )}
               >
                 <f.icon
                   className={clsx(
                     'h-4 w-4 flex-none',
-                    activeFolder === f.key ? 'text-blue-600 dark:text-blue-300' : 'text-ink-500'
+                    activeFolder === f.key ? 'text-accent' : 'text-ink-500'
                   )}
                   strokeWidth={1.5}
                 />
@@ -290,14 +286,14 @@ export default function SafeDetailPage() {
                     className={clsx(
                       'flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm transition-colors',
                       activeFolder === f.id
-                        ? 'bg-blue-50 font-medium text-blue-700 dark:bg-blue-500/[0.12] dark:text-blue-100'
+                        ? 'bg-accent-soft font-medium text-accent'
                         : 'text-ink-300 hover:bg-surface-850 hover:text-ink-50'
                     )}
                   >
                     <Folder
                       className={clsx(
                         'h-4 w-4 flex-none',
-                        activeFolder === f.id ? 'text-blue-600 dark:text-blue-300' : 'text-ink-500'
+                        activeFolder === f.id ? 'text-accent' : 'text-ink-500'
                       )}
                       strokeWidth={1.5}
                     />
@@ -335,7 +331,7 @@ export default function SafeDetailPage() {
               <select
                 value={table.filters.status}
                 onChange={(e) => table.setFilter('status', e.target.value)}
-                className="h-9 cursor-pointer rounded-lg border border-surface-700 bg-surface-900 pl-2.5 pr-7 text-xs font-medium text-ink-100 shadow-sm transition-colors hover:border-surface-600 focus:border-blue-500 focus:outline-none"
+                className="h-9 cursor-pointer rounded-lg border border-surface-700 bg-surface-900 pl-2.5 pr-7 text-xs font-medium text-ink-100 shadow-sm transition-colors hover:border-surface-600 focus:border-accent focus:outline-none"
               >
                 <option value="all">Any</option>
                 {statuses.map((s) => (
@@ -439,7 +435,7 @@ export default function SafeDetailPage() {
                                   <span className="min-w-0">
                                     <Link
                                       to={`/vault/${safeId}/credentials/${c.id}`}
-                                      className="block truncate font-medium text-ink-50 transition-colors hover:text-blue-600 dark:hover:text-blue-300"
+                                      className="block truncate font-medium text-ink-50"
                                     >
                                       {c.name}
                                     </Link>
@@ -471,9 +467,9 @@ export default function SafeDetailPage() {
                                     className={clsx(
                                       'font-medium',
                                       health.tone === 'red'
-                                        ? 'text-red-600 dark:text-red-400'
+                                        ? 'text-danger'
                                         : health.tone === 'amber'
-                                          ? 'text-amber-600 dark:text-amber-400'
+                                          ? 'text-warn'
                                           : 'text-ink-400'
                                     )}
                                   >
