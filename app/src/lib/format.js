@@ -44,13 +44,37 @@ export function formatDuration(totalSeconds) {
   return `${sec}s`
 }
 
+// A RELATIVE AGE ROLLS UP. formatDuration is built for elapsed session time
+// and tops out at hours and minutes, which is right for "this session has run
+// 2h 14m" and wrong the moment it is pointed at a creation date: a role
+// created a year ago rendered as "8760h 54m ago", which is technically true
+// and completely unreadable.
+//
+// Rolling up loses precision on purpose. Nobody reading a list needs the
+// minute a role was created; they need "a year ago" and the exact timestamp
+// on hover, which every caller already puts on the title attribute.
 export function formatRelativeToNow(iso) {
   if (!iso) return '-'
   const target = new Date(iso).getTime()
   if (Number.isNaN(target)) return '-'
+
   const diffMs = target - Date.now()
   const future = diffMs >= 0
-  const label = formatDuration(Math.abs(diffMs) / 1000)
+  const secs = Math.abs(diffMs) / 1000
+
+  let label
+  if (secs < 45) label = 'moments'
+  else if (secs < 3600) label = `${Math.round(secs / 60)}m`
+  else if (secs < 86400) label = `${Math.round(secs / 3600)}h`
+  else if (secs < 7 * 86400) label = `${Math.round(secs / 86400)}d`
+  else if (secs < 60 * 86400) label = `${Math.round(secs / (7 * 86400))}w`
+  else if (secs < 365 * 86400) label = `${Math.round(secs / (30 * 86400))}mo`
+  else {
+    const years = secs / (365 * 86400)
+    label = `${years < 10 ? years.toFixed(1).replace(/\.0$/, '') : Math.round(years)}y`
+  }
+
+  if (label === 'moments') return future ? 'in a moment' : 'moments ago'
   return future ? `in ${label}` : `${label} ago`
 }
 

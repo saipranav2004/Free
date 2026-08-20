@@ -1,21 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { toast } from 'sonner'
-import {
-  Plus,
-  Lock,
-  Link2,
-  Trash2,
-  ShieldCheck,
-  X,
-  SearchX,
-  FileKey2,
-  AlertTriangle,
-  ChevronRight,
-  Layers,
-} from 'lucide-react'
+import { AlertTriangle, FileKey2, Link2, Lock, Plus, ShieldCheck, Trash2, X } from 'lucide-react'
+import { useSearchParams } from 'react-router-dom'
 import clsx from 'clsx'
+import { toast } from 'sonner'
 import {
   listRoles,
   getRole,
@@ -24,27 +12,31 @@ import {
   deleteRole,
   listPolicies,
 } from '../../api/rbac'
-import { PageHeader, Card, CardFooter, EmptyState, ListPanel } from '../../components/common/Layout'
-import { QueryState } from '../../components/common/QueryState'
-import { ConfirmDialog } from '../../components/common/ConfirmDialog'
-import { Drawer } from '../../components/common/Drawer'
-import { Badge } from '../../components/common/Badge'
-import { Button } from '../../components/common/Button'
-import { SegmentedControl } from '../../components/common/SegmentedControl'
+import { normalizeApiError, apiErrorMessage } from '../../lib/apiError'
+import { Container, PageTitle, Stack } from '../../components/ui/layout'
+import { DataTable, RowActions, SkeletonGrid, SortTh, Td, Th, Tr, Trunc } from '../../components/ui/grid'
+import { MenuItem, MenuNote, RowMenu } from '../../components/ui/menu'
+import { FilterChip } from '../../components/ui/bits'
 import {
-  SearchField,
-  SortHeader,
-  RefreshControl,
-  ExportMenu,
   ActiveFilters,
-} from '../../components/common/TableControls'
-import { selectClass } from '../../components/common/FormFields'
+  CommandBar,
+  ExportMenu,
+  Pagination,
+  PreferencesMenu,
+  RefreshControl,
+  SearchField,
+} from '../../components/ui/chrome'
+import { DeniedState, EmptyState, ErrorState, NoMatchState, OfflineState } from '../../components/ui/states'
+import { Button } from '../../components/common/Button'
+import { Drawer } from '../../components/common/Drawer'
+import { ConfirmDialog } from '../../components/common/ConfirmDialog'
 import { CreateRoleModal } from '../../components/admin/CreateRoleModal'
 import { useTableState } from '../../hooks/useTableState'
 import { exportRowsToCsv, exportRowsToJson } from '../../lib/exportRows'
-import { apiErrorMessage } from '../../lib/apiError'
-import { formatDateTime } from '../../lib/format'
-import { POLICY_EFFECT_BADGE, ROLE_BADGE, SYSTEM_ROLES } from '../../config/constants'
+import { formatDateTime, formatRelativeToNow } from '../../lib/format'
+import { Badge } from '../../components/common/Badge'
+import { selectClass } from '../../components/common/FormFields'
+import { isSystemRole, ROLE_BADGE, POLICY_EFFECT_BADGE } from '../../config/constants'
 
 // ---------------------------------------------------------------------------
 // Admin Center, Roles
@@ -68,10 +60,6 @@ const CSV_COLUMNS = [
   { key: 'created_at', label: 'Created' },
   { key: 'id', label: 'Role ID' },
 ]
-
-function isSystemRole(role) {
-  return role?.is_system === true || SYSTEM_ROLES.includes(String(role?.name || '').toLowerCase())
-}
 
 // --- detail drawer -----------------------------------------------------------
 
@@ -363,221 +351,200 @@ export default function RolesPage() {
     })
   }
 
-  const pad = table.density === 'compact' ? 'py-1.5' : 'py-2'
+  const err = rolesQuery.isError ? normalizeApiError(rolesQuery.error) : null
 
   return (
-    <div>
-      <PageHeader
-        eyebrow="Admin Center"
+    <Stack gap="lg">
+      <PageTitle
         title="Roles"
+        counter={rolesQuery.isSuccess ? roles.length : undefined}
         description="A role bundles policies into one assignable unit. Accounts are given roles; roles carry the permissions the policy engine evaluates."
-        actions={
-          <Button variant="primary" icon={Plus} onClick={() => setCreateOpen(true)}>
-            Create role
-          </Button>
-        }
       />
 
-      <ListPanel
-        toolbar={
-          <div className="space-y-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <SearchField
-                value={table.query}
-                onChange={table.setQuery}
-                placeholder="Search roles…"
-                className="min-w-[14rem] sm:max-w-sm"
-              />
-              <SegmentedControl
-                size="sm"
-                ariaLabel="Filter by type"
-                value={table.filters.type}
-                onChange={(v) => table.setFilter('type', v)}
-                options={[
-                  { key: 'all', label: 'All', count: roles.length },
-                  { key: 'system', label: 'System', count: systemCount },
-                  { key: 'custom', label: 'Custom', count: roles.length - systemCount },
-                ]}
-              />
-              <span className="ml-auto flex flex-wrap items-center gap-2">
-                <ExportMenu
-                  count={table.total}
-                  disabled={table.total === 0}
-                  onExportCsv={() => exportRowsToCsv(table.filteredRows, CSV_COLUMNS, 'roles')}
-                  onExportJson={() => exportRowsToJson(table.filteredRows, CSV_COLUMNS, 'roles')}
-                />
-                <RefreshControl
-                  onRefresh={() => rolesQuery.refetch()}
-                  isFetching={rolesQuery.isFetching}
-                  updatedAt={rolesQuery.dataUpdatedAt}
-                />
-              </span>
-            </div>
-
-            {chips.length > 0 && (
-              <div className="border-t border-surface-800 pt-3">
-                <ActiveFilters chips={chips} onClearAll={table.resetFilters} />
-              </div>
-            )}
-          </div>
-        }
-      >
-        <QueryState
-          query={rolesQuery}
-          empty={(r) => !r || r.length === 0}
-          emptyTitle="No roles defined"
-          emptyMessage="Create a role to bundle policies and assign them to accounts."
-          emptyAction={
+      <Stack gap="sm">
+        <CommandBar
+          primary={
             <Button variant="primary" icon={Plus} onClick={() => setCreateOpen(true)}>
               Create role
             </Button>
           }
-        >
-          {() =>
-            table.total === 0 ? (
-              <Card>
-                <EmptyState
-                  icon={SearchX}
-                  title="No roles match"
-                  description="Nothing matches the current search or type filter."
-                  action={
-                    <Button variant="secondary" onClick={table.resetFilters}>
-                      Clear filters
-                    </Button>
-                  }
-                />
-              </Card>
-            ) : (
-              <>
-                <div className="overflow-x-auto">
-                  <table className="w-full min-w-[46rem] border-separate border-spacing-0 text-sm">
-                    <thead>
-                      <tr>
-                        <SortHeader
-                          label="Role"
-                          columnKey="name"
-                          sort={table.sort}
-                          onSort={table.toggleSort}
-                          className="min-w-[13rem]"
-                        />
-                        <SortHeader
-                          label="Description"
-                          columnKey="description"
-                          sort={table.sort}
-                          onSort={table.toggleSort}
-                        />
-                        <SortHeader
-                          label="Type"
-                          columnKey="is_system"
-                          sort={table.sort}
-                          onSort={table.toggleSort}
-                          className="w-28"
-                        />
-                        <SortHeader
-                          label="Created"
-                          columnKey="created_at"
-                          sort={table.sort}
-                          onSort={table.toggleSort}
-                          className="w-40"
-                        />
-                        <SortHeader label="Actions" columnKey="_actions" srOnly className="w-20" />
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {table.pageRows.map((role) => {
-                        const system = isSystemRole(role)
-                        return (
-                          <tr
-                            key={role.id}
-                            onClick={() => setPeeked(role)}
-                            className="group cursor-pointer transition-colors hover:bg-surface-850"
-                          >
-                            <td className={clsx('border-b border-surface-800 px-4', pad)}>
-                              <div className="flex min-w-0 items-center gap-3">
-                                <span
-                                  className={clsx(
-                                    'flex h-8 w-8 flex-none items-center justify-center rounded-lg border transition-colors',
-                                    system
-                                      ? 'border-blue-500/30 bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-300'
-                                      : 'border-surface-700 bg-surface-850 text-ink-400 group-hover:border-surface-600'
-                                  )}
-                                >
-                                  <Lock className="h-3.5 w-3.5" strokeWidth={1.5} />
-                                </span>
-                                <span className="min-w-0">
-                                  <span className="block truncate font-medium text-ink-50 transition-colors group-hover:text-blue-600 dark:group-hover:text-blue-300">
-                                    {role.name}
-                                  </span>
-                                  <span className="mt-0.5 block truncate font-mono text-2xs text-ink-600">
-                                    {String(role.id).slice(0, 8)}…
-                                  </span>
-                                </span>
-                              </div>
-                            </td>
-                            <td
-                              className={clsx(
-                                'max-w-[20rem] border-b border-surface-800 px-4 text-ink-400',
-                                pad
-                              )}
-                            >
-                              <span className="block truncate">{role.description || '-'}</span>
-                            </td>
-                            <td className={clsx('whitespace-nowrap border-b border-surface-800 px-4', pad)}>
-                              {system ? (
-                                <Badge className="bg-blue-100 text-blue-700 ring-blue-600/20 dark:bg-blue-500/15 dark:text-blue-300 dark:ring-blue-500/30">
-                                  System
-                                </Badge>
-                              ) : (
-                                <Badge className="bg-surface-800 text-ink-300 ring-surface-700">Custom</Badge>
-                              )}
-                            </td>
-                            <td
-                              className={clsx(
-                                'whitespace-nowrap border-b border-surface-800 px-4 text-xs tabular-nums text-ink-400',
-                                pad
-                              )}
-                            >
-                              {role.created_at ? formatDateTime(role.created_at) : '-'}
-                            </td>
-                            <td className={clsx('border-b border-surface-800 px-2', pad)}>
-                              <div className="flex items-center justify-end gap-0.5">
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    setDeleteTarget(role)
-                                  }}
-                                  disabled={system}
-                                  aria-label={`Delete ${role.name}`}
-                                  title={
-                                    system ? 'Built-in system roles cannot be deleted' : `Delete ${role.name}`
-                                  }
-                                  className="flex h-7 w-7 items-center justify-center rounded-md text-ink-500 transition-colors hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-ink-500 dark:hover:bg-red-950/30 dark:hover:text-red-300"
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" strokeWidth={1.75} />
-                                </button>
-                                <span className="flex h-7 w-7 items-center justify-center rounded-md text-ink-600 transition-colors group-hover:bg-surface-800 group-hover:text-ink-100">
-                                  <ChevronRight className="h-4 w-4" strokeWidth={2} />
-                                </span>
-                              </div>
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-                <CardFooter className="justify-between">
-                  <p className="text-xs text-ink-500">
-                    Showing {table.total} of {roles.length} roles
-                  </p>
-                  <Link2 className="h-3.5 w-3.5 text-ink-600" strokeWidth={1.75} />
-                </CardFooter>
-              </>
-            )
+          summary={
+            rolesQuery.isSuccess && table.total !== roles.length
+              ? `${table.total} of ${roles.length} shown`
+              : undefined
           }
-        </QueryState>
-      </ListPanel>
+        >
+          <ExportMenu
+            count={table.total}
+            disabled={table.total === 0}
+            onExportCsv={() => exportRowsToCsv(table.filteredRows, CSV_COLUMNS, 'roles')}
+            onExportJson={() => exportRowsToJson(table.filteredRows, CSV_COLUMNS, 'roles')}
+          />
+          <RefreshControl
+            onRefresh={() => rolesQuery.refetch()}
+            isFetching={rolesQuery.isFetching}
+            updatedAt={rolesQuery.dataUpdatedAt}
+          />
+          <PreferencesMenu pageSize={table.pageSize} onPageSize={table.setPageSize} />
+        </CommandBar>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <SearchField
+            value={table.query}
+            onChange={table.setQuery}
+            placeholder="Search roles"
+            label="Search roles"
+          />
+          {[
+            { key: 'all', label: 'All', count: roles.length },
+            { key: 'system', label: 'Built in', count: systemCount },
+            { key: 'custom', label: 'Custom', count: roles.length - systemCount },
+          ].map((f) => (
+            <FilterChip
+              key={f.key}
+              active={table.filters.type === f.key}
+              count={f.count}
+              onClick={() => table.setFilter('type', f.key)}
+            >
+              {f.label}
+            </FilterChip>
+          ))}
+        </div>
+
+        <ActiveFilters chips={chips} onClearAll={table.resetFilters} />
+      </Stack>
+
+      <Container padded={false}>
+        {rolesQuery.isLoading ? (
+          <table className="w-full">
+            <tbody>
+              <SkeletonGrid colSpan={5} rows={6} />
+            </tbody>
+          </table>
+        ) : err ? (
+          err.status === 403 ? (
+            <DeniedState description={err.message} />
+          ) : err.code === 'network_error' ? (
+            <OfflineState onRetry={() => rolesQuery.refetch()} retrying={rolesQuery.isFetching} />
+          ) : (
+            <ErrorState
+              description={err.message}
+              onRetry={() => rolesQuery.refetch()}
+              retrying={rolesQuery.isFetching}
+            />
+          )
+        ) : roles.length === 0 ? (
+          <EmptyState
+            icon={Lock}
+            title="No roles defined"
+            description="Create a role to bundle policies and assign them to accounts."
+            action={
+              <Button variant="primary" icon={Plus} onClick={() => setCreateOpen(true)}>
+                Create the first role
+              </Button>
+            }
+          />
+        ) : table.total === 0 ? (
+          <NoMatchState
+            description="Nothing matches the current search or type filter."
+            onClear={table.resetFilters}
+          />
+        ) : (
+          <>
+            <DataTable minWidth="48rem">
+              <colgroup>
+                <col className="w-[15rem] min-w-[12rem]" />
+                <col className="w-auto" />
+                <col className="w-[8rem]" />
+                <col className="w-[9rem]" />
+                <col className="w-[9rem]" />
+                <col className="w-[4rem]" />
+              </colgroup>
+              <thead>
+                <tr>
+                  <SortTh columnKey="name" sort={table.sort} onSort={table.toggleSort} sticky edge>
+                    Role
+                  </SortTh>
+                  <Th>Description</Th>
+                  <SortTh columnKey="is_system" sort={table.sort} onSort={table.toggleSort}>
+                    Type
+                  </SortTh>
+                  <SortTh columnKey="user_count" sort={table.sort} onSort={table.toggleSort} align="right">
+                    Accounts
+                  </SortTh>
+                  <SortTh columnKey="created_at" sort={table.sort} onSort={table.toggleSort}>
+                    Created
+                  </SortTh>
+                  <Th align="right">
+                    <span className="sr-only">Actions</span>
+                  </Th>
+                </tr>
+              </thead>
+              <tbody>
+                {table.pageRows.map((role) => {
+                  const system = isSystemRole(role)
+                  return (
+                    <Tr key={role.id}>
+                      <Td sticky edge>
+                        <button
+                          type="button"
+                          onClick={() => setPeeked(role)}
+                          title={role.name}
+                          className="block max-w-full truncate text-left text-sm font-medium text-primary transition-colors hover:text-accent hover:underline"
+                        >
+                          {role.name}
+                        </button>
+                      </Td>
+                      <Td>
+                        <Trunc value={role.description} muted />
+                      </Td>
+                      <Td>
+                        {/* Built in versus custom is the one thing here that
+                            changes what you may do to a row, so it is a word
+                            rather than a coloured chip: a chip on every row is
+                            a column of colour that says nothing. */}
+                        <span className="text-sm text-secondary">{system ? 'Built in' : 'Custom'}</span>
+                      </Td>
+                      <Td align="right">
+                        <span className="text-sm tabular text-primary">{role.user_count ?? '-'}</span>
+                      </Td>
+                      <Td>
+                        <span className="text-sm text-secondary" title={formatDateTime(role.created_at)}>
+                          {formatRelativeToNow(role.created_at)}
+                        </span>
+                      </Td>
+                      <Td align="right">
+                        <RowActions>
+                          <RowMenu label={`Actions for ${role.name}`}>
+                            <MenuItem icon={Lock} onClick={() => setPeeked(role)}>
+                              Open role
+                            </MenuItem>
+                            {!system && (
+                              <MenuItem icon={Trash2} danger onClick={() => setDeleteTarget(role)}>
+                                Delete role
+                              </MenuItem>
+                            )}
+                            {system && <MenuNote>Built in roles cannot be deleted.</MenuNote>}
+                          </RowMenu>
+                        </RowActions>
+                      </Td>
+                    </Tr>
+                  )
+                })}
+              </tbody>
+            </DataTable>
+
+            <Pagination
+              page={table.page}
+              pageSize={table.pageSize}
+              total={table.total}
+              totalPages={table.totalPages}
+              onPageChange={table.setPage}
+              label="roles"
+            />
+          </>
+        )}
+      </Container>
 
       <RoleDrawer role={peeked} onClose={() => setPeeked(null)} onDelete={setDeleteTarget} />
 
@@ -595,6 +562,6 @@ export default function RolesPage() {
         onConfirm={() => deleteMutation.mutate(deleteTarget.id)}
         onCancel={() => setDeleteTarget(null)}
       />
-    </div>
+    </Stack>
   )
 }

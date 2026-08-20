@@ -1,105 +1,54 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import {
-  Plus,
-  ChevronRight,
-  Vault as VaultIcon,
-  Clock,
-  Star,
-  Search,
-  LayoutGrid,
-  Rows3,
-  SearchX,
-} from 'lucide-react'
-import clsx from 'clsx'
+import { Plus, Vault as VaultIcon } from 'lucide-react'
 import { listSafes } from '../../api/vault'
-import { PageHeader, Card, EmptyState, Toolbar } from '../../components/common/Layout'
-import { QueryState } from '../../components/common/QueryState'
-import { Badge } from '../../components/common/Badge'
+import { normalizeApiError } from '../../lib/apiError'
+import { Container, PageTitle, Stack } from '../../components/ui/layout'
+import { DataTable, SkeletonGrid, SortTh, Td, Th, Tr, Trunc } from '../../components/ui/grid'
+import { Meta } from '../../components/ui/bits'
+import {
+  CommandBar,
+  Pagination,
+  PreferencesMenu,
+  RefreshControl,
+  SearchField,
+} from '../../components/ui/chrome'
+import { DeniedState, EmptyState, ErrorState, NoMatchState, OfflineState } from '../../components/ui/states'
 import { Button } from '../../components/common/Button'
-import { SegmentedControl } from '../../components/common/SegmentedControl'
-import { SearchField, SortHeader, RefreshControl } from '../../components/common/TableControls'
 import { CreateSafeModal } from '../../components/vault/CreateSafeModal'
 import { useTableState } from '../../hooks/useTableState'
-import { formatDate } from '../../lib/format'
+import { formatDate, formatRelativeToNow } from '../../lib/format'
 
 // ---------------------------------------------------------------------------
 // Vault, safes
 // ---------------------------------------------------------------------------
-// KPI strip REMOVED at the user's request: on a page whose whole content is
-// "here are your safes", a stat card reading "Safes: 4" above a list of four
-// safes is furniture. The two facts that were worth keeping (which safe is
-// default, what retention applies) are now attributes ON each safe, where
-// they're actually actionable.
+// A safe is a container, and there are usually a handful of them, so the
+// question this page answers is "which safe, and how much is in it".
 //
-// Everything else is the console's standard list apparatus: one search, one
-// sort, a card/table view switch, and the create action in the page header.
-// listSafes() returns the whole collection and takes no params, so filtering
-// and ordering are client-side by necessity, see useTableState.
+// THE CARD VIEW IS GONE. Cards were the default: four bordered tiles with a
+// name, a description and a count each. That is a table with extra chrome and
+// a worse scan line, and it stopped being defensible the moment the count
+// mattered, because you cannot compare numbers that are not in a column. The
+// same information now reads down five aligned columns.
+//
+// COUNTS AND RETENTION ARE RIGHT ALIGNED AND TABULAR, because they are
+// quantities and the whole point of putting them in a column is comparing
+// them vertically. Created stays left aligned: a date is qualitative.
+//
+// listSafes() returns the whole collection and takes no parameters, so search,
+// sort and paging are client side by necessity.
 
-function retentionTone(days) {
-  if (typeof days !== 'number') return 'default'
-  if (days >= 365) return 'long'
-  if (days <= 30) return 'short'
-  return 'default'
-}
-
-function SafeCard({ safe }) {
-  return (
-    <Card
-      as={Link}
-      to={`/vault/${safe.id}`}
-      interactive
-      className="group flex flex-col p-4 outline-none focus-visible:border-blue-500"
-    >
-      <div className="flex items-start gap-3">
-        <span className="flex h-10 w-10 flex-none items-center justify-center rounded-xl border border-surface-700 bg-surface-850 text-ink-400 transition-colors group-hover:border-blue-500/40 group-hover:text-blue-600 dark:group-hover:text-blue-300">
-          <VaultIcon className="h-[1.15rem] w-[1.15rem]" strokeWidth={1.5} />
-        </span>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-start gap-2">
-            <h3 className="min-w-0 flex-1 truncate text-sm font-semibold text-ink-50">{safe.name}</h3>
-            {safe.is_default && (
-              <Badge className="bg-blue-50 text-blue-700 ring-blue-600/20 dark:bg-blue-500/15 dark:text-blue-300 dark:ring-blue-500/30">
-                Default
-              </Badge>
-            )}
-          </div>
-          <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-ink-500">
-            {safe.description || 'No description'}
-          </p>
-        </div>
-      </div>
-
-      <div className="mt-4 flex items-center justify-between gap-3 border-t border-surface-800 pt-3">
-        <span
-          className={clsx(
-            'inline-flex items-center gap-1.5 rounded-md border px-2 py-1 font-mono text-2xs tabular-nums',
-            retentionTone(safe.retention_days) === 'short'
-              ? 'border-amber-300/50 bg-amber-50 text-amber-700 dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-300'
-              : 'border-surface-700 bg-surface-850 text-ink-400'
-          )}
-          title="Deleted credential versions are purged after this many days"
-        >
-          <Clock className="h-3 w-3" strokeWidth={1.75} />
-          {typeof safe.retention_days === 'number' ? `${safe.retention_days}d retention` : 'No retention set'}
-        </span>
-        <span className="flex items-center gap-1 text-2xs font-medium text-ink-500 transition-colors group-hover:text-blue-600 dark:group-hover:text-blue-300">
-          Open
-          <ChevronRight
-            className="h-3.5 w-3.5 transition-transform duration-200 group-hover:translate-x-0.5"
-            strokeWidth={2}
-          />
-        </span>
-      </div>
-    </Card>
-  )
-}
+const SAFE_COLUMNS = [
+  { key: 'name', label: 'Safe', required: true },
+  { key: 'description', label: 'Description' },
+  { key: 'credential_count', label: 'Credentials' },
+  { key: 'retention_days', label: 'Retention' },
+  { key: 'created_at', label: 'Created' },
+]
 
 export default function SafesListPage() {
   const [createOpen, setCreateOpen] = useState(false)
-  const [view, setView] = useState('grid')
 
   const safesQuery = useQuery({
     queryKey: ['vault', 'safes'],
@@ -113,167 +62,198 @@ export default function SafesListPage() {
     storageKey: 'safes',
     rowId: (s) => s.id,
     initialSort: { key: 'name', dir: 'asc' },
-    initialPageSize: 50,
+    initialPageSize: 25,
     searchFields: ['name', 'description'],
   })
 
+  const err = safesQuery.isError ? normalizeApiError(safesQuery.error) : null
+  const show = (key) => !table.visibleColumns || table.visibleColumns.includes(key)
+
   return (
-    <div>
-      <PageHeader
-        eyebrow="Vault"
-        title="Safes"
-        description="Safes group credentials by ownership and retention policy. Secrets never leave the vault access is brokered, time-bound and recorded."
-        actions={
-          <Button variant="primary" icon={Plus} onClick={() => setCreateOpen(true)}>
-            Create safe
-          </Button>
-        }
+    <Stack gap="lg">
+      <PageTitle
+        title="Vault"
+        counter={safesQuery.isSuccess ? safes.length : undefined}
+        description="Safes hold credentials. Revealing one is recorded against your identity, with the reason you give."
       />
 
-      <Toolbar>
-        <SearchField
-          value={table.query}
-          onChange={table.setQuery}
-          placeholder="Search safes by name or description…"
-          className="min-w-[14rem] sm:max-w-sm"
-        />
-        <span className="ml-auto flex flex-wrap items-center gap-2">
-          <SegmentedControl
-            size="sm"
-            ariaLabel="View"
-            value={view}
-            onChange={setView}
-            options={[
-              { key: 'grid', label: '', icon: LayoutGrid },
-              { key: 'table', label: '', icon: Rows3 },
-            ]}
-          />
+      <Stack gap="sm">
+        <CommandBar
+          primary={
+            <Button variant="primary" icon={Plus} onClick={() => setCreateOpen(true)}>
+              Create safe
+            </Button>
+          }
+          summary={
+            safesQuery.isSuccess && table.total !== safes.length
+              ? `${table.total} of ${safes.length} shown`
+              : undefined
+          }
+        >
           <RefreshControl
             onRefresh={() => safesQuery.refetch()}
             isFetching={safesQuery.isFetching}
             updatedAt={safesQuery.dataUpdatedAt}
           />
-        </span>
-      </Toolbar>
+          <PreferencesMenu
+            columns={SAFE_COLUMNS}
+            visible={table.visibleColumns}
+            onVisibleChange={table.setVisibleColumns}
+            pageSize={table.pageSize}
+            onPageSize={table.setPageSize}
+          />
+        </CommandBar>
 
-      <QueryState
-        query={safesQuery}
-        empty={(d) => !d || d.length === 0}
-        emptyTitle="No safes yet"
-        emptyMessage="Create a safe to start storing credentials under a retention policy."
-        emptyAction={
-          <Button variant="primary" icon={Plus} onClick={() => setCreateOpen(true)}>
-            Create safe
-          </Button>
-        }
-        skeletonRows={4}
-      >
-        {() =>
-          table.total === 0 ? (
-            <Card>
-              <EmptyState
-                icon={SearchX}
-                title="No safes match that search"
-                description={`Nothing named like “${table.query}”. Clear the search to see every safe.`}
-                action={
-                  <Button variant="secondary" onClick={() => table.setQuery('')}>
-                    Clear search
-                  </Button>
-                }
-              />
-            </Card>
-          ) : view === 'grid' ? (
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              {table.pageRows.map((safe) => (
-                <SafeCard key={safe.id} safe={safe} />
-              ))}
-            </div>
+        <SearchField
+          value={table.query}
+          onChange={table.setQuery}
+          placeholder="Search safes by name or description"
+          label="Search safes"
+        />
+      </Stack>
+
+      <Container padded={false}>
+        {safesQuery.isLoading ? (
+          <table className="w-full">
+            <tbody>
+              <SkeletonGrid colSpan={SAFE_COLUMNS.length} rows={5} />
+            </tbody>
+          </table>
+        ) : err ? (
+          err.status === 403 ? (
+            <DeniedState description={err.message} />
+          ) : err.code === 'network_error' ? (
+            <OfflineState onRetry={() => safesQuery.refetch()} retrying={safesQuery.isFetching} />
           ) : (
-            <Card className="overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[40rem] border-separate border-spacing-0 text-sm">
-                  <thead>
-                    <tr>
-                      <SortHeader
-                        label="Safe"
-                        columnKey="name"
-                        sort={table.sort}
-                        onSort={table.toggleSort}
-                        className="min-w-[14rem]"
-                      />
-                      <SortHeader
-                        label="Description"
-                        columnKey="description"
-                        sort={table.sort}
-                        onSort={table.toggleSort}
-                      />
-                      <SortHeader
-                        label="Retention"
-                        columnKey="retention_days"
-                        sort={table.sort}
-                        onSort={table.toggleSort}
-                        align="right"
-                      />
-                      <SortHeader
-                        label="Created"
-                        columnKey="created_at"
-                        sort={table.sort}
-                        onSort={table.toggleSort}
-                      />
-                      <SortHeader label="Open" columnKey="_open" srOnly className="w-12" />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {table.pageRows.map((safe) => (
-                      <tr key={safe.id} className="group transition-colors hover:bg-surface-850">
-                        <td className="border-b border-surface-800 px-4 py-3">
-                          <div className="flex min-w-0 items-center gap-3">
-                            <span className="flex h-8 w-8 flex-none items-center justify-center rounded-lg border border-surface-700 bg-surface-850 text-ink-400">
-                              <VaultIcon className="h-4 w-4" strokeWidth={1.5} />
-                            </span>
-                            <Link
-                              to={`/vault/${safe.id}`}
-                              className="min-w-0 truncate font-medium text-ink-50 transition-colors hover:text-blue-600 dark:hover:text-blue-300"
-                            >
-                              {safe.name}
-                            </Link>
-                            {safe.is_default && (
-                              <Badge className="bg-blue-50 text-blue-700 ring-blue-600/20 dark:bg-blue-500/15 dark:text-blue-300 dark:ring-blue-500/30">
-                                <Star className="h-2.5 w-2.5" strokeWidth={2.5} />
-                                Default
-                              </Badge>
-                            )}
-                          </div>
-                        </td>
-                        <td className="max-w-[22rem] border-b border-surface-800 px-4 py-3 text-ink-400">
-                          <span className="block truncate">{safe.description || '-'}</span>
-                        </td>
-                        <td className="whitespace-nowrap border-b border-surface-800 px-4 py-3 text-right font-mono text-xs tabular-nums text-ink-300">
-                          {typeof safe.retention_days === 'number' ? `${safe.retention_days}d` : '-'}
-                        </td>
-                        <td className="whitespace-nowrap border-b border-surface-800 px-4 py-3 text-xs tabular-nums text-ink-400">
-                          {safe.created_at ? formatDate(safe.created_at) : '-'}
-                        </td>
-                        <td className="border-b border-surface-800 px-2 py-3">
-                          <Link
-                            to={`/vault/${safe.id}`}
-                            aria-label={`Open ${safe.name}`}
-                            className="flex h-7 w-7 items-center justify-center rounded-md text-ink-600 transition-colors hover:bg-surface-800 hover:text-ink-100"
-                          >
-                            <ChevronRight className="h-4 w-4" strokeWidth={2} />
-                          </Link>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </Card>
+            <ErrorState
+              description={err.message}
+              onRetry={() => safesQuery.refetch()}
+              retrying={safesQuery.isFetching}
+            />
           )
-        }
-      </QueryState>
+        ) : safes.length === 0 ? (
+          <EmptyState
+            icon={VaultIcon}
+            title="No safes yet"
+            description="Create a safe to start storing credentials under a retention policy."
+            action={
+              <Button variant="primary" icon={Plus} onClick={() => setCreateOpen(true)}>
+                Create the first safe
+              </Button>
+            }
+          />
+        ) : table.total === 0 ? (
+          <NoMatchState
+            description="No safe matches that search."
+            onClear={() => table.setQuery('')}
+            clearLabel="Clear search"
+          />
+        ) : (
+          <>
+            <DataTable minWidth="52rem">
+              <colgroup>
+                {show('name') && <col className="w-[16rem] min-w-[12rem]" />}
+                {show('description') && <col className="w-auto" />}
+                {show('credential_count') && <col className="w-[8rem]" />}
+                {show('retention_days') && <col className="w-[8rem]" />}
+                {show('created_at') && <col className="w-[10rem]" />}
+              </colgroup>
+
+              <thead>
+                <tr>
+                  {show('name') && (
+                    <SortTh columnKey="name" sort={table.sort} onSort={table.toggleSort} sticky edge>
+                      Safe
+                    </SortTh>
+                  )}
+                  {show('description') && <Th>Description</Th>}
+                  {show('credential_count') && (
+                    <SortTh
+                      columnKey="credential_count"
+                      sort={table.sort}
+                      onSort={table.toggleSort}
+                      align="right"
+                    >
+                      Credentials
+                    </SortTh>
+                  )}
+                  {show('retention_days') && (
+                    <SortTh
+                      columnKey="retention_days"
+                      sort={table.sort}
+                      onSort={table.toggleSort}
+                      align="right"
+                    >
+                      Retention
+                    </SortTh>
+                  )}
+                  {show('created_at') && (
+                    <SortTh columnKey="created_at" sort={table.sort} onSort={table.toggleSort}>
+                      Created
+                    </SortTh>
+                  )}
+                </tr>
+              </thead>
+
+              <tbody>
+                {table.pageRows.map((s) => (
+                  <Tr key={s.id}>
+                    {show('name') && (
+                      <Td sticky edge>
+                        <div className="flex min-w-0 items-center gap-2">
+                          <Link
+                            to={`/vault/${s.id}`}
+                            title={s.name}
+                            className="min-w-0 truncate text-sm font-medium text-primary transition-colors hover:text-accent hover:underline"
+                          >
+                            {s.name}
+                          </Link>
+                          {s.is_default && <Meta>default</Meta>}
+                        </div>
+                      </Td>
+                    )}
+                    {show('description') && (
+                      <Td>
+                        <Trunc value={s.description} muted />
+                      </Td>
+                    )}
+                    {show('credential_count') && (
+                      <Td align="right">
+                        <span className="text-sm tabular text-primary">{s.credential_count ?? '-'}</span>
+                      </Td>
+                    )}
+                    {show('retention_days') && (
+                      <Td align="right">
+                        <span className="text-sm tabular text-secondary">
+                          {s.retention_days ? `${s.retention_days} d` : '-'}
+                        </span>
+                      </Td>
+                    )}
+                    {show('created_at') && (
+                      <Td>
+                        <span className="text-sm text-secondary" title={formatDate(s.created_at)}>
+                          {formatRelativeToNow(s.created_at)}
+                        </span>
+                      </Td>
+                    )}
+                  </Tr>
+                ))}
+              </tbody>
+            </DataTable>
+
+            <Pagination
+              page={table.page}
+              pageSize={table.pageSize}
+              total={table.total}
+              totalPages={table.totalPages}
+              onPageChange={table.setPage}
+              label="safes"
+            />
+          </>
+        )}
+      </Container>
 
       <CreateSafeModal open={createOpen} onClose={() => setCreateOpen(false)} />
-    </div>
+    </Stack>
   )
 }
