@@ -173,7 +173,9 @@ export function CreateResourceModal({ open, onClose }) {
     mutationFn: createResource,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['resources'] })
-      toast.success('Resource registered')
+      toast.success('Resource registered', {
+        description: 'It is now in the catalogue and can be connected to or requested.',
+      })
       close()
     },
     onError: (err) => toast.error(apiErrorMessage(err)),

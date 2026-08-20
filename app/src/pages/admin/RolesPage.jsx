@@ -305,7 +305,9 @@ export default function RolesPage() {
   const deleteMutation = useMutation({
     mutationFn: (roleId) => deleteRole(roleId),
     onSuccess: () => {
-      toast.success('Role deleted')
+      toast.success('Role deleted', {
+        description: 'Accounts that held it lose the policies it granted.',
+      })
       queryClient.invalidateQueries({ queryKey: ['admin', 'roles'] })
       setDeleteTarget(null)
       setPeeked(null)

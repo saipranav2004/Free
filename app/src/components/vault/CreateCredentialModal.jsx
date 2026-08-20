@@ -104,7 +104,9 @@ export function CreateCredentialModal({ open, onClose, safeId, folders = [], fol
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['vault', 'safes', safeId, 'credentials'] })
-      toast.success('Credential encrypted and stored')
+      toast.success('Credential stored', {
+        description: 'It is encrypted at rest. Revealing it later is recorded against your identity.',
+      })
       onClose()
     },
     onError: (err) => toast.error(apiErrorMessage(err)),

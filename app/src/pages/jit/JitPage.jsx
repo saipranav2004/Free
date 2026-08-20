@@ -407,7 +407,9 @@ export default function JitPage() {
   const cancelMutation = useMutation({
     mutationFn: ({ id, reason }) => cancelJitRequest(id, reason),
     onSuccess: () => {
-      toast.success('Request withdrawn')
+      toast.success('Request withdrawn', {
+        description: 'No approver will see it. You can raise a new one if you still need access.',
+      })
       setCancelTarget(null)
       queryClient.invalidateQueries({ queryKey: ['jit'] })
     },

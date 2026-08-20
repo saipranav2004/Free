@@ -23,7 +23,9 @@ export function BackupRestorePanel() {
     mutationFn: createBackup,
     onSuccess: (meta) => {
       setLastBackup(meta)
-      toast.success('Encrypted backup created')
+      toast.success('Backup created', {
+        description: 'An encrypted snapshot of the vault was written to object storage.',
+      })
     },
     onError: (err) => toast.error(apiErrorMessage(err)),
   })

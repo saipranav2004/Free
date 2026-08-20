@@ -755,7 +755,9 @@ export default function IdentityDetailPage() {
   const deleteMutation = useMutation({
     mutationFn: () => deleteUser(id),
     onSuccess: () => {
-      toast.success('Account deleted')
+      toast.success('Account deleted', {
+        description: 'The account can no longer sign in. Its audit history is kept.',
+      })
       queryClient.invalidateQueries({ queryKey: ['admin', 'users'] })
       navigate('/admin/identity')
     },
@@ -780,7 +782,9 @@ export default function IdentityDetailPage() {
       return assignRole(id, roleName)
     },
     onSuccess: () => {
-      toast.success('Role assigned')
+      toast.success('Role assigned', {
+        description: 'The account gains the policies this role carries on its next request.',
+      })
       invalidate()
       setNewRole('')
     },
@@ -799,7 +803,9 @@ export default function IdentityDetailPage() {
       return removeRole(id, roleName)
     },
     onSuccess: () => {
-      toast.success('Role removed')
+      toast.success('Role removed', {
+        description: 'The policies this role carried no longer apply to the account.',
+      })
       invalidate()
     },
     onError: (err) => toast.error(mutationErrorMessage(err)),
@@ -813,7 +819,9 @@ export default function IdentityDetailPage() {
       return revokeAdminDelegation(id, { reason })
     },
     onSuccess: () => {
-      toast.success('Admin delegation revoked')
+      toast.success('Administrative access revoked', {
+        description: 'This account can no longer reach the Admin Center.',
+      })
       invalidate()
       setConfirmRevoke(false)
     },

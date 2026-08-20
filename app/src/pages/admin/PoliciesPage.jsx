@@ -268,7 +268,9 @@ export default function PoliciesPage() {
   const deleteMutation = useMutation({
     mutationFn: (policyId) => deletePolicy(policyId),
     onSuccess: () => {
-      toast.success('Policy deleted')
+      toast.success('Policy deleted', {
+        description: 'Roles that referenced it no longer grant its actions.',
+      })
       queryClient.invalidateQueries({ queryKey: ['admin', 'policies'] })
       setDeleteTarget(null)
       setPeeked(null)

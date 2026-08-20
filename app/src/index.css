@@ -413,26 +413,56 @@ html {
  * Third party surfaces
  * =========================================================================== */
 
-/* Toasts. The app already calls sonner from 141 places and every one of them
-   works, so it is kept and themed here rather than replaced. */
+/* Toasts. Sonner is called from ~140 places and every one works, so it is
+   themed here rather than replaced. richColors is off (see main.jsx); this
+   gives every toast the same neutral surface, with the outcome icon carrying
+   the one bit of colour. */
 [data-sonner-toaster] {
   --normal-bg: rgb(var(--bg-surface));
   --normal-border: rgb(var(--border));
   --normal-text: rgb(var(--text-primary));
+  --border-radius: 12px;
   font-family: theme('fontFamily.sans');
 }
 [data-sonner-toast] {
-  border-radius: 10px !important;
-  font-size: 0.875rem !important;
+  border: 1px solid rgb(var(--border)) !important;
+  border-radius: 12px !important;
+  padding: 14px 16px !important;
+  gap: 12px !important;
   box-shadow: var(--shadow-pop) !important;
 }
+[data-sonner-toast] [data-icon] {
+  margin-top: 1px;
+  margin-right: 0;
+}
+[data-sonner-toast] [data-content] {
+  gap: 3px !important;
+}
 [data-sonner-toast] [data-title] {
+  font-size: 0.875rem !important;
   font-weight: 600 !important;
+  line-height: 1.25rem !important;
+  color: rgb(var(--text-primary)) !important;
 }
 [data-sonner-toast] [data-description] {
   font-size: 0.8125rem !important;
   color: rgb(var(--text-secondary)) !important;
-  line-height: 1.25rem !important;
+  line-height: 1.15rem !important;
+}
+/* The close control is chrome: quiet until the toast is hovered. */
+[data-sonner-toast] [data-close-button] {
+  border: 1px solid rgb(var(--border)) !important;
+  background: rgb(var(--bg-surface)) !important;
+  color: rgb(var(--text-tertiary)) !important;
+  opacity: 0;
+  transition: opacity 120ms ease, color 120ms ease;
+}
+[data-sonner-toast]:hover [data-close-button] {
+  opacity: 1;
+}
+[data-sonner-toast] [data-close-button]:hover {
+  color: rgb(var(--text-primary)) !important;
+  background: rgb(var(--bg-hover)) !important;
 }
 
 /* Native date and time inputs render a dark picker glyph on a dark field in

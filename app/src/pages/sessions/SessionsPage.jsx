@@ -250,7 +250,9 @@ export default function SessionsPage() {
   const killMutation = useMutation({
     mutationFn: ({ id, reason }) => killSession(id, reason),
     onSuccess: () => {
-      toast.success('Session killed')
+      toast.success('Session ended', {
+        description: 'The connection was terminated and the reason recorded to the audit log.',
+      })
       setKillTarget(null)
       setDetail(null)
       invalidateAll()
