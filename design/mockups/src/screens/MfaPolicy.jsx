@@ -9,6 +9,9 @@ import {
   RuledLabel, Section, StatRail, StatusDot,
 } from '../ui/primitives'
 import { COL, DataTable, RowActions, Td, Th, Tr, Trunc } from '../ui/table'
+import { CommandBar, ExportMenu, RowMenu } from '../ui/listchrome'
+import { ConfirmDialog, MenuItem, useToast } from '../ui/overlay'
+import { MfaRuleDialog } from '../surfaces/CreateForms'
 import { DeniedState, DegradedState, EmptyState } from '../ui/states'
 import { relative } from '../lib/format'
 
@@ -44,8 +47,11 @@ const MODE_COPY = {
 
 export default function MfaPolicyPage() {
   const { isAdmin } = useViewer()
+  const toast = useToast()
   const [showDegraded, setShowDegraded] = useState(false)
   const [onlyAtRisk, setOnlyAtRisk] = useState(true)
+  const [editRule, setEditRule] = useState(null)
+  const [deleteRule, setDeleteRule] = useState(null)
 
   const accounts = mfaCompliance.accounts
   const atRisk = useMemo(() => accounts.filter((a) => a.would_lock_out), [accounts])
@@ -167,7 +173,7 @@ export default function MfaPolicyPage() {
           <Section
             title="Rules"
             description="One rule per role. A role with no rule is not gated at all."
-            action={<Button size="sm">Add a rule</Button>}
+            action={<Button size="sm" onClick={() => setEditRule({ role_name: '', mode: 'monitor', grace_period_days: 14 })}>Add a rule</Button>}
           >
             <DataTable minWidth="48rem">
               <thead>
@@ -201,7 +207,11 @@ export default function MfaPolicyPage() {
                       <Td align="right"><span className="text-tertiary">{relative(r.updated_at)}</span></Td>
                       <Td align="right">
                         <RowActions>
-                          <Button size="sm">Edit</Button>
+                          <Button size="sm" onClick={() => setEditRule(r)}>Edit</Button>
+                          <RowMenu label={`Actions for the ${r.role_name} rule`}>
+                            <MenuItem onClick={() => setEditRule(r)}>Change mode…</MenuItem>
+                            <MenuItem danger onClick={() => setDeleteRule(r)}>Remove rule…</MenuItem>
+                          </RowMenu>
                         </RowActions>
                       </Td>
                     </Tr>
@@ -221,6 +231,24 @@ export default function MfaPolicyPage() {
           </Section>
         </>
       )}
+
+      <MfaRuleDialog
+        open={!!editRule}
+        onClose={() => setEditRule(null)}
+        rule={editRule}
+        atRisk={editRule ? atRisk.filter((a) => a.roles.includes(editRule.role_name)).length : 0}
+        onDone={(mode) => { const n = editRule.role_name; setEditRule(null); toast({ title: `Rule for ${n} set to ${mode}`, tone: mode === 'enforce' ? 'warning' : 'success' }) }}
+      />
+
+      <ConfirmDialog
+        open={!!deleteRule}
+        onClose={() => setDeleteRule(null)}
+        title={`Remove the MFA rule for ${deleteRule?.role_name}?`}
+        consequence="Accounts holding that role stop being challenged at sign-in and stop being counted here. Nobody is signed out — the rule simply stops applying."
+        confirmLabel="Remove rule"
+        destructive
+        onConfirm={() => { const n = deleteRule.role_name; setDeleteRule(null); toast({ title: `Rule for ${n} removed`, tone: 'warning' }) }}
+      />
     </>
   )
 }

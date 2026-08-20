@@ -7,12 +7,18 @@ import {
 import { useViewer } from '../state/viewer'
 import { credentials, resources, sessions, auditEvents } from '../fixtures'
 import {
-  BreakglassTag, Button, DetailList, FilterChip, Meta, PageHeader, Panel,
-  RuledLabel, Section, Segmented, StatusDot, inputClass,
+  BreakglassTag, Button, DetailList, Field, FieldSet, FilterChip, Meta, PageHeader,
+  Panel, RuledLabel, Section, Segmented, StatusDot, inputClass,
 } from '../ui/primitives'
-import { COL, DataTable, RowActions, Td, Th, Tr, Trunc } from '../ui/table'
+import { COL, DataTable, RowActions, SortTh, Td, Th, Tr, Trunc, nextSort, sortRows } from '../ui/table'
+import {
+  ActiveFilters, CommandBar, ExportMenu, Pagination, PreferencesMenu, RowMenu, usePaging,
+} from '../ui/listchrome'
+import { ConfirmDialog, Dialog, MenuItem, useToast } from '../ui/overlay'
+import { CreateResourceDialog } from '../surfaces/CreateForms'
+import { ConnectPanel, PairAgentPanel } from '../surfaces/Panels'
 import { EmptyState } from '../ui/states'
-import { dateTime, duration, relative } from '../lib/format'
+import { duration, relative } from '../lib/format'
 
 // ===========================================================================
 // Resources  (list + detail)
@@ -77,15 +83,29 @@ function ConnectAffordance({ resource, size = 'sm' }) {
   )
 }
 
+const RES_COLUMNS = [
+  { key: 'resource', label: 'Resource', locked: true },
+  { key: 'type', label: 'Type' },
+  { key: 'host', label: 'Host' },
+  { key: 'port', label: 'Port' },
+  { key: 'controls', label: 'Controls' },
+  { key: 'credential', label: 'Credential' },
+]
+
 export function ResourcesList() {
   const { isAdmin } = useViewer()
+  const toast = useToast()
   const [q, setQ] = useState('')
   const [view, setView] = useState('table')
   const [jitOnly, setJitOnly] = useState(false)
   const [recordedOnly, setRecordedOnly] = useState(false)
   const [noCredOnly, setNoCredOnly] = useState(false)
+  const [sort, setSort] = useState({ key: 'resource', dir: 'asc' })
+  const [visible, setVisible] = useState(RES_COLUMNS.map((c) => c.key))
+  const [createOpen, setCreateOpen] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState(null)
 
-  const rows = useMemo(() => {
+  const matched = useMemo(() => {
     let r = resources
     if (q) {
       const s = q.toLowerCase()
@@ -94,9 +114,19 @@ export function ResourcesList() {
     if (jitOnly) r = r.filter((x) => x.requires_jit)
     if (recordedOnly) r = r.filter((x) => x.always_record)
     if (noCredOnly) r = r.filter((x) => !x.vault_entry_id)
-    return r
-  }, [q, jitOnly, recordedOnly, noCredOnly])
+    return sortRows(r, sort, {
+      resource: (x) => x.name,
+      type: (x) => x.resource_type,
+      host: (x) => x.host,
+      port: (x) => x.port,
+      credential: (x) => (x.vault_entry_id ? 1 : 0),
+    })
+  }, [q, jitOnly, recordedOnly, noCredOnly, sort])
 
+  const paging = usePaging(matched.length, 25)
+  const rows = paging.slice(matched)
+  const has = (k) => visible.includes(k)
+  const onSort = (key) => setSort((s2) => nextSort(s2, key))
   const filtered = !!q || jitOnly || recordedOnly || noCredOnly
   const clear = () => {
     setQ('')
@@ -110,10 +140,24 @@ export function ResourcesList() {
       <PageHeader
         title="Resources"
         description="Everything you can connect to. JIT-gated resources need an approved request first."
-        actions={isAdmin ? <Button variant="primary" icon={Plus}>Add resource</Button> : null}
       />
 
-      <div className="mb-4 flex flex-wrap items-center gap-2">
+      <CommandBar
+        primary={isAdmin ? <Button variant="primary" icon={Plus} onClick={() => setCreateOpen(true)}>Add resource</Button> : null}
+        summary={`${matched.length} of ${resources.length}`}
+      >
+        <Segmented value={view} onChange={setView} options={[{ value: 'table', label: 'Table' }, { value: 'grid', label: 'Grid' }]} />
+        <ExportMenu count={rows.length} />
+        <PreferencesMenu
+          columns={RES_COLUMNS}
+          visible={visible}
+          onVisibleChange={setVisible}
+          pageSize={paging.pageSize}
+          onPageSize={paging.setPageSize}
+        />
+      </CommandBar>
+
+      <div className="mb-3 flex flex-wrap items-center gap-2">
         <div className="relative min-w-[14rem] flex-1 sm:max-w-[20rem]">
           <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-tertiary" strokeWidth={1.75} />
           <input
@@ -135,34 +179,36 @@ export function ResourcesList() {
             No credential
           </FilterChip>
         )}
-        <div className="ml-auto flex items-center gap-2">
-          <span className="text-xs tabular text-tertiary">{rows.length} of {resources.length}</span>
-          <Segmented
-            value={view}
-            onChange={setView}
-            options={[{ value: 'table', label: 'Table' }, { value: 'grid', label: 'Grid' }]}
-          />
-        </div>
       </div>
+
+      <ActiveFilters
+        chips={[
+          q && { label: `“${q}”`, onRemove: () => setQ('') },
+          jitOnly && { label: 'JIT required', onRemove: () => setJitOnly(false) },
+          recordedOnly && { label: 'Always recorded', onRemove: () => setRecordedOnly(false) },
+          noCredOnly && { label: 'No credential', onRemove: () => setNoCredOnly(false) },
+        ].filter(Boolean)}
+        onClearAll={clear}
+      />
 
       {rows.length === 0 ? (
         <EmptyState
           variant={filtered ? 'no-match' : 'none-yet'}
           description={filtered ? 'No resource matches. Widen the search or drop a facet.' : 'No resources are registered yet.'}
           onClearFilters={clear}
-          action={isAdmin ? <Button variant="primary" icon={Plus}>Add the first resource</Button> : null}
+          action={isAdmin ? <Button variant="primary" icon={Plus} onClick={() => setCreateOpen(true)}>Add the first resource</Button> : null}
         />
       ) : view === 'table' ? (
         <DataTable minWidth="70rem">
           <thead>
             <tr>
-              <Th width={COL.name} sticky edge>Resource</Th>
-              <Th width={COL.short}>Type</Th>
-              <Th width={COL.wide}>Host</Th>
-              <Th width={COL.count} align="right">Port</Th>
-              <Th width={COL.medium}>Controls</Th>
-              <Th width={COL.short}>Credential</Th>
-              <Th width={COL.actions} align="right"><span className="sr-only">Actions</span></Th>
+              <SortTh columnKey="resource" sort={sort} onSort={onSort} width={COL.name} sticky edge>Resource</SortTh>
+              {has('type') && <SortTh columnKey="type" sort={sort} onSort={onSort} width={COL.short}>Type</SortTh>}
+              {has('host') && <SortTh columnKey="host" sort={sort} onSort={onSort} width={COL.wide}>Host</SortTh>}
+              {has('port') && <SortTh columnKey="port" sort={sort} onSort={onSort} align="right" width={COL.count}>Port</SortTh>}
+              {has('controls') && <Th width={COL.medium}>Controls</Th>}
+              {has('credential') && <SortTh columnKey="credential" sort={sort} onSort={onSort} width={COL.short}>Credential</SortTh>}
+              <Th width="w-[11rem]" align="right"><span className="sr-only">Actions</span></Th>
             </tr>
           </thead>
           <tbody>
@@ -177,10 +223,10 @@ export function ResourcesList() {
                     {!r.is_active && <Meta>inactive</Meta>}
                   </div>
                 </Td>
-                <Td><Trunc value={r.resource_type} muted /></Td>
-                <Td><Trunc value={r.host} mono /></Td>
-                <Td align="right"><span className="font-mono text-xs">{r.port}</span></Td>
-                <Td>
+                {has('type') && <Td><Trunc value={r.resource_type} muted /></Td>}
+                {has('host') && <Td><Trunc value={r.host} mono /></Td>}
+                {has('port') && <Td align="right"><span className="font-mono text-xs">{r.port}</span></Td>}
+                {has('controls') && <Td>
                   <span className="flex items-center gap-3">
                     {r.requires_jit && (
                       <span className="inline-flex items-center gap-1 text-xs text-warn" title="Requires an approved JIT request">
@@ -194,18 +240,19 @@ export function ResourcesList() {
                     )}
                     {!r.requires_jit && !r.always_record && <Meta>none</Meta>}
                   </span>
-                </Td>
-                <Td>
-                  {r.vault_entry_id ? (
-                    <StatusDot tone="ok" label="Stored" />
-                  ) : (
-                    <StatusDot tone="warn" label="Missing" />
-                  )}
-                </Td>
+                </Td>}
+                {has('credential') && (
+                  <Td>{r.vault_entry_id ? <StatusDot tone="ok" label="Stored" /> : <StatusDot tone="warn" label="Missing" />}</Td>
+                )}
                 <Td align="right">
-                  <div className="flex justify-end">
+                  <RowActions>
                     <ConnectAffordance resource={r} />
-                  </div>
+                    <RowMenu label={`Actions for ${r.name}`}>
+                      <MenuItem><Link to={`/resources/${r.id}`}>Open resource</Link></MenuItem>
+                      {isAdmin && <MenuItem>{r.vault_entry_id ? 'Replace credential…' : 'Store a credential…'}</MenuItem>}
+                      {isAdmin && <MenuItem danger onClick={() => setDeleteTarget(r)}>Delete resource…</MenuItem>}
+                    </RowMenu>
+                  </RowActions>
                 </Td>
               </Tr>
             ))}
@@ -238,6 +285,30 @@ export function ResourcesList() {
           ))}
         </div>
       )}
+
+      {view === 'table' && rows.length > 0 && (
+        <Pagination page={paging.page} pageSize={paging.pageSize} total={matched.length} onPage={paging.setPage} />
+      )}
+
+      <CreateResourceDialog
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onDone={(name) => {
+          setCreateOpen(false)
+          toast({ title: `${name} registered`, description: 'No credential is stored yet, so it will refuse connections until you add one.' })
+        }}
+      />
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        title={`Delete ${deleteTarget?.name}?`}
+        consequence="Nobody can connect to it from this moment. Its audit history and its recordings are kept — deleting a resource does not delete the evidence of what was done on it. Active sessions are not cleaned up by this."
+        confirmLabel="Delete resource"
+        destructive
+        typeToConfirm={deleteTarget?.name}
+        onConfirm={() => { const n = deleteTarget.name; setDeleteTarget(null); toast({ title: `${n} deleted`, tone: 'error' }) }}
+      />
     </>
   )
 }
@@ -257,6 +328,11 @@ export function ResourcesList() {
 export function ResourceDetail() {
   const { id } = useParams()
   const { isAdmin } = useViewer()
+  const toast = useToast()
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [credOpen, setCredOpen] = useState(false)
+  const [rotateOpen, setRotateOpen] = useState(false)
+  const [showPair, setShowPair] = useState(false)
   const r = resources.find((x) => x.id === id) || resources[0]
   const cred = credentials.find((c) => c.id === r.vault_entry_id)
   const resSessions = sessions.filter((s) => s.resource_id === r.id)
@@ -273,16 +349,20 @@ export function ResourceDetail() {
           </span>
         }
         description={r.description}
-        actions={
-          <div className="flex items-center gap-2">
-            <ConnectAffordance resource={r} size="lg" />
-            {r.connect_mode === 'console_url' && <Button size="lg">Open console</Button>}
-          </div>
-        }
       />
 
+      <ConnectPanel resource={r} />
+
+      {showPair ? (
+        <div className="mt-3"><PairAgentPanel /></div>
+      ) : (
+        <button type="button" onClick={() => setShowPair(true)} className="mt-2 text-xs text-accent hover:underline">
+          No paired device? Pair one →
+        </button>
+      )}
+
       {r.requires_jit && (
-        <Panel className="mb-6 flex items-start gap-3 px-4 py-3">
+        <Panel className="mb-6 mt-3 flex items-start gap-3 px-4 py-3">
           <KeyRound className="mt-0.5 h-4 w-4 flex-none text-warn" strokeWidth={1.75} />
           <p className="text-base text-secondary">
             This resource is JIT-gated. Connecting needs an approved request — standard requests take two
@@ -374,11 +454,11 @@ export function ResourceDetail() {
           className="mt-12 border-t border-line pt-8"
         >
           <div className="flex flex-wrap items-center gap-2">
-            <Button icon={Shield}>{cred ? 'Replace stored credential' : 'Store a credential'}</Button>
-            <Button disabled={!cred} title={cred ? undefined : 'Nothing to rotate — no credential is stored'}>
+            <Button icon={Shield} onClick={() => setCredOpen(true)}>{cred ? 'Replace stored credential' : 'Store a credential'}</Button>
+            <Button disabled={!cred} onClick={() => setRotateOpen(true)} title={cred ? undefined : 'Nothing to rotate — no credential is stored'}>
               Rotate credential
             </Button>
-            <Button variant="dangerQuiet">Delete resource</Button>
+            <Button variant="dangerQuiet" onClick={() => setDeleteOpen(true)}>Delete resource</Button>
           </div>
           <p className="mt-3 max-w-prose text-xs text-tertiary">
             Deleting a resource does not delete its audit history or its recordings. It does end the ability to
@@ -386,6 +466,50 @@ export function ResourceDetail() {
           </p>
         </Section>
       )}
+
+      <Dialog
+        open={credOpen}
+        onClose={() => setCredOpen(false)}
+        size="md"
+        title={cred ? `Replace the credential on ${r.name}` : `Store a credential for ${r.name}`}
+        description="This is the account the broker uses to open sessions. Nobody sees it — they get a session, not the secret."
+        footer={
+          <>
+            <Button variant="primary" size="lg" onClick={() => { setCredOpen(false); toast({ title: 'Credential stored' }) }}>Store credential</Button>
+            <Button size="lg" onClick={() => setCredOpen(false)}>Cancel</Button>
+            <Meta className="ml-auto hidden sm:inline">POST /admin/resources/:id/credential</Meta>
+          </>
+        }
+      >
+        <FieldSet title="Broker account">
+          <Field label="Username" htmlFor="rc-user" required>
+            <input id="rc-user" className={clsx(inputClass, 'font-mono')} defaultValue="pam_admin" />
+          </Field>
+          <Field label="Secret" htmlFor="rc-secret" required hint="Encrypted on arrival. Rotating later replaces it without a gap.">
+            <input id="rc-secret" type="password" className={clsx(inputClass, 'font-mono')} />
+          </Field>
+        </FieldSet>
+      </Dialog>
+
+      <ConfirmDialog
+        open={rotateOpen}
+        onClose={() => setRotateOpen(false)}
+        title={`Rotate the credential on ${r.name}?`}
+        consequence="The broker changes the password on the target and stores the new value as the next version. Sessions already open keep working; new sessions use the new secret. If the target refuses the change, nothing is stored and the old value stays valid."
+        confirmLabel="Rotate now"
+        onConfirm={() => { setRotateOpen(false); toast({ title: 'Rotation requested', description: 'The result appears on the credential in the vault.' }) }}
+      />
+
+      <ConfirmDialog
+        open={deleteOpen}
+        onClose={() => setDeleteOpen(false)}
+        title={`Delete ${r.name}?`}
+        consequence="Nobody can connect to it from this moment. Its audit history and recordings are kept — deleting a resource does not delete the evidence of what was done on it."
+        confirmLabel="Delete resource"
+        destructive
+        typeToConfirm={r.name}
+        onConfirm={() => { setDeleteOpen(false); toast({ title: `${r.name} deleted`, tone: 'error' }) }}
+      />
     </>
   )
 }

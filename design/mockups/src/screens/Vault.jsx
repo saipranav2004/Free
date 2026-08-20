@@ -4,10 +4,15 @@ import clsx from 'clsx'
 import { ChevronRight, Eye, FolderIcon, KeyRound, Plus, RotateCw, Search } from 'lucide-react'
 import { credentials, credentialVersions, folders, resources, safes } from '../fixtures'
 import {
-  AlarmBand, BreakglassTag, Button, DetailList, FilterChip, Meta, PageHeader,
-  Panel, RuledLabel, Section, StatusDot, inputClass,
+  AlarmBand, BreakglassTag, Button, DetailList, Field, FieldSet, FilterChip, Meta,
+  PageHeader, Panel, RuledLabel, Section, StatusDot, inputClass, textareaClass,
 } from '../ui/primitives'
-import { COL, DataTable, RowActions, Td, Th, Tr, Trunc } from '../ui/table'
+import { COL, DataTable, RowActions, SortTh, Td, Th, Tr, Trunc, nextSort, sortRows } from '../ui/table'
+import { CommandBar, ExportMenu, Pagination, PreferencesMenu, RowMenu, usePaging } from '../ui/listchrome'
+import { ConfirmDialog, Dialog, MenuItem, useToast } from '../ui/overlay'
+import {
+  CreateCredentialDialog, CreateFolderDialog, CreateSafeDialog, RevealDialog,
+} from '../surfaces/CreateForms'
 import { EmptyState } from '../ui/states'
 import { dateTime, relative } from '../lib/format'
 
@@ -38,24 +43,40 @@ import { dateTime, relative } from '../lib/format'
 // There is no "delete credential" endpoint, so there is no delete control.
 
 export function SafesList() {
+  const toast = useToast()
   const [q, setQ] = useState('')
-  const rows = safes.filter((s) => s.name.toLowerCase().includes(q.toLowerCase()))
+  const [createOpen, setCreateOpen] = useState(false)
+  const [sort, setSort] = useState({ key: 'safe', dir: 'asc' })
   const countIn = (safeId) => credentials.filter((c) => c.safe_id === safeId).length
+  const matched = sortRows(
+    safes.filter((s) => s.name.toLowerCase().includes(q.toLowerCase())),
+    sort,
+    { safe: (x) => x.name, credentials: (x) => countIn(x.id), retention: (x) => x.retention_days, created: (x) => x.created_at }
+  )
+  const paging = usePaging(matched.length, 25)
+  const rows = paging.slice(matched)
+  const onSort = (key) => setSort((s2) => nextSort(s2, key))
 
   return (
     <>
       <PageHeader
         title="Vault"
         description="Safes hold credentials. Revealing one is recorded against your identity with the reason you give."
-        actions={<Button variant="primary" icon={Plus}>New safe</Button>}
       />
 
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        <div className="relative min-w-[14rem] flex-1 sm:max-w-[20rem]">
+      <CommandBar
+        primary={<Button variant="primary" icon={Plus} onClick={() => setCreateOpen(true)}>New safe</Button>}
+        summary={`${matched.length} of ${safes.length}`}
+      >
+        <ExportMenu count={rows.length} />
+        <PreferencesMenu pageSize={paging.pageSize} onPageSize={paging.setPageSize} />
+      </CommandBar>
+
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <div className="relative min-w-[13rem] flex-1 sm:max-w-[18rem]">
           <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-tertiary" strokeWidth={1.75} />
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Safe name" aria-label="Search safes" className={clsx(inputClass, 'pl-7')} />
         </div>
-        <span className="ml-auto text-xs tabular text-tertiary">{rows.length} of {safes.length}</span>
       </div>
 
       {rows.length === 0 ? (
@@ -64,11 +85,11 @@ export function SafesList() {
         <DataTable minWidth="52rem">
           <thead>
             <tr>
-              <Th width={COL.name} sticky edge>Safe</Th>
-              <Th width="w-[24rem]">Description</Th>
-              <Th width={COL.count} align="right">Credentials</Th>
-              <Th width={COL.short} align="right">Retention</Th>
-              <Th width={COL.timestamp} align="right">Created</Th>
+              <SortTh columnKey="safe" sort={sort} onSort={onSort} width={COL.name} sticky edge>Safe</SortTh>
+              <Th width="w-[22rem]">Description</Th>
+              <SortTh columnKey="credentials" sort={sort} onSort={onSort} align="right" width={COL.count}>Credentials</SortTh>
+              <SortTh columnKey="retention" sort={sort} onSort={onSort} align="right" width={COL.short}>Retention</SortTh>
+              <SortTh columnKey="created" sort={sort} onSort={onSort} align="right" width={COL.timestamp}>Created</SortTh>
             </tr>
           </thead>
           <tbody>
@@ -91,14 +112,28 @@ export function SafesList() {
           </tbody>
         </DataTable>
       )}
+
+      {rows.length > 0 && (
+        <Pagination page={paging.page} pageSize={paging.pageSize} total={matched.length} onPage={paging.setPage} />
+      )}
+
+      <CreateSafeDialog
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onDone={(name) => { setCreateOpen(false); toast({ title: `Safe “${name}” created` }) }}
+      />
     </>
   )
 }
 
 export function SafeDetail() {
   const { safeId } = useParams()
+  const toast = useToast()
   const safe = safes.find((s) => s.id === safeId) || safes[0]
   const [path, setPath] = useState('/')
+  const [folderOpen, setFolderOpen] = useState(false)
+  const [credOpen, setCredOpen] = useState(false)
+  const [revealTarget, setRevealTarget] = useState(null)
 
   const safeFolders = folders.filter((f) => f.safe_id === safe.id)
   const safeCreds = credentials.filter((c) => c.safe_id === safe.id)
@@ -122,13 +157,14 @@ export function SafeDetail() {
         eyebrow={<Link to="/vault" className="hover:text-accent">Vault</Link>}
         title={safe.name}
         description={safe.description}
-        actions={
-          <div className="flex items-center gap-2">
-            <Button icon={Plus}>New folder</Button>
-            <Button variant="primary" icon={Plus}>New credential</Button>
-          </div>
-        }
       />
+
+      <CommandBar
+        primary={<Button variant="primary" icon={Plus} onClick={() => setCredOpen(true)}>New credential</Button>}
+        actions={<Button icon={Plus} onClick={() => setFolderOpen(true)}>New folder</Button>}
+      >
+        <ExportMenu count={safeCreds.length} />
+      </CommandBar>
 
       {/* The path IS the navigation. */}
       <nav aria-label="Folder path" className="mb-4 flex flex-wrap items-center gap-1 font-mono text-sm">
@@ -150,7 +186,7 @@ export function SafeDetail() {
       </nav>
 
       {childFolders.length === 0 && credsHere.length === 0 ? (
-        <EmptyState title="This folder is empty" description="Add a credential here, or a sub-folder to organise them." action={<Button variant="primary" icon={Plus}>New credential</Button>} />
+        <EmptyState title="This folder is empty" description="Add a credential here, or a sub-folder to organise them." action={<Button variant="primary" icon={Plus} onClick={() => setCredOpen(true)}>New credential</Button>} />
       ) : (
         <DataTable minWidth="58rem">
           <thead>
@@ -202,7 +238,11 @@ export function SafeDetail() {
                   </Td>
                   <Td align="right">
                     <RowActions>
-                      <Button size="sm" icon={Eye}>Reveal</Button>
+                      <Button size="sm" icon={Eye} onClick={() => setRevealTarget(c)}>Reveal</Button>
+                      <RowMenu label={`Actions for ${c.name}`}>
+                        <MenuItem><Link to={`/vault/${safe.id}/credentials/${c.id}`}>Open credential</Link></MenuItem>
+                        <MenuItem>Request rotation…</MenuItem>
+                      </RowMenu>
                     </RowActions>
                   </Td>
                 </Tr>
@@ -211,6 +251,21 @@ export function SafeDetail() {
           </tbody>
         </DataTable>
       )}
+
+      <CreateFolderDialog
+        open={folderOpen}
+        onClose={() => setFolderOpen(false)}
+        safeId={safe.id}
+        currentPath={path}
+        onDone={(name) => { setFolderOpen(false); toast({ title: `Folder “${name}” created` }) }}
+      />
+      <CreateCredentialDialog
+        open={credOpen}
+        onClose={() => setCredOpen(false)}
+        safeId={safe.id}
+        onDone={(name) => { setCredOpen(false); toast({ title: `${name} stored`, description: 'Encrypted. Revealing it later needs a reason and is audited.' }) }}
+      />
+      <RevealDialog open={!!revealTarget} onClose={() => setRevealTarget(null)} credential={revealTarget} />
     </>
   )
 }
@@ -223,6 +278,11 @@ export function CredentialDetail() {
   const resource = resources.find((r) => r.id === cred.resource_id)
   const versions = credentialVersions.filter((v) => v.credential_id === cred.id)
   const overdue = cred.next_rotation_at && new Date(cred.next_rotation_at) < new Date()
+  const toast = useToast()
+  const [revealOpen, setRevealOpen] = useState(false)
+  const [versionOpen, setVersionOpen] = useState(false)
+  const [pushOpen, setPushOpen] = useState(false)
+  const [rotateOpen, setRotateOpen] = useState(false)
 
   return (
     <>
@@ -236,7 +296,7 @@ export function CredentialDetail() {
         title={cred.name}
         description={`${cred.credential_type} for ${cred.account_name}`}
         actions={
-          <Button variant="primary" size="lg" icon={Eye}>
+          <Button variant="primary" size="lg" icon={Eye} onClick={() => setRevealOpen(true)}>
             Reveal
           </Button>
         }
@@ -278,9 +338,9 @@ export function CredentialDetail() {
           ]}
         />
         <div className="mt-4 flex flex-wrap items-center gap-2">
-          <Button icon={RotateCw}>Request rotation</Button>
-          <Button>Store a new version</Button>
-          <Button>Change the password on the target</Button>
+          <Button icon={RotateCw} onClick={() => setRotateOpen(true)}>Request rotation</Button>
+          <Button onClick={() => setVersionOpen(true)}>Store a new version</Button>
+          <Button onClick={() => setPushOpen(true)}>Change the password on the target</Button>
         </div>
         <p className="mt-3 max-w-prose text-xs text-tertiary">
           &ldquo;Store a new version&rdquo; records a secret the vault already knows about.
@@ -326,6 +386,68 @@ export function CredentialDetail() {
           </ul>
         )}
       </Section>
+
+      <RevealDialog open={revealOpen} onClose={() => setRevealOpen(false)} credential={cred} />
+
+      <Dialog
+        open={versionOpen}
+        onClose={() => setVersionOpen(false)}
+        size="md"
+        title="Store a new version"
+        description="Records a secret the vault does not yet know about. It does NOT change anything on the target system."
+        footer={
+          <>
+            <Button variant="primary" size="lg" onClick={() => { setVersionOpen(false); toast({ title: `Version ${cred.version + 1} stored` }) }}>Store version</Button>
+            <Button size="lg" onClick={() => setVersionOpen(false)}>Cancel</Button>
+            <Meta className="ml-auto hidden sm:inline">POST /pam/credentials/:id/versions</Meta>
+          </>
+        }
+      >
+        <FieldSet title={`New value — becomes v${cred.version + 1}`}>
+          <Field label="Secret" htmlFor="nv-secret" required>
+            <input id="nv-secret" type="password" className={clsx(inputClass, 'font-mono')} />
+          </Field>
+          <Field label="Reason" htmlFor="nv-reason" required hint="Shown in the version history beside your name.">
+            <textarea id="nv-reason" rows={2} className={textareaClass} />
+          </Field>
+        </FieldSet>
+      </Dialog>
+
+      <Dialog
+        open={pushOpen}
+        onClose={() => setPushOpen(false)}
+        size="md"
+        title="Change the password on the target"
+        description={`Sets a new password on ${resource ? resource.name : 'the resource'} AND stores it. Different endpoint, different blast radius.`}
+        footer={
+          <>
+            <Button variant="danger" size="lg" onClick={() => { setPushOpen(false); toast({ title: 'Password changed on the target', tone: 'warning' }) }}>Change it</Button>
+            <Button size="lg" onClick={() => setPushOpen(false)}>Cancel</Button>
+            <Meta className="ml-auto hidden sm:inline">POST /pam/credentials/:id/password-change</Meta>
+          </>
+        }
+      >
+        <p className="rounded border border-warn/30 bg-warn-soft px-3 py-2 text-sm text-warn">
+          Anything using this account outside the console — a cron job, an application, a script — breaks the
+          moment this succeeds. Sessions already open are unaffected.
+        </p>
+        <div className="mt-4">
+          <FieldSet title="New password">
+            <Field label="Password" htmlFor="pc-secret" required>
+              <input id="pc-secret" type="password" className={clsx(inputClass, 'font-mono')} />
+            </Field>
+          </FieldSet>
+        </div>
+      </Dialog>
+
+      <ConfirmDialog
+        open={rotateOpen}
+        onClose={() => setRotateOpen(false)}
+        title="Request rotation?"
+        consequence="The rotation service generates a new secret, sets it on the target, and stores it as the next version. If the target refuses, nothing changes and the current value stays valid."
+        confirmLabel="Request rotation"
+        onConfirm={() => { setRotateOpen(false); toast({ title: 'Rotation requested' }) }}
+      />
     </>
   )
 }

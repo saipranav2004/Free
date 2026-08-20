@@ -7,6 +7,9 @@ import {
   AlarmBand, BreakglassTag, Button, DetailList, FilterChip, Meta, PageHeader,
   Panel, RuledLabel, Section, StatusDot,
 } from '../ui/primitives'
+import { CommandBar } from '../ui/listchrome'
+import { ConfirmDialog, useToast } from '../ui/overlay'
+import { JitRequestDialog } from '../surfaces/CreateForms'
 import { DeniedState, EmptyState } from '../ui/states'
 import { countdown, dateTime, JIT_LABEL, JIT_TONE, relative } from '../lib/format'
 
@@ -33,7 +36,7 @@ import { countdown, dateTime, JIT_LABEL, JIT_TONE, relative } from '../lib/forma
 // A requester cannot approve, extend or revoke — no such endpoint exists for
 // them — so no such control is drawn.
 
-function LifecycleRow({ item }) {
+function LifecycleRow({ item, onCancel }) {
   const { request, grant } = item
   const isBg = request?.request_type === 'BREAKGLASS'
   const c = grant && grant.status === 'ACTIVE' ? countdown(grant.expires_at) : null
@@ -81,7 +84,7 @@ function LifecycleRow({ item }) {
         {grant?.status === 'ACTIVE' ? (
           <Button size="sm" variant="primary">Connect</Button>
         ) : ['PENDING', 'PARTIALLY_APPROVED', 'WAITING'].includes(request?.status) ? (
-          <Button size="sm" variant="dangerQuiet">Cancel</Button>
+          <Button size="sm" variant="dangerQuiet" onClick={() => onCancel(request)}>Withdraw</Button>
         ) : null}
       </div>
     </div>
@@ -90,7 +93,11 @@ function LifecycleRow({ item }) {
 
 export function JitPage() {
   const { isAdmin, viewer } = useViewer()
+  const toast = useToast()
   const [showHistory, setShowHistory] = useState(false)
+  const [requestOpen, setRequestOpen] = useState(false)
+  const [breakglassOpen, setBreakglassOpen] = useState(false)
+  const [cancelTarget, setCancelTarget] = useState(null)
 
   const mine = useMemo(() => {
     const myGrants = grants.filter((g) => g.user_id === viewer.user_id)
@@ -131,12 +138,12 @@ export function JitPage() {
       <PageHeader
         title="JIT Access"
         description="Request time-boxed access to a resource. A standard request needs two different approvers; break-glass waits out a mandatory period instead."
-        actions={
-          <div className="flex items-center gap-2">
-            <Button variant="primary" icon={Plus}>Request access</Button>
-            <Button variant="dangerQuiet" icon={ShieldAlert}>Break-glass</Button>
-          </div>
-        }
+      />
+
+      <CommandBar
+        primary={<Button variant="primary" icon={Plus} onClick={() => setRequestOpen(true)}>Request access</Button>}
+        actions={<Button variant="dangerQuiet" icon={ShieldAlert} onClick={() => setBreakglassOpen(true)}>Break-glass</Button>}
+        summary={`${open.length} open · ${history.length} closed`}
       />
 
       <Section title="Open" description="Everything you hold or are waiting for, newest activity first.">
@@ -144,12 +151,12 @@ export function JitPage() {
           <EmptyState
             title="No access in flight"
             description="You hold no elevated access and have nothing waiting on an approver."
-            action={<Button variant="primary" icon={Plus}>Request access</Button>}
+            action={<Button variant="primary" icon={Plus} onClick={() => setRequestOpen(true)}>Request access</Button>}
           />
         ) : (
           <Panel>
             {open.map((m, i) => (
-              <LifecycleRow key={m.request?.id || m.grant?.id || i} item={m} />
+              <LifecycleRow key={m.request?.id || m.grant?.id || i} item={m} onCancel={setCancelTarget} />
             ))}
           </Panel>
         )}
@@ -169,11 +176,32 @@ export function JitPage() {
           ) : (
             <Panel>
               {history.map((m, i) => (
-                <LifecycleRow key={m.request?.id || m.grant?.id || i} item={m} />
+                <LifecycleRow key={m.request?.id || m.grant?.id || i} item={m} onCancel={setCancelTarget} />
               ))}
             </Panel>
           ))}
       </Section>
+
+      <JitRequestDialog
+        open={requestOpen}
+        onClose={() => setRequestOpen(false)}
+        onDone={() => { setRequestOpen(false); toast({ title: 'Request raised', description: 'Two different administrators must approve before any access exists.' }) }}
+      />
+      <JitRequestDialog
+        breakglass
+        open={breakglassOpen}
+        onClose={() => setBreakglassOpen(false)}
+        onDone={() => { setBreakglassOpen(false); toast({ title: 'Break-glass request raised', tone: 'warning', description: 'Access becomes available in 15 minutes unless an administrator denies it first.' }) }}
+      />
+      <ConfirmDialog
+        open={!!cancelTarget}
+        onClose={() => setCancelTarget(null)}
+        title={`Withdraw your request for ${cancelTarget?.resource_name}?`}
+        consequence="Approvers stop seeing it. Any approval already given is discarded — if you raise it again it starts from zero, so a request that is one approval short is usually worth leaving alone."
+        confirmLabel="Withdraw request"
+        destructive
+        onConfirm={() => { const r = cancelTarget; setCancelTarget(null); toast({ title: 'Request withdrawn', description: `Your request for ${r.resource_name} is closed.` }) }}
+      />
     </>
   )
 }
@@ -190,6 +218,8 @@ export function JitPage() {
 export function JitRequestDetail() {
   const { id } = useParams()
   const { isAdmin } = useViewer()
+  const toast = useToast()
+  const [cancelOpen, setCancelOpen] = useState(false)
   if (isAdmin) {
     return (
       <DeniedState
@@ -251,7 +281,7 @@ export function JitRequestDetail() {
           grant?.status === 'ACTIVE' ? (
             <Button variant="primary" size="lg">Connect</Button>
           ) : ['PENDING', 'PARTIALLY_APPROVED', 'WAITING'].includes(request.status) ? (
-            <Button variant="dangerQuiet" size="lg">Cancel request</Button>
+            <Button variant="dangerQuiet" size="lg" onClick={() => setCancelOpen(true)}>Withdraw request</Button>
           ) : null
         }
       />
@@ -323,6 +353,16 @@ export function JitRequestDetail() {
           />
         </Section>
       )}
+
+      <ConfirmDialog
+        open={cancelOpen}
+        onClose={() => setCancelOpen(false)}
+        title="Withdraw this request?"
+        consequence="Approvers stop seeing it. Any approval already given is discarded — raising it again starts from zero."
+        confirmLabel="Withdraw request"
+        destructive
+        onConfirm={() => { setCancelOpen(false); toast({ title: 'Request withdrawn' }) }}
+      />
     </>
   )
 }

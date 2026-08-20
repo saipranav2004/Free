@@ -89,9 +89,18 @@ for the rest of this exercise.
 
 ## 1.2 The real backend surface
 
-`src/api/*.js` is the complete client surface — no component calls `fetch`
-or `axios` directly (verified: `http.` appears only inside `src/api/` and
-`src/lib/http.js`). 88 distinct endpoint+verb pairs across 12 modules.
+`src/api/*.js` is *almost* the complete client surface: **86** endpoint+verb
+pairs across 12 modules, plus **2** called directly from a component.
+
+> **Correction (made during the pass-2 re-crawl).** This section originally
+> claimed no component calls the HTTP client directly. That is wrong.
+> `components/audit/SessionRecordingViewer.jsx` imports
+> `* as httpModule from '../../lib/http'` and calls it at lines 110, 128 and
+> 138 — `GET /pam/admin/recordings/:id/cast` and
+> `GET /pam/admin/recordings/:id/commands`. The original grep looked for
+> `fetch(` and `axios`, neither of which that file uses. Both endpoints are
+> absent from the supplied `backend.zip` route table, same skew caveat as the
+> other six. Total is still 88; the sentence under it was not.
 
 ### Client modules → endpoints
 
@@ -104,6 +113,7 @@ or `axios` directly (verified: `http.` appears only inside `src/api/` and
 | `jit.js` | `POST /pam/jit/requests`, `POST /pam/jit/breakglass`, `GET /pam/jit/requests`, `GET /pam/jit/requests/:id`, `POST /pam/jit/requests/:id/cancel`, `GET /pam/jit/grants` |
 | `vault.js` | `GET /pam/credential-types`, `GET /pam/safes`, `POST /pam/safes`, `GET /pam/safes/:id`, `GET /pam/safes/:id/folders`, `POST /pam/safes/:id/folders`, `GET /pam/safes/:id/credentials`, `POST /pam/safes/:id/credentials`, `GET /pam/credentials/:id`, `POST /pam/credentials/:id/reveal`, `POST /pam/credentials/:id/versions`, `POST /pam/credentials/:id/password-change`, `POST /pam/credentials/:id/rotate` |
 | `audit.js` | `GET /pam/audit`, `GET /pam/audit/request/:id`, `GET /pam/audit/user/:id`, `GET /pam/audit/resource/*`, `POST /pam/audit/report` (blob) |
+| *(no module — direct `http` calls from `SessionRecordingViewer.jsx`)* ⚠ | `GET /pam/admin/recordings/:id/cast`, `GET /pam/admin/recordings/:id/commands` |
 | `admin.js` | `GET /pam/admin/jit-requests`, `GET /pam/admin/jit-requests/:id`, `GET /pam/admin/grants`, `GET /pam/admin/sessions`, `GET /pam/admin/recordings`, `GET /pam/admin/audit`, `GET /pam/admin/audit/verify`, `GET /pam/admin/breakglass`, `GET /pam/admin/breakglass/:id/report`, `GET /pam/admin/stats`, `POST /pam/admin/actions/jit-requests/:id/approve`, `.../deny`, `POST /pam/admin/actions/grants/:id/revoke`, `POST /pam/admin/actions/sessions/:id/kill` |
 | `identity.js` | `GET/POST /pam/admin/identity/users`, `GET/PATCH/DELETE /…/users/:id`, `POST /…/:id/status`, `POST /…/:id/reset-password`, `POST/DELETE /…/:id/roles[/:role_name]`, `POST/DELETE /…/:id/policies[/:policy_id]`, `POST/DELETE /…/:id/delegate-admin`, `GET /…/:id/delegation`, `POST /…/:id/reset-mfa` ⚠ |
 | `rbac.js` | full CRUD on `/pam/admin/rbac/roles` and `/pam/admin/rbac/policies`, plus `POST/DELETE /roles/:id/policies[/:policy_id]` |
@@ -112,8 +122,9 @@ or `axios` directly (verified: `http.` appears only inside `src/api/` and
 | `adminVault.js` | `POST /pam/admin/vault/backup`, `POST /pam/admin/vault/restore` |
 
 ⚠ **Version skew — read before treating anything as "missing".**
-Six endpoints the frontend calls do **not** exist in the supplied
-`backend.zip` route table (`cmd/pam-api/main.go`):
+Eight endpoints the frontend calls do **not** exist in the supplied
+`backend.zip` route table (`cmd/pam-api/main.go`) — the two recording
+sub-routes above, plus:
 `POST /auth/mfa/backup-codes/regenerate`,
 `POST /pam/admin/identity/users/:id/reset-mfa`, and all four
 `/pam/admin/mfa-policy*` routes. `src/api/mfaPolicy.js` cites

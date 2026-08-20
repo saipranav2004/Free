@@ -1,6 +1,9 @@
+import { useEffect, useState } from 'react'
 import { Route, Routes } from 'react-router-dom'
 import { AppShell } from './shell/AppShell'
 import { ViewerProvider } from './state/viewer'
+import { DensityProvider } from './ui/table'
+import { ToastHost } from './ui/overlay'
 import Dashboard from './screens/Dashboard'
 import { ResourcesList, ResourceDetail } from './screens/Resources'
 import { SafesList, SafeDetail, CredentialDetail } from './screens/Vault'
@@ -20,9 +23,33 @@ import { Login, MfaVerify } from './screens/Auth'
 //   • /admin/audit    keeps events + recordings
 //   • /admin/compliance is NEW as a route, but is only the chain-verify and
 //     report-generation surfaces lifted out of /admin/audit — no new endpoint.
+// Density is a real, persisted user preference — not a line in a spec doc.
+// It sits at the app root because a power user sets it once and expects every
+// list in the product to obey it.
+function useDensityPref() {
+  const [density, setDensity] = useState(() => {
+    try {
+      return localStorage.getItem('pam_density') === 'compact' ? 'compact' : 'comfortable'
+    } catch {
+      return 'comfortable'
+    }
+  })
+  useEffect(() => {
+    try {
+      localStorage.setItem('pam_density', density)
+    } catch {
+      /* private browsing — the preference just doesn't persist */
+    }
+  }, [density])
+  return { density, setDensity }
+}
+
 export default function App() {
+  const density = useDensityPref()
   return (
     <ViewerProvider>
+      <DensityProvider value={density}>
+      <ToastHost>
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/mfa-verify" element={<MfaVerify />} />
@@ -54,6 +81,8 @@ export default function App() {
           <Route path="*" element={<NotFound />} />
         </Route>
       </Routes>
+      </ToastHost>
+      </DensityProvider>
     </ViewerProvider>
   )
 }

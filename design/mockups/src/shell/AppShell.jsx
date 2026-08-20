@@ -1,13 +1,19 @@
 import { useEffect, useState } from 'react'
-import { NavLink, Outlet, useLocation } from 'react-router-dom'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import clsx from 'clsx'
 import {
-  Activity, Archive, Boxes, ClipboardList, FileKey2, KeyRound, LayoutDashboard,
-  Lock, Menu, Moon, PanelLeftClose, PanelLeftOpen, Radio, ScrollText, Search,
-  Settings as SettingsIcon, ShieldCheck, Sun, Users, Vault, X,
+  Activity, Archive, Bell, Boxes, ClipboardList, FileKey2, KeyRound, LayoutDashboard,
+  LogOut, Lock, Menu, Moon, PanelLeftClose, PanelLeftOpen, Radio, ScrollText, Search,
+  Settings as SettingsIcon, ShieldAlert, ShieldCheck, Sun, Users, Vault, X,
 } from 'lucide-react'
 import { useViewer } from '../state/viewer'
-import { Button } from '../ui/primitives'
+import {
+  adminStats, grants, jitRequests,
+  resources as fixResources, safes as fixSafes, users as fixUsers,
+} from '../fixtures'
+import { relative } from '../lib/format'
+import { Menu as Popover, MenuDivider, MenuItem, MenuLabel } from '../ui/overlay'
+import { StatusDot } from '../ui/primitives'
 
 // ---------------------------------------------------------------------------
 // Navigation model (Phase 4.6)
@@ -155,14 +161,251 @@ function useTheme() {
   return [dark, setDark]
 }
 
+
+// ── Notifications ─────────────────────────────────────────────────────────
+// Mirrors NotificationsMenu.jsx exactly: it is NOT a generic feed. It runs
+// four real queries and renders only what those return — for an admin, the
+// pending and one-approval-short queues; for everyone, their own in-flight
+// requests and grants about to expire. Nothing else is invented, because
+// nothing else has an endpoint behind it.
+function NotificationsMenu({ isAdmin }) {
+  const pending = jitRequests.filter((r) => r.status === 'PENDING').length
+  const second = jitRequests.filter((r) => r.status === 'PARTIALLY_APPROVED').length
+  const expiring = grants.filter(
+    (g) => g.status === 'ACTIVE' && new Date(g.expires_at).getTime() - Date.now() < 12 * 3600_000
+  )
+  const items = isAdmin
+    ? [
+        pending > 0 && {
+          tone: 'warn',
+          title: `${pending} request${pending === 1 ? '' : 's'} awaiting a first approval`,
+          to: '/admin/jit',
+        },
+        second > 0 && {
+          tone: 'warn',
+          title: `${second} waiting on a second, different approver`,
+          to: '/admin/jit',
+        },
+        adminStats.active_breakglass_grants > 0 && {
+          tone: 'danger',
+          title: `${adminStats.active_breakglass_grants} break-glass grant in force`,
+          to: '/admin/jit',
+        },
+      ].filter(Boolean)
+    : expiring.map((g) => ({
+        tone: 'warn',
+        title: `${g.resource_name} expires ${relative(g.expires_at)}`,
+        to: '/jit',
+      }))
+
+  return (
+    <Popover
+      label="Notifications"
+      width="w-72"
+      trigger={(open) => (
+        <span
+          className={clsx(
+            'relative flex h-9 w-9 cursor-pointer items-center justify-center rounded',
+            open ? 'bg-hover text-primary' : 'text-tertiary hover:bg-hover hover:text-primary'
+          )}
+        >
+          <Bell className="h-4 w-4" strokeWidth={1.75} />
+          {items.length > 0 && (
+            <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-warn" aria-hidden="true" />
+          )}
+        </span>
+      )}
+    >
+      <MenuLabel>Needs attention</MenuLabel>
+      {items.length === 0 ? (
+        <p className="px-3 py-3 text-sm text-tertiary">Nothing is waiting on you.</p>
+      ) : (
+        items.map((n) => (
+          <NavLink
+            key={n.title}
+            to={n.to}
+            role="menuitem"
+            className="flex items-start gap-2 px-3 py-2 text-sm text-primary hover:bg-hover"
+          >
+            <StatusDot tone={n.tone} className="mt-1" />
+            <span className="min-w-0 flex-1">{n.title}</span>
+          </NavLink>
+        ))
+      )}
+      <MenuDivider />
+      <p className="px-3 pb-2 pt-1 text-xs leading-relaxed text-tertiary">
+        Built from the JIT queues and your own grants. There is no notification endpoint — nothing here is
+        pushed, and nothing is marked read.
+      </p>
+    </Popover>
+  )
+}
+
+// ── User menu ─────────────────────────────────────────────────────────────
+// Carries the one thing an account menu in a PAM console must carry: MFA
+// posture. Everything else is navigation.
+function UserMenu({ viewer, roles, dark, onToggleTheme }) {
+  return (
+    <Popover
+      label="Account"
+      width="w-64"
+      trigger={(open) => (
+        <span
+          className={clsx(
+            'flex h-7 w-7 cursor-pointer items-center justify-center rounded-full text-micro font-semibold',
+            open ? 'bg-accent text-white' : 'bg-subtle text-primary hover:bg-hover'
+          )}
+        >
+          {viewer.username.slice(0, 2).toUpperCase()}
+        </span>
+      )}
+    >
+      <div className="px-3 py-2">
+        <p className="truncate text-sm font-semibold text-primary">{viewer.full_name || viewer.username}</p>
+        <p className="truncate font-mono text-xs text-tertiary">{viewer.email}</p>
+        <p className="mt-2 text-xs text-tertiary">{roles.join(' · ')}</p>
+      </div>
+      <MenuDivider />
+      <div className="flex items-center gap-2 px-3 py-2">
+        {viewer.mfa_enabled ? (
+          <StatusDot tone="ok" label="MFA enrolled" />
+        ) : (
+          <StatusDot tone="warn" label="No second factor" />
+        )}
+      </div>
+      <MenuItem icon={ShieldCheck}>
+        <NavLink to="/settings">{viewer.mfa_enabled ? 'Manage MFA' : 'Enrol now'}</NavLink>
+      </MenuItem>
+      <MenuItem icon={SettingsIcon}>
+        <NavLink to="/settings">Settings</NavLink>
+      </MenuItem>
+      <MenuItem icon={dark ? Sun : Moon} onClick={onToggleTheme} className="sm:hidden">
+        {dark ? 'Light theme' : 'Dark theme'}
+      </MenuItem>
+      <MenuDivider />
+      <MenuItem icon={LogOut} danger>
+        Sign out
+      </MenuItem>
+    </Popover>
+  )
+}
+
+// ── Command palette ───────────────────────────────────────────────────────
+// NAVIGATION ONLY, and the reason is worth keeping: the existing QuickJump
+// says a palette that lists actions it cannot perform is worse than one that
+// only jumps, and no action registry exists. What it gains here is the real
+// object scope GlobalSearch.jsx already queries — resources, safes, accounts —
+// so ⌘K reaches objects, not just pages.
+function CommandPalette({ open, onClose, isAdmin }) {
+  const [q, setQ] = useState('')
+  const nav = useNavigate()
+  useEffect(() => {
+    if (open) setQ('')
+  }, [open])
+  if (!open) return null
+
+  const s = q.toLowerCase()
+  const pages = [
+    ...CONSOLE_NAV.filter((i) => !(i.selfServiceOnly && isAdmin)),
+    ...(isAdmin ? ADMIN_NAV : []),
+    { to: '/settings', label: 'Settings', icon: SettingsIcon },
+  ].filter((i) => i.label.toLowerCase().includes(s))
+  const objects = [
+    ...fixResources.filter((r) => r.name.toLowerCase().includes(s)).slice(0, 5).map((r) => ({ to: `/resources/${r.id}`, label: r.name, group: 'Resources', sub: `${r.host}:${r.port}` })),
+    ...fixSafes.filter((x) => x.name.toLowerCase().includes(s)).slice(0, 3).map((x) => ({ to: `/vault/${x.id}`, label: x.name, group: 'Vault', sub: 'safe' })),
+    ...(isAdmin
+      ? fixUsers.filter((u) => u.username.toLowerCase().includes(s)).slice(0, 5).map((u) => ({ to: `/admin/identity/${u.user_id}`, label: u.username, group: 'Accounts', sub: u.email }))
+      : []),
+  ]
+
+  const go = (to) => {
+    onClose()
+    nav(to)
+  }
+
+  return (
+    <div className="fixed inset-0 z-[55] flex items-start justify-center p-4 sm:pt-24">
+      <div className="anim-overlay absolute inset-0 bg-black/50" onClick={onClose} aria-hidden="true" />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Jump to"
+        className="anim-panel relative flex max-h-[70vh] w-full max-w-[34rem] flex-col overflow-hidden rounded-xl border border-line bg-surface shadow-overlay"
+      >
+        <div className="flex flex-none items-center gap-2 border-b border-line px-3">
+          <Search className="h-4 w-4 flex-none text-tertiary" strokeWidth={1.75} />
+          <input
+            autoFocus
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            onKeyDown={(e) => e.key === 'Escape' && onClose()}
+            placeholder="Jump to a page, resource, safe or account"
+            aria-label="Jump to"
+            className="h-11 w-full bg-transparent text-base text-primary placeholder:text-tertiary focus:outline-none"
+          />
+          <kbd className="flex-none rounded border border-line px-1 font-mono text-micro text-tertiary">esc</kbd>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto py-1">
+          {pages.length === 0 && objects.length === 0 && (
+            <p className="px-3 py-6 text-center text-sm text-tertiary">Nothing matches “{q}”.</p>
+          )}
+          {pages.length > 0 && <MenuLabel>Pages</MenuLabel>}
+          {pages.map((i) => (
+            <button
+              key={i.to}
+              type="button"
+              onClick={() => go(i.to)}
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-primary hover:bg-hover"
+            >
+              <i.icon className="h-4 w-4 flex-none text-tertiary" strokeWidth={1.75} />
+              {i.label}
+            </button>
+          ))}
+          {objects.length > 0 && <MenuLabel>Objects</MenuLabel>}
+          {objects.map((o) => (
+            <button
+              key={o.to}
+              type="button"
+              onClick={() => go(o.to)}
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-hover"
+            >
+              <span className="min-w-0 flex-1 truncate text-primary">{o.label}</span>
+              <span className="flex-none truncate font-mono text-xs text-tertiary">{o.sub}</span>
+              <span className="flex-none text-micro uppercase text-tertiary">{o.group}</span>
+            </button>
+          ))}
+        </div>
+        <p className="flex-none border-t border-line px-3 py-2 text-xs text-tertiary">
+          Navigation only — no page-level actions. There is no action registry, and a palette that lists actions
+          it cannot perform is worse than one that only jumps.
+        </p>
+      </div>
+    </div>
+  )
+}
+
 export function AppShell() {
   const [collapsed, setCollapsed] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [dark, setDark] = useTheme()
-  const { viewer, isAdmin, pendingCount } = useViewer()
+  const [paletteOpen, setPaletteOpen] = useState(false)
+  const { viewer, roles, isAdmin, pendingCount } = useViewer()
   const location = useLocation()
 
   useEffect(() => setDrawerOpen(false), [location.pathname])
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        setPaletteOpen((v) => !v)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
+  const onOpenSearch = () => setPaletteOpen(true)
 
   // Presentational only — maps a path segment to a human label. Never
   // influences routing.
@@ -259,38 +502,48 @@ export function AppShell() {
             <span className="truncate">{crumb.length === 0 ? 'Dashboard' : crumb.join(' / ')}</span>
           </nav>
 
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto flex min-w-0 items-center gap-2">
             <button
               type="button"
-              className="hidden h-8 items-center gap-2 rounded border border-line px-2 text-xs text-tertiary hover:text-primary lg:flex"
+              onClick={onOpenSearch}
+              className="hidden h-8 items-center gap-2 rounded border border-line px-2 text-xs text-tertiary hover:border-line-strong hover:text-primary lg:flex"
             >
               <Search className="h-3.5 w-3.5" strokeWidth={1.75} />
-              Jump to…
+              Search resources, safes, accounts
               <kbd className="rounded border border-line px-1 font-mono text-micro">⌘K</kbd>
             </button>
+            <button
+              type="button"
+              onClick={onOpenSearch}
+              aria-label="Search"
+              className="flex h-9 w-9 items-center justify-center rounded text-tertiary hover:bg-hover hover:text-primary lg:hidden"
+            >
+              <Search className="h-4 w-4" strokeWidth={1.75} />
+            </button>
             <RoleSwitcher />
+            <NotificationsMenu isAdmin={isAdmin} />
             <button
               type="button"
               onClick={() => setDark(!dark)}
-              aria-label="Toggle theme"
-              className="flex h-8 w-8 items-center justify-center rounded text-tertiary hover:bg-hover hover:text-primary"
+              aria-label={dark ? 'Switch to light theme' : 'Switch to dark theme'}
+              className="hidden h-9 w-9 items-center justify-center rounded text-tertiary hover:bg-hover hover:text-primary sm:flex"
             >
               {dark ? <Sun className="h-4 w-4" strokeWidth={1.75} /> : <Moon className="h-4 w-4" strokeWidth={1.75} />}
             </button>
-            <span className="flex h-7 w-7 flex-none items-center justify-center rounded-full bg-subtle text-micro font-semibold text-primary">
-              {viewer.username.slice(0, 2).toUpperCase()}
-            </span>
+            <UserMenu viewer={viewer} roles={roles} dark={dark} onToggleTheme={() => setDark(!dark)} />
           </div>
         </header>
 
         {/* Content caps at 1440 and centres, so an ultrawide doesn't stretch a
             table to 2500px of unreadable line length (Phase 6). */}
         <main className="min-w-0 flex-1 overflow-y-auto">
-          <div className="mx-auto w-full max-w-content px-4 py-6 md:px-8 md:py-8">
+          <div className="mx-auto w-full max-w-content px-4 py-4 md:px-6 md:py-6">
             <Outlet />
           </div>
         </main>
       </div>
+
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} isAdmin={isAdmin} />
     </div>
   )
 }

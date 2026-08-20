@@ -1,5 +1,12 @@
 # Phase 5 + 6 — Per-page redesigns, with responsive & cross-browser spec
 
+> **Pass 2 addendum.** This document covers the 24 routes. The 44 secondary
+> surfaces they open — modals, confirmations, wizards, menus, the recording
+> player, toasts — are enumerated in [`06-surface-tree.md`](06-surface-tree.md)
+> and were built in revision 2. The list-chrome and density changes that
+> revision made to *these* pages are in [`07-critique.md`](07-critique.md);
+> where this document and the mockups disagree, the mockups are current.
+
 Every page below follows the same format:
 
 > **Layout** (structure first) · **What changed and why** (traced to Phase 2

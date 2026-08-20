@@ -1,5 +1,10 @@
 # Phase 4 — The design system
 
+> **Revised in pass 2.** Density, the list-chrome layer and the overlay layer
+> changed after the self-critique in [`07-critique.md`](07-critique.md).
+> Revisions are marked **[r2]** inline so the original decision and the reason
+> it changed are both visible.
+
 Locked once, applies to every page. Implemented in
 `design/mockups/src/styles/tokens.css` + `tailwind.config.js` so the mockups
 are the spec, not an illustration of it.
@@ -57,8 +62,8 @@ in several files; those all round to the grid.
 | Between a label and its field | 8 |
 | Between form rows | 16 |
 | Between a section heading and its content | 16 |
-| Between sections | 32 |
-| Page gutter (desktop) | 32 |
+| Between sections | **[r2] 24** (was 32 — uniform 32px gaps are rhythm applied without grouping) |
+| Page gutter (desktop) | **[r2] 24** (was 32) |
 | Page gutter (mobile) | 16 |
 
 Page content caps at **1440px** and centres. Reading-width prose caps at
@@ -149,14 +154,17 @@ sections without turning into a wall.
 
 The table is the primary instrument in this product. Spec:
 
-- **Row height 36px** default, **32px** in compact mode (a per-user toggle
-  that persists, like Linear's). Not "card per row" — ever, on any list whose
-  items share a schema.
-- **Header**: `text-micro`, uppercase, `+0.06em`, `--text-tertiary`,
-  `--bg-subtle`, sticky top, 32px tall.
+- **[r2] Row height 32px** default, **26px** compact — was 36/32. Against an
+  AWS, Azure or Okta list, 36px is one notch too loose: an operator with 300
+  privileged accounts saw ~14 rows per screen instead of ~20. The compact mode
+  is a **built, persisted control** in the preferences gear, not a line in this
+  document. Not "card per row" — ever, on any list whose items share a schema.
+- **[r2] Header**: `text-micro`, uppercase, `+0.06em`, `--text-tertiary`,
+  `--bg-subtle`, sticky top, **28px** tall.
 - **Column alignment**: text left; numbers, durations, counts, sizes and ports
-  **right**, tabular; status dot column fixed 24px; actions column right-most,
-  fixed width, actions revealed on row hover/focus (always visible on touch).
+  **right**, tabular; **[r2]** the status dot moves *into* the identity cell
+  rather than taking its own column, so the frozen column carries the row's
+  whole identity; actions column right-most, fixed width.
 - **Fixed layout with declared widths** — keep the existing `COL` map and
   `table-fixed` from `tableStyles.jsx` verbatim. It is correct.
 - **Frozen identity column** — keep `stickyCell` / `stickyHeader` verbatim,
@@ -170,6 +178,13 @@ The table is the primary instrument in this product. Spec:
   never wrap a table cell to two lines.
 - **Row click** opens the detail drawer; **row cmd-click / the name link**
   navigates to the detail route. Both, always, on every table.
+- **[r2] Sortable headers** carry a persistent glyph (three states: unsorted,
+  asc, desc) so a user can tell which columns sort without hovering each one.
+- **[r2] Row actions are always visible**, never hover-revealed — hover-reveal
+  fails on touch, fails for keyboard, and makes a list un-scannable. The
+  **destructive** row action lives in a `⋯` overflow menu, because a column of
+  red buttons is a red stripe, and a red stripe on healthy rows means nothing.
+- **[r2] Select-all** in the header with a real indeterminate state.
 
 Card-per-row is permitted in exactly one place in this product: the
 **resource "connect" tile** on a Normal User's empty-ish resource list
@@ -177,6 +192,55 @@ Card-per-row is permitted in exactly one place in this product: the
 rather than comparison. Nowhere else.
 
 ---
+
+## 4.5a [r2] List chrome — the command bar
+
+Pass 1 shipped lists with no sort, no pagination, no column control, no export
+and no saved views. All seven of those exist in the app being redesigned
+(`TableControls.jsx`, used by six pages), so their absence was a **capability
+regression**, not restraint. See `07-critique.md`.
+
+The structure is the one AWS Console, Azure Portal and Salesforce converge on:
+
+```
+Page title
+Description
+────────────────────────────────────────────────────────────────────
+[Primary action] [secondary…]   12 of 34        ↻ updated 4s · Auto ▾ · Export ▾ · ⚙
+────────────────────────────────────────────────────────────────────
+[chip] [chip] [chip]                                    ← facets
+FILTERS  ×live now  ×unrecorded   Clear all             ← active filters
+┌──────────────────────────────────────────────────────────────────┐
+│ table                                                            │
+└──────────────────────────────────────────────────────────────────┘
+1–25 of 340                                          ‹  1 / 14  ›
+```
+
+- **Left** = actions that change data. **Right** = utilities that change
+  presentation only. They never mix.
+- **One gear** holds density, page size and column visibility (AWS's
+  "Preferences"). Three separate toolbar buttons for those spent three
+  controls' worth of attention on presentation.
+- The bar's bottom rule is the one border in the layout doing grouping work:
+  above it is "what can I do here", below it is "what is here".
+- Detail pages get the same bar, scoped to the object (Azure's blade command
+  bar), so lifecycle actions are not 600px down the page.
+
+## 4.5b [r2] Overlays
+
+One primitive each, so no surface can drift:
+
+| Primitive | Rules it enforces |
+|---|---|
+| `Dialog` | Centred panel ≥640px; **full-height bottom sheet below**. Focus trap, Escape, focus restore, body scroll lock. Optional step rail for wizards. |
+| `ConfirmDialog` | Consequence sentence first. `requireReason` mirrors the endpoints that 400 without one and says the reason lands in the audit log. `typeToConfirm` reserved for the two irreversible actions (delete account, restore vault). |
+| `Menu` | One popover for every dropdown — user, notifications, export, preferences, row overflow. Closes on outside click, Escape, and on activating an item (unless it is a multi-select). |
+| `ToastHost` | Bottom-right on desktop, **top on mobile** (a bottom toast sits under the thumb and the keyboard). Title + optional description, because the four-eyes result needs a "what happens next" line. |
+
+**Forms.** `Field` puts the label above, the control next, and **either** a
+hint **or** an error — the error replaces the hint so the row never grows and
+reflows the dialog mid-typing. Required is a mark on the label, not a colour on
+the input. Error text says what to do, never "Invalid".
 
 ## 4.6 Navigation model
 
@@ -198,7 +262,15 @@ belong to the page header, adjacent to the content they affect.
 **Command palette (⌘K):** the existing `QuickJump` is navigation-only, and its
 own comment explains why (no action registry exists). That is the right call
 and it stays navigation-only. The palette is **not** a substitute for visible
-navigation and no action is reachable *only* through it.
+navigation and no action is reachable *only* through it. **[r2]** What it gains
+is object scope: it searches resources, safes and accounts — the data
+`GlobalSearch.jsx` already queries — so ⌘K reaches objects, not just pages.
+
+**[r2] Top bar** carries breadcrumb · global search · notifications · theme ·
+account. The notifications menu is built from the JIT queues and the viewer's
+own grants — there is no notification endpoint, so nothing is pushed and
+nothing is marked read, and the menu says so. Below 640px the theme control
+moves into the account menu so the bar never overflows.
 
 Active state: 2px accent rail on the left edge + accent text + `--bg-subtle`.
 One indicator, not three (currently rail + tinted bg + ring + accent icon).

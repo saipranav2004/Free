@@ -10,6 +10,8 @@ import {
   AlarmBand, Button, DetailList, Meta, PageHeader, Panel, RuledLabel, Section,
   StatusDot, inputClass,
 } from '../ui/primitives'
+import { ConfirmDialog, useToast } from '../ui/overlay'
+import { MfaEnrolmentDialog, MfaGate, PairAgentPanel } from '../surfaces/Panels'
 import { DeniedState, EmptyState } from '../ui/states'
 import { dateTime, relative } from '../lib/format'
 
@@ -35,7 +37,19 @@ function Row({ label, hint, children }) {
 
 export function Settings() {
   const { viewer, roles } = useViewer()
+  const toast = useToast()
   const myDevices = agentDevices.filter((d) => d.user_id === viewer.user_id)
+  const [enrolOpen, setEnrolOpen] = useState(false)
+  const [regenOpen, setRegenOpen] = useState(false)
+  const [revokeDevice, setRevokeDevice] = useState(null)
+  const [pairOpen, setPairOpen] = useState(false)
+  const [gateDemo, setGateDemo] = useState(false)
+
+  // The enforcement gate is a full-page state, so it is previewable here
+  // rather than mocked as a screenshot in a document.
+  if (gateDemo) {
+    return <MfaGate role={roles[0]} onEnrol={() => { setGateDemo(false); setEnrolOpen(true) }} />
+  }
 
   return (
     <>
@@ -75,17 +89,17 @@ export function Settings() {
             {viewer.mfa_enabled ? (
               <>
                 <StatusDot tone="ok" label="Enrolled" />
-                <Button size="sm">Re-enrol</Button>
+                <Button size="sm" onClick={() => setEnrolOpen(true)}>Re-enrol</Button>
               </>
             ) : (
-              <Button size="sm" variant="primary" icon={ShieldCheck}>Enrol</Button>
+              <Button size="sm" variant="primary" icon={ShieldCheck} onClick={() => setEnrolOpen(true)}>Enrol</Button>
             )}
           </Row>
           <Row
             label="Backup codes"
             hint="Ten single-use codes for when you don't have your phone. Regenerating invalidates the old set immediately."
           >
-            <Button size="sm" disabled={!viewer.mfa_enabled}>Regenerate</Button>
+            <Button size="sm" disabled={!viewer.mfa_enabled} onClick={() => setRegenOpen(true)}>Regenerate</Button>
           </Row>
         </div>
       </Section>
@@ -98,7 +112,7 @@ export function Settings() {
           <EmptyState
             title="No devices paired"
             description="Pair a device to launch sessions from your own terminal."
-            action={<Button variant="primary">Pair a device</Button>}
+            action={<Button variant="primary" onClick={() => setPairOpen(true)}>Pair a device</Button>}
           />
         ) : (
           <>
@@ -116,13 +130,13 @@ export function Settings() {
                   </div>
                   <div className="flex flex-none items-center gap-3">
                     <StatusDot tone={d.status === 'ACTIVE' ? 'ok' : 'neutral'} label={d.status} />
-                    <Button size="sm" variant="dangerQuiet">Revoke</Button>
+                    <Button size="sm" variant="dangerQuiet" onClick={() => setRevokeDevice(d)}>Revoke</Button>
                   </div>
                 </li>
               ))}
             </ul>
             <div className="mt-4">
-              <Button>Pair another device</Button>
+              <Button onClick={() => setPairOpen(true)}>Pair another device</Button>
             </div>
             <p className="mt-3 max-w-prose text-xs text-tertiary">
               Pairing requires MFA on the current session. The pairing code expires — the panel shows a live
@@ -132,11 +146,50 @@ export function Settings() {
         )}
       </Section>
 
+      {pairOpen && (
+        <div className="mt-4">
+          <PairAgentPanel />
+        </div>
+      )}
+
       <Section title="Appearance">
         <Row label="Theme" hint="Follows the toggle in the top bar. Stored per browser, not per account.">
           <Meta>Use the toggle above</Meta>
         </Row>
+        <Row label="Row density" hint="Applies to every table in the console. Set it from the preferences gear on any list.">
+          <Meta>Set on any list</Meta>
+        </Row>
       </Section>
+
+      <Section title="States you can preview" description="Mockup-only shortcuts so the full-page states are reviewable without arranging the conditions that produce them.">
+        <Button size="sm" onClick={() => setGateDemo(true)}>Show the MFA enforcement gate</Button>
+      </Section>
+
+      <MfaEnrolmentDialog
+        open={enrolOpen}
+        onClose={() => setEnrolOpen(false)}
+        onDone={() => toast({ title: 'Two-factor is on', description: 'Your backup codes will not be shown again.' })}
+      />
+
+      <ConfirmDialog
+        open={regenOpen}
+        onClose={() => setRegenOpen(false)}
+        title="Regenerate your backup codes?"
+        consequence="The ten codes you have now stop working the moment the new set is issued. If you have them written down somewhere, that copy becomes useless."
+        confirmLabel="Regenerate codes"
+        destructive
+        onConfirm={() => { setRegenOpen(false); toast({ title: 'New backup codes issued', tone: 'warning', description: 'Save them now — they are shown once.' }) }}
+      />
+
+      <ConfirmDialog
+        open={!!revokeDevice}
+        onClose={() => setRevokeDevice(null)}
+        title={`Revoke ${revokeDevice?.device_name}?`}
+        consequence="That device can no longer launch sessions for you. Any session it already opened stays open — revoking the pairing does not disconnect anything."
+        confirmLabel="Revoke device"
+        destructive
+        onConfirm={() => { const d = revokeDevice; setRevokeDevice(null); toast({ title: `${d.device_name} revoked`, tone: 'warning' }) }}
+      />
     </>
   )
 }
@@ -151,7 +204,10 @@ export function Settings() {
 // endpoint lists keys. Listed under Requires backend support, not invented.
 export function VaultOps() {
   const { isAdmin } = useViewer()
-  const [confirm, setConfirm] = useState('')
+  const toast = useToast()
+  const [backupKey, setBackupKey] = useState(null)
+  const [restoreOpen, setRestoreOpen] = useState(false)
+  const [objectKey, setObjectKey] = useState('')
   if (!isAdmin) return <DeniedState requires="admin" what="Vault Operations" />
 
   return (
@@ -164,9 +220,27 @@ export function VaultOps() {
 
       <Section title="Backup" description="Encrypts and writes the whole vault to object storage. Safe to run at any time; it takes no locks.">
         <div className="flex flex-wrap items-center gap-3">
-          <Button variant="primary" icon={Archive}>Take a backup now</Button>
+          <Button
+            variant="primary"
+            icon={Archive}
+            onClick={() => {
+              const k = `pam-backups/org-1/${new Date().toISOString().replace(/[:.]/g, '-')}.enc`
+              setBackupKey(k)
+              toast({ title: 'Backup written', description: 'Copy the object key — nothing else can list it back.' })
+            }}
+          >
+            Take a backup now
+          </Button>
           <Meta>Returns the object key. Keep it — it is the only handle a restore accepts.</Meta>
         </div>
+
+        {backupKey && (
+          <div className="mt-3 flex items-center gap-2 rounded border border-ok/30 bg-ok-soft px-3 py-2">
+            <code className="min-w-0 flex-1 truncate font-mono text-xs text-primary">{backupKey}</code>
+            <Button size="sm" onClick={() => setObjectKey(backupKey)}>Use for restore</Button>
+            <Button size="sm">Copy</Button>
+          </div>
+        )}
         <Panel className="mt-4 flex items-start gap-3 px-4 py-3">
           <Download className="mt-0.5 h-4 w-4 flex-none text-tertiary" strokeWidth={1.75} />
           <p className="max-w-prose text-sm text-secondary">
@@ -189,16 +263,16 @@ export function VaultOps() {
             <label htmlFor="key" className="mb-2 block text-micro font-semibold uppercase text-tertiary">
               S3 object key
             </label>
-            <input id="key" placeholder="pam-backups/org-1/2026-08-19T09-04-11Z.enc" className={clsx(inputClass, 'font-mono')} />
+            <input
+              id="key"
+              value={objectKey}
+              onChange={(e) => setObjectKey(e.target.value)}
+              placeholder="pam-backups/org-1/2026-08-19T09-04-11Z.enc"
+              className={clsx(inputClass, 'font-mono')}
+            />
           </div>
-          <div>
-            <label htmlFor="confirm" className="mb-2 block text-micro font-semibold uppercase text-tertiary">
-              Type <span className="font-mono text-primary">restore the vault</span> to enable the button
-            </label>
-            <input id="confirm" value={confirm} onChange={(e) => setConfirm(e.target.value)} className={inputClass} />
-          </div>
-          <Button variant="danger" disabled={confirm !== 'restore the vault'}>
-            Restore the vault
+          <Button variant="danger" disabled={!objectKey.trim()} onClick={() => setRestoreOpen(true)}>
+            Restore the vault…
           </Button>
         </div>
 
@@ -209,6 +283,25 @@ export function VaultOps() {
           admins who can still call the endpoint directly.
         </p>
       </Section>
+
+      <ConfirmDialog
+        open={restoreOpen}
+        onClose={() => setRestoreOpen(false)}
+        title="Restore the vault from this backup?"
+        consequence="Every credential created or rotated since that backup is gone. Sessions holding those credentials break. There is no undo, and no endpoint that lists what you are about to lose."
+        confirmLabel="Restore the vault"
+        destructive
+        requireReason
+        reasonLabel="Why is this being restored"
+        typeToConfirm="restore the vault"
+        extra={
+          <div className="rounded border border-line bg-subtle px-3 py-2">
+            <p className="text-micro font-semibold uppercase text-tertiary">Restoring from</p>
+            <code className="mt-1 block break-all font-mono text-xs text-primary">{objectKey}</code>
+          </div>
+        }
+        onConfirm={() => { setRestoreOpen(false); toast({ title: 'Restore started', tone: 'error', description: 'The vault is being replaced from that object.' }) }}
+      />
     </>
   )
 }

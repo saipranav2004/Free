@@ -6,7 +6,9 @@ import {
   AlarmBand, BreakglassTag, Button, DetailList, FilterChip, Meta, Panel,
   PageHeader, RuledLabel, Section, Segmented, StatusDot,
 } from '../ui/primitives'
-import { DataTable, COL, Td, Th, Tr, Trunc, RowActions } from '../ui/table'
+import { DataTable, COL, SortTh, Td, Th, Tr, Trunc, RowActions, nextSort, sortRows } from '../ui/table'
+import { CommandBar, ExportMenu, RowMenu } from '../ui/listchrome'
+import { ConfirmDialog, MenuItem, useToast } from '../ui/overlay'
 import { DeniedState, EmptyState } from '../ui/states'
 import { countdown, dateTime, GRANT_TONE, JIT_LABEL, JIT_TONE, relative } from '../lib/format'
 
@@ -36,7 +38,7 @@ import { countdown, dateTime, GRANT_TONE, JIT_LABEL, JIT_TONE, relative } from '
 //   Trail   → GET  /admin/jit-requests/:id  (the ONLY source of `approvals`)
 // There is no bulk approve endpoint, so there is no bulk approve control.
 
-function ApprovalRow({ request, isRoot, viewerId, onOpen }) {
+function ApprovalRow({ request, isRoot, viewerId, onOpen, onApprove, onDeny }) {
   const trail = approvalsByRequest[request.id] || null
   const approved = trail?.filter((a) => a.decision === 'approved') || []
   const alreadyMine = approved.some((a) => a.approver_user_id === viewerId)
@@ -77,10 +79,10 @@ function ApprovalRow({ request, isRoot, viewerId, onOpen }) {
           expires {relative(request.request_expires_at)}
         </span>
         <div className="flex items-center gap-2">
-          <Button size="sm" variant="primary" disabled={!!blocked} title={blocked || undefined}>
+          <Button size="sm" variant="primary" disabled={!!blocked} title={blocked || undefined} onClick={() => onApprove(request)}>
             {label}
           </Button>
-          <Button size="sm" variant="dangerQuiet">Deny</Button>
+          <Button size="sm" variant="dangerQuiet" onClick={() => onDeny(request)}>Deny</Button>
         </div>
       </div>
     </div>
@@ -108,7 +110,7 @@ function Band({ icon: Icon, title, hint, count, children }) {
 // The drawer answers "why", never "what" — the action already happened in the
 // row. Level-2 elevation is the only shadow in the system and this is one of
 // the four places it's allowed.
-function RequestDrawer({ request, isRoot, onClose }) {
+function RequestDrawer({ request, isRoot, onClose, onApprove, onDeny }) {
   if (!request) return null
   const trail = approvalsByRequest[request.id] || null
   const approved = trail?.filter((a) => a.decision === 'approved') || []
@@ -181,10 +183,10 @@ function RequestDrawer({ request, isRoot, onClose }) {
         </div>
 
         <footer className="flex flex-none items-center gap-2 border-t border-line px-4 py-3">
-          <Button variant="primary" size="lg">
+          <Button variant="primary" size="lg" onClick={() => onApprove(request)}>
             {isRoot ? 'Approve (final)' : approved.length >= 1 ? 'Approve (2 of 2)' : 'Approve'}
           </Button>
-          <Button variant="dangerQuiet" size="lg">Deny</Button>
+          <Button variant="dangerQuiet" size="lg" onClick={() => onDeny(request)}>Deny</Button>
           <p className="ml-auto max-w-[16rem] text-right text-xs text-tertiary">
             {isRoot
               ? 'Your approval issues the grant immediately.'
@@ -198,12 +200,19 @@ function RequestDrawer({ request, isRoot, onClose }) {
   )
 }
 
-function GrantsTab() {
+function GrantsTab({ onRevoke }) {
   const [status, setStatus] = useState('ACTIVE')
-  const rows = grants.filter((g) => g.status === status)
+  const [sort, setSort] = useState({ key: 'expires', dir: 'asc' })
+  const rows = sortRows(grants.filter((g) => g.status === status), sort, {
+    resource: (g) => g.resource_name, holder: (g) => g.username, expires: (g) => g.expires_at,
+  })
+  const onSort = (key) => setSort((s2) => nextSort(s2, key))
   return (
     <>
-      <div className="mb-4 flex flex-wrap items-center gap-2">
+      <CommandBar summary={`${rows.length} grants`}>
+        <ExportMenu count={rows.length} />
+      </CommandBar>
+      <div className="mb-3 flex flex-wrap items-center gap-2">
         <Segmented
           value={status}
           onChange={setStatus}
@@ -220,10 +229,10 @@ function GrantsTab() {
         <DataTable minWidth="60rem">
           <thead>
             <tr>
-              <Th width={COL.name} sticky edge>Resource</Th>
-              <Th width={COL.medium}>Holder</Th>
+              <SortTh columnKey="resource" sort={sort} onSort={onSort} width={COL.name} sticky edge>Resource</SortTh>
+              <SortTh columnKey="holder" sort={sort} onSort={onSort} width={COL.medium}>Holder</SortTh>
               <Th width={COL.wide}>Action</Th>
-              <Th width={COL.short} align="right">Expires</Th>
+              <SortTh columnKey="expires" sort={sort} onSort={onSort} align="right" width={COL.short}>Expires</SortTh>
               <Th width={COL.short}>Recording</Th>
               <Th width={COL.short}>IAM sync</Th>
               <Th width={COL.actions} align="right"><span className="sr-only">Actions</span></Th>
@@ -252,11 +261,17 @@ function GrantsTab() {
                   <Td><Trunc value={g.recording_required ? 'Required' : 'Not required'} muted={!g.recording_required} /></Td>
                   <Td><Trunc value={g.iam_sync_status} muted /></Td>
                   <Td align="right">
-                    {g.status === 'ACTIVE' && (
-                      <RowActions>
-                        <Button size="sm" variant="dangerQuiet">Revoke</Button>
-                      </RowActions>
-                    )}
+                    <RowActions>
+                      <RowMenu label={`Actions for ${g.resource_name}`}>
+                        {g.status === 'ACTIVE' ? (
+                          <MenuItem danger onClick={() => onRevoke(g)}>Revoke grant…</MenuItem>
+                        ) : (
+                          <p className="px-3 py-2 text-xs text-tertiary">
+                            {g.status === 'REVOKED' ? g.revoke_reason : 'This grant has expired. Nothing to revoke.'}
+                          </p>
+                        )}
+                      </RowMenu>
+                    </RowActions>
                   </Td>
                 </Tr>
               )
@@ -274,9 +289,16 @@ function GrantsTab() {
 
 export default function AdminApprovals() {
   const { isAdmin, isRoot, viewer } = useViewer()
+  const toast = useToast()
   const [tab, setTab] = useState('queue')
   const [open, setOpen] = useState(null)
   const [onlyBreakglass, setOnlyBreakglass] = useState(false)
+  const [approveTarget, setApproveTarget] = useState(null)
+  const [denyTarget, setDenyTarget] = useState(null)
+  const [revokeTarget, setRevokeTarget] = useState(null)
+
+  const approvalsOf = (r) => approvalsByRequest[r?.id]?.filter((a) => a.decision === 'approved') || []
+  const willIssue = (r) => isRoot || approvalsOf(r).length >= 1
 
   if (!isAdmin) {
     return <DeniedState requires="admin" what="the approvals queue" fallbackHref="/jit" fallbackLabel="Go to your own requests" />
@@ -343,13 +365,13 @@ export default function AdminApprovals() {
                 count={oneShort.length}
               >
                 {oneShort.map((r) => (
-                  <ApprovalRow key={r.id} request={r} isRoot={isRoot} viewerId={viewer.user_id} onOpen={setOpen} />
+                  <ApprovalRow key={r.id} request={r} isRoot={isRoot} viewerId={viewer.user_id} onOpen={setOpen} onApprove={setApproveTarget} onDeny={setDenyTarget} />
                 ))}
               </Band>
 
               <Band icon={Timer} title="New" hint="No approvals yet. Two different people must approve." count={fresh.length}>
                 {fresh.map((r) => (
-                  <ApprovalRow key={r.id} request={r} isRoot={isRoot} viewerId={viewer.user_id} onOpen={setOpen} />
+                  <ApprovalRow key={r.id} request={r} isRoot={isRoot} viewerId={viewer.user_id} onOpen={setOpen} onApprove={setApproveTarget} onDeny={setDenyTarget} />
                 ))}
               </Band>
 
@@ -360,7 +382,7 @@ export default function AdminApprovals() {
                 count={waiting.length}
               >
                 {waiting.map((r) => (
-                  <ApprovalRow key={r.id} request={r} isRoot={isRoot} viewerId={viewer.user_id} onOpen={setOpen} />
+                  <ApprovalRow key={r.id} request={r} isRoot={isRoot} viewerId={viewer.user_id} onOpen={setOpen} onApprove={setApproveTarget} onDeny={setDenyTarget} />
                 ))}
               </Band>
             </>
@@ -390,11 +412,71 @@ export default function AdminApprovals() {
         </>
       ) : (
         <div className="mt-6">
-          <GrantsTab />
+          <GrantsTab onRevoke={setRevokeTarget} />
         </div>
       )}
 
-      <RequestDrawer request={open} isRoot={isRoot} onClose={() => setOpen(null)} />
+      <RequestDrawer
+        request={open}
+        isRoot={isRoot}
+        onClose={() => setOpen(null)}
+        onApprove={(r) => { setOpen(null); setApproveTarget(r) }}
+        onDeny={(r) => { setOpen(null); setDenyTarget(r) }}
+      />
+
+      {/* The consequence copy is the whole point of this dialog: a FIRST
+          approval issues nothing, and the current build's success toast used
+          to say "Request approved" either way — promising access that did not
+          exist yet. */}
+      <ConfirmDialog
+        open={!!approveTarget}
+        onClose={() => setApproveTarget(null)}
+        title={`Approve access to ${approveTarget?.resource_name}?`}
+        consequence={
+          willIssue(approveTarget)
+            ? isRoot
+              ? 'You are root — your approval settles this alone. The grant is issued immediately and the session clock starts when they connect.'
+              : 'This is the second of two approvals. The grant is issued immediately.'
+            : 'This is the FIRST of two approvals. No grant is issued yet — a second, different administrator (or root) must also approve.'
+        }
+        confirmLabel={isRoot ? 'Approve (final)' : willIssue(approveTarget) ? 'Approve (2 of 2)' : 'Approve (1 of 2)'}
+        reasonLabel="Reason (optional)"
+        onConfirm={() => {
+          const r = approveTarget
+          setApproveTarget(null)
+          toast({
+            title: willIssue(r) ? 'Grant issued' : 'Approved — one of two',
+            description: willIssue(r)
+              ? `${r.requester_username} can now connect to ${r.resource_name} for ${r.duration_minutes} minutes.`
+              : 'A second, different administrator — or root — must approve before any access exists.',
+          })
+        }}
+      />
+
+      <ConfirmDialog
+        open={!!denyTarget}
+        onClose={() => setDenyTarget(null)}
+        title={`Deny access to ${denyTarget?.resource_name}?`}
+        consequence="One denial ends this request on its own — unlike approval, it does not wait for a second person. The requester has to raise a new one if access is still needed, and they will see your reason."
+        confirmLabel="Deny request"
+        destructive
+        requireReason
+        reasonLabel="Reason for denial"
+        reasonHint="Required. Shown to the requester and kept on the audit record."
+        onConfirm={() => { const r = denyTarget; setDenyTarget(null); toast({ title: 'Request denied', tone: 'warning', description: `${r.requester_username} has been told why.` }) }}
+      />
+
+      <ConfirmDialog
+        open={!!revokeTarget}
+        onClose={() => setRevokeTarget(null)}
+        title={`Revoke the grant on ${revokeTarget?.resource_name}?`}
+        consequence={`${revokeTarget?.username} loses access immediately, and any session they have open on it is killed mid-command. The API returns how many sessions that was.`}
+        confirmLabel="Revoke grant"
+        destructive
+        requireReason
+        reasonLabel="Why is this being revoked"
+        onConfirm={() => { const g = revokeTarget; setRevokeTarget(null); toast({ title: 'Grant revoked', tone: 'warning', description: `1 live session on ${g.resource_name} was killed.` }) }}
+      />
     </>
   )
 }

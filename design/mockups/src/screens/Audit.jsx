@@ -9,7 +9,12 @@ import {
   AlarmBand, BreakglassTag, Button, DetailList, FilterChip, HeroMetric, Meta,
   PageHeader, Panel, RuledLabel, Section, StatRail, StatusDot, inputClass,
 } from '../ui/primitives'
-import { COL, DataTable, RowActions, Td, Th, Tr, Trunc } from '../ui/table'
+import { COL, DataTable, RowActions, SortTh, Td, Th, Tr, Trunc, nextSort, sortRows } from '../ui/table'
+import {
+  ActiveFilters, CommandBar, ExportMenu, Pagination, PreferencesMenu, RowMenu, usePaging,
+} from '../ui/listchrome'
+import { MenuItem, useToast } from '../ui/overlay'
+import { RecordingPlayer, ReportBuilderDialog } from '../surfaces/Panels'
 import { DeniedState, EmptyState } from '../ui/states'
 import { bytes, dateTime, duration, OUTCOME_TONE, relative } from '../lib/format'
 
@@ -107,6 +112,8 @@ function EventSearch({ scope, viewer }) {
   const [category, setCategory] = useState(null)
   const [outcome, setOutcome] = useState(null)
   const [open, setOpen] = useState(null)
+  const [reportOpen, setReportOpen] = useState(false)
+  const [sort, setSort] = useState({ key: 'when', dir: 'desc' })
 
   const source = useMemo(
     // Self scope sends user_id — the parameter the endpoint already accepts and
@@ -123,12 +130,21 @@ function EventSearch({ scope, viewer }) {
     }
     if (category) r = r.filter((e) => e.category === category)
     if (outcome) r = r.filter((e) => e.outcome === outcome)
-    return r
-  }, [source, q, category, outcome])
+    return sortRows(r, sort, {
+      action: (e) => e.action,
+      actor: (e) => e.username,
+      resource: (e) => e.resource,
+      category: (e) => e.category,
+      when: (e) => e.occurred_at,
+    })
+  }, [source, q, category, outcome, sort])
 
   const filtered = !!q || !!category || !!outcome
   const clear = () => { setQ(''); setCategory(null); setOutcome(null) }
   const denied = rows.filter((e) => e.outcome === 'DENIED' || e.outcome === 'ERROR').length
+  const paging = usePaging(rows.length, 50)
+  const page = paging.slice(rows)
+  const onSort = (key) => setSort((s2) => nextSort(s2, key))
 
   return (
     <div className="flex flex-col gap-6 lg:flex-row">
@@ -179,19 +195,31 @@ function EventSearch({ scope, viewer }) {
       </aside>
 
       <div className="min-w-0 flex-1">
-        <div className="mb-3 flex flex-wrap items-baseline gap-x-6 gap-y-2">
-          <span className="text-sm text-secondary tabular">
-            <span className="font-semibold text-primary">{rows.length.toLocaleString()}</span> events
-          </span>
-          {denied > 0 && (
-            <span className="text-sm text-danger tabular">
-              <span className="font-semibold">{denied}</span> denied or errored
+        <CommandBar
+          primary={
+            <span className="text-sm text-secondary tabular">
+              <span className="font-semibold text-primary">{rows.length.toLocaleString()}</span> events
+              {denied > 0 && (
+                <span className="ml-3 text-danger">
+                  <span className="font-semibold">{denied}</span> denied or errored
+                </span>
+              )}
             </span>
-          )}
-          <span className="ml-auto flex items-center gap-2">
-            <Button size="sm" icon={Download}>Export CSV</Button>
-          </span>
-        </div>
+          }
+        >
+          <Button size="md" icon={FileText} onClick={() => setReportOpen(true)}>Report…</Button>
+          <ExportMenu count={page.length} />
+          <PreferencesMenu pageSize={paging.pageSize} onPageSize={paging.setPageSize} sizes={[50, 100, 200]} />
+        </CommandBar>
+
+        <ActiveFilters
+          chips={[
+            q && { label: `“${q}”`, onRemove: () => setQ('') },
+            category && { label: category, onRemove: () => setCategory(null) },
+            outcome && { label: outcome, onRemove: () => setOutcome(null) },
+          ].filter(Boolean)}
+          onClearAll={clear}
+        />
 
         {rows.length === 0 ? (
           <EmptyState variant={filtered ? 'no-match' : 'none-yet'} onClearFilters={clear} description={filtered ? 'Nothing matches. Widen the range or drop a facet.' : 'No events recorded yet.'} />
@@ -199,16 +227,16 @@ function EventSearch({ scope, viewer }) {
           <DataTable minWidth="52rem">
             <thead>
               <tr>
-                <Th width={COL.wide} sticky edge>Action</Th>
-                {scope !== 'self' && <Th width={COL.medium}>Actor</Th>}
-                <Th width={COL.medium}>Resource</Th>
-                <Th width={COL.short}>Category</Th>
+                <SortTh columnKey="action" sort={sort} onSort={onSort} width={COL.wide} sticky edge>Action</SortTh>
+                {scope !== 'self' && <SortTh columnKey="actor" sort={sort} onSort={onSort} width={COL.medium}>Actor</SortTh>}
+                <SortTh columnKey="resource" sort={sort} onSort={onSort} width={COL.medium}>Resource</SortTh>
+                <SortTh columnKey="category" sort={sort} onSort={onSort} width={COL.short}>Category</SortTh>
                 <Th width={COL.medium}>Source IP</Th>
-                <Th width={COL.timestamp} align="right">When</Th>
+                <SortTh columnKey="when" sort={sort} onSort={onSort} align="right" width={COL.timestamp}>When</SortTh>
               </tr>
             </thead>
             <tbody>
-              {rows.slice(0, 40).map((e) => (
+              {page.map((e) => (
                 <Tr key={e.id} onClick={() => setOpen(e)}>
                   <Td sticky edge>
                     <span className="flex items-center gap-2">
@@ -226,13 +254,21 @@ function EventSearch({ scope, viewer }) {
             </tbody>
           </DataTable>
         )}
-        <p className="mt-3 text-xs text-tertiary">
-          Showing the first 40 of {rows.length.toLocaleString()}. The endpoint pages with limit/offset and caps a
-          single call at 500 rows.
+        {rows.length > 0 && (
+          <Pagination page={paging.page} pageSize={paging.pageSize} total={rows.length} onPage={paging.setPage} />
+        )}
+        <p className="mt-2 text-xs text-tertiary">
+          The endpoint pages with limit/offset and caps a single call at 500 rows, so a page size above that
+          would take more than one request.
         </p>
       </div>
 
       <EventDrawer event={open} onClose={() => setOpen(null)} />
+      <ReportBuilderDialog
+        open={reportOpen}
+        onClose={() => setReportOpen(false)}
+        filterSummary={[category && `category=${category}`, outcome && `outcome=${outcome}`, q && `q=${q}`, scope === 'self' ? `user_id=${viewer.user_id}` : null].filter(Boolean).join(' · ') || 'none'}
+      />
     </div>
   )
 }
@@ -264,6 +300,7 @@ export function MyActivity() {
 export function AdminAudit() {
   const { isAdmin, viewer } = useViewer()
   const [tab, setTab] = useState('events')
+  const [playing, setPlaying] = useState(null)
   if (!isAdmin) return <DeniedState requires="admin" what="the organisation audit trail" fallbackHref="/activity" fallbackLabel="See your own activity" />
 
   return (
@@ -324,7 +361,12 @@ export function AdminAudit() {
                   <Td align="right"><span className="text-tertiary">{relative(r.started_at)}</span></Td>
                   <Td align="right">
                     <RowActions>
-                      <Button size="sm" icon={Play}>Play</Button>
+                      <Button size="sm" icon={Play} onClick={() => setPlaying(r)}>Play</Button>
+                      <RowMenu label={`Actions for ${r.resource_name}`}>
+                        <MenuItem onClick={() => setPlaying(r)}>Open player</MenuItem>
+                        <MenuItem>Download .cast</MenuItem>
+                        <MenuItem>Verify SHA-256</MenuItem>
+                      </RowMenu>
                     </RowActions>
                   </Td>
                 </Tr>
@@ -338,6 +380,8 @@ export function AdminAudit() {
           </p>
         </>
       )}
+
+      <RecordingPlayer open={!!playing} recording={playing} onClose={() => setPlaying(null)} />
     </>
   )
 }
@@ -348,6 +392,9 @@ export function AdminAudit() {
 // report", not an operator searching for an event.
 export function Compliance() {
   const { isAdmin } = useViewer()
+  const toast = useToast()
+  const [reportOpen, setReportOpen] = useState(false)
+  const [verifying, setVerifying] = useState(false)
   const v = auditVerification
   if (!isAdmin) return <DeniedState requires="admin" what="compliance reporting" fallbackHref="/activity" fallbackLabel="See your own activity" />
 
@@ -364,7 +411,23 @@ export function Compliance() {
         value={v.verified ? 'Intact' : 'Broken'}
         tone={v.verified ? 'ok' : 'danger'}
         caption={`${v.entries_checked.toLocaleString()} entries verified, sequence ${v.first_sequence.toLocaleString()}–${v.last_sequence.toLocaleString()} · last checked ${relative(v.verified_at)}`}
-        action={<Button variant="primary" size="lg" icon={ShieldCheck}>Re-verify now</Button>}
+        action={
+          <Button
+            variant="primary"
+            size="lg"
+            icon={ShieldCheck}
+            disabled={verifying}
+            onClick={() => {
+              setVerifying(true)
+              setTimeout(() => {
+                setVerifying(false)
+                toast({ title: 'Chain verified', description: `${v.entries_checked.toLocaleString()} entries, no break found.` })
+              }, 1400)
+            }}
+          >
+            {verifying ? 'Verifying…' : 'Re-verify now'}
+          </Button>
+        }
       />
 
       {!v.verified && (
@@ -396,22 +459,10 @@ export function Compliance() {
         title="Reports"
         description="A compliance report over a time window and a set of filters. Generation is MFA-gated and is itself audited as pam:report:Generate."
       >
-        <Panel className="p-4">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div>
-              <label htmlFor="from" className="mb-2 block text-micro font-semibold uppercase text-tertiary">From</label>
-              <input id="from" type="date" className={inputClass} />
-            </div>
-            <div>
-              <label htmlFor="to" className="mb-2 block text-micro font-semibold uppercase text-tertiary">To</label>
-              <input id="to" type="date" className={inputClass} />
-            </div>
-          </div>
-          <div className="mt-4 flex flex-wrap items-center gap-2">
-            <Button variant="primary" icon={FileText}>Generate report</Button>
-            <Meta>Returns a file. Large windows take a while — the request streams rather than paging.</Meta>
-          </div>
-        </Panel>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="primary" icon={FileText} onClick={() => setReportOpen(true)}>Generate a report…</Button>
+          <Meta>Returns a file. Large windows take a while — the request streams rather than paging.</Meta>
+        </div>
       </Section>
 
       <Section title="Break-glass reports" description="Every break-glass grant can produce a standalone report of what was done under it.">
@@ -425,6 +476,8 @@ export function Compliance() {
           <Button icon={FileText}>Open break-glass register</Button>
         </div>
       </Section>
+
+      <ReportBuilderDialog open={reportOpen} onClose={() => setReportOpen(false)} filterSummary="none — whole org" />
     </>
   )
 }

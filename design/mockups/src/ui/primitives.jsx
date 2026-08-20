@@ -321,3 +321,80 @@ export function FilterChip({ active, onClick, children, count }) {
     </button>
   )
 }
+
+// ---------------------------------------------------------------------------
+// Form primitives
+// ---------------------------------------------------------------------------
+// Added in revision 2. Pass 1 mocked no forms at all, which meant the design
+// system had no answer for the single most common enterprise surface: a
+// create/edit dialog. The rules encoded here:
+//   • label above, control, then EITHER hint or error — never both, and the
+//     error replaces the hint so the row never grows and reflows the dialog;
+//   • required is a mark on the label, not a colour on the input;
+//   • errors are sentences that say what to do, never "Invalid".
+
+export function Field({ label, htmlFor, required, hint, error, children, className }) {
+  return (
+    <div className={clsx('min-w-0', className)}>
+      <label htmlFor={htmlFor} className="mb-2 flex items-center gap-1 text-micro font-semibold uppercase text-tertiary">
+        {label}
+        {required && <span className="text-danger" aria-hidden="true">*</span>}
+        {required && <span className="sr-only">(required)</span>}
+      </label>
+      {children}
+      <p className={clsx('mt-2 text-xs', error ? 'text-danger' : 'text-tertiary')} role={error ? 'alert' : undefined}>
+        {error || hint || ' '}
+      </p>
+    </div>
+  )
+}
+
+// A labelled group inside a dialog. Flat — a rule and a caption, not a card.
+export function FieldSet({ title, hint, children, className }) {
+  return (
+    <fieldset className={clsx('min-w-0 border-0 p-0', className)}>
+      <legend className="mb-3 w-full border-b border-line pb-2 text-micro font-semibold uppercase text-tertiary">
+        {title}
+      </legend>
+      {hint && <p className="mb-3 max-w-prose text-xs text-tertiary">{hint}</p>}
+      <div className="flex flex-col gap-2">{children}</div>
+    </fieldset>
+  )
+}
+
+export const selectClass =
+  'h-8 w-full rounded border border-line bg-surface px-2 text-sm text-primary focus:border-accent focus:outline-none'
+
+export const textareaClass =
+  'w-full rounded border border-line bg-surface px-2 py-2 text-sm text-primary placeholder:text-tertiary focus:border-accent focus:outline-none'
+
+// Password strength — mirrors lib/validators.js's four-band model. Shown as a
+// segmented meter rather than a coloured bar, because the bands are discrete
+// and a continuous bar implies a precision the rule set doesn't have.
+export function StrengthMeter({ score = 0, label }) {
+  const bands = ['Too short', 'Weak', 'Fair', 'Strong']
+  const tone = ['bg-danger', 'bg-danger', 'bg-warn', 'bg-ok'][score] || 'bg-line-strong'
+  return (
+    <div className="mt-2 flex items-center gap-2">
+      <span className="flex flex-1 gap-1" aria-hidden="true">
+        {[0, 1, 2, 3].map((i) => (
+          <span key={i} className={clsx('h-1 flex-1 rounded-full', i <= score ? tone : 'bg-subtle')} />
+        ))}
+      </span>
+      <span className="w-16 flex-none text-right text-xs text-tertiary">{label || bands[score]}</span>
+    </div>
+  )
+}
+
+// A read-only review row — the last step of a wizard, and the confirmation
+// pattern for anything with more than four inputs.
+export function ReviewRow({ label, value }) {
+  return (
+    <div className="flex items-baseline justify-between gap-4 border-b border-line py-2 last:border-b-0">
+      <span className="flex-none text-micro font-semibold uppercase text-tertiary">{label}</span>
+      <span className="min-w-0 truncate text-right text-sm text-primary">
+        {value === undefined || value === null || value === '' ? <span className="text-tertiary">—</span> : value}
+      </span>
+    </div>
+  )
+}

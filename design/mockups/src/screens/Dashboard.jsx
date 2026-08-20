@@ -1,10 +1,11 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import clsx from 'clsx'
 import { ArrowRight, Clock, KeyRound, ShieldAlert } from 'lucide-react'
 import { useViewer } from '../state/viewer'
 import { adminStats, auditEvents, grants, jitRequests, sessions, approvalsByRequest } from '../fixtures'
 import { Button, HeroMetric, Meta, Panel, RuledLabel, Section, StatRail, StatusDot, AlarmBand, BreakglassTag } from '../ui/primitives'
+import { ConfirmDialog, useToast } from '../ui/overlay'
 import { FreshnessMarker } from '../ui/states'
 import { countdown, JIT_LABEL, JIT_TONE, relative } from '../lib/format'
 
@@ -79,7 +80,7 @@ function ActivityBars({ events, hours = 12 }) {
 // row's organising fact, not a badge parked at the end: a request that already
 // carries one approval needs ONE specific different person, and that is what
 // makes it the fastest thing in the queue to clear.
-function QueueRow({ request, isRoot, viewerId }) {
+function QueueRow({ request, isRoot, viewerId, onApprove, onDeny }) {
   const trail = approvalsByRequest[request.id] || null
   const approvedCount = trail ? trail.filter((a) => a.decision === 'approved').length : request.status === 'PARTIALLY_APPROVED' ? 1 : 0
   const alreadyApprovedByViewer = !!trail?.some((a) => a.approver_user_id === viewerId)
@@ -119,10 +120,10 @@ function QueueRow({ request, isRoot, viewerId }) {
           }
         />
         <div className="flex items-center gap-2">
-          <Button size="sm" variant="primary" disabled={!!blocked} title={blocked || undefined}>
+          <Button size="sm" variant="primary" disabled={!!blocked} title={blocked || undefined} onClick={() => onApprove(request)}>
             {label}
           </Button>
-          <Button size="sm" variant="dangerQuiet">
+          <Button size="sm" variant="dangerQuiet" onClick={() => onDeny(request)}>
             Deny
           </Button>
         </div>
@@ -136,6 +137,11 @@ function QueueRow({ request, isRoot, viewerId }) {
 // ===========================================================================
 function AdminDashboard({ isRoot, viewerId }) {
   const s = adminStats
+  const toast = useToast()
+  const [approveTarget, setApproveTarget] = useState(null)
+  const [denyTarget, setDenyTarget] = useState(null)
+  const approvedCountOf = (r) => (approvalsByRequest[r?.id] || []).filter((a) => a.decision === 'approved').length
+  const willIssue = (r) => isRoot || approvedCountOf(r) >= 1
   const queue = useMemo(() => {
     const open = jitRequests.filter((r) => ['PARTIALLY_APPROVED', 'PENDING', 'WAITING'].includes(r.status))
     // Order is the design: one-approval-short first (clears fastest), then new,
@@ -208,7 +214,7 @@ function AdminDashboard({ isRoot, viewerId }) {
       >
         <Panel>
           {queue.map((r) => (
-            <QueueRow key={r.id} request={r} isRoot={isRoot} viewerId={viewerId} />
+            <QueueRow key={r.id} request={r} isRoot={isRoot} viewerId={viewerId} onApprove={setApproveTarget} onDeny={setDenyTarget} />
           ))}
         </Panel>
       </Section>
@@ -262,6 +268,43 @@ function AdminDashboard({ isRoot, viewerId }) {
           </p>
         </div>
       </Section>
+
+      <ConfirmDialog
+        open={!!approveTarget}
+        onClose={() => setApproveTarget(null)}
+        title={`Approve access to ${approveTarget?.resource_name}?`}
+        consequence={
+          willIssue(approveTarget)
+            ? isRoot
+              ? 'You are root — your approval settles this alone. The grant is issued immediately.'
+              : 'This is the second of two approvals. The grant is issued immediately.'
+            : 'This is the FIRST of two approvals. No grant is issued yet — a second, different administrator (or root) must also approve.'
+        }
+        confirmLabel={isRoot ? 'Approve (final)' : willIssue(approveTarget) ? 'Approve (2 of 2)' : 'Approve (1 of 2)'}
+        reasonLabel="Reason (optional)"
+        onConfirm={() => {
+          const r = approveTarget
+          setApproveTarget(null)
+          toast({
+            title: willIssue(r) ? 'Grant issued' : 'Approved — one of two',
+            description: willIssue(r)
+              ? `${r.requester_username} can now connect to ${r.resource_name}.`
+              : 'A second, different administrator — or root — must approve before any access exists.',
+          })
+        }}
+      />
+
+      <ConfirmDialog
+        open={!!denyTarget}
+        onClose={() => setDenyTarget(null)}
+        title={`Deny access to ${denyTarget?.resource_name}?`}
+        consequence="One denial ends this request on its own — unlike approval, it does not wait for a second person."
+        confirmLabel="Deny request"
+        destructive
+        requireReason
+        reasonLabel="Reason for denial"
+        onConfirm={() => { setDenyTarget(null); toast({ title: 'Request denied', tone: 'warning' }) }}
+      />
     </div>
   )
 }

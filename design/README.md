@@ -13,6 +13,8 @@ system, and reviewable mockups.
 | [`03-personas.md`](03-personas.md) | 3 | Root / Admin / Normal User, verified against the actual route guards, OPA bundle and service-layer rank checks — several standard PAM assumptions are wrong for this product |
 | [`04-design-system.md`](04-design-system.md) | 4 | Type scale, 4px grid, colour discipline, elevation rules, table density, navigation model, the four mandatory states |
 | [`05-redesigns.md`](05-redesigns.md) | 5 + 6 | Per-page: layout, what changed and why, component fixes, role variants, every action mapped to an endpoint, "requires backend support", and the responsive + Chrome/Edge spec |
+| [`06-surface-tree.md`](06-surface-tree.md) | pass 2 · step 1 | The **full** surface tree — 68 surfaces, not 24 routes. Every modal, drawer, wizard, menu, toast and banner in the codebase, with all 44 gaps from pass 1 named |
+| [`07-critique.md`](07-critique.md) | pass 2 · step 2 | An honest critique of pass 1 against the domain references and against AWS / Azure / Salesforce, and what the revision changed for each finding |
 | [`mockups/`](mockups) | 5 | The mockups, as a runnable React + Vite app |
 
 ## Running the mockups
@@ -55,6 +57,9 @@ Routes: `/`, `/resources`, `/resources/:id`, `/vault`, `/vault/:safeId`,
 ## What was verified rather than assumed
 
 - 24 routes × 3 roles rendered in headless Chromium: **0 runtime errors**.
+- **20 dialog triggers** clicked and asserted to open the right surface by its
+  content, then dismissed with Escape: all pass.
+- Command palette opens on ⌘K, searches real objects, closes on Escape.
 - Horizontal page overflow at 390 / 820 / 1280 / 1920 px on the shell and the
   densest table: **0px**. Tables scroll inside their own container with the
   identity column frozen; the page body never scrolls sideways.
@@ -62,6 +67,20 @@ Routes: `/`, `/resources`, `/resources/:id`, `/vault`, `/vault/:safeId`,
 - The design system is enforced by the toolchain: `tailwind.config.js`
   **replaces** Tailwind's type, spacing, radius and shadow scales rather than
   extending them, so an off-scale value simply doesn't compile.
+
+## Pass 2 in one paragraph
+
+Pass 1 redesigned 24 **routes**. The codebase has **68 surfaces** — an
+enterprise console's character lives in what its routes open. 44 of them were
+missing: every create modal, all 13 confirmations, the MFA wizard, the session
+recording player, the toast system, the command palette. Worse, pass 1 had
+silently **removed** seven list controls that exist in the app today (sort,
+pagination, column chooser, export, saved views, refresh, filter chips) — a
+capability regression wearing restraint's clothes. Revision 2 builds the
+missing surfaces in the same language, restores the list chrome behind a
+command bar, tightens density (32px rows, plus a real persisted compact mode),
+and moves destructive row actions into an overflow menu. Full reasoning in
+`07-critique.md`.
 
 ## Three findings worth reading before the design work
 

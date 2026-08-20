@@ -4,7 +4,10 @@ import { Plus, X } from 'lucide-react'
 import { useViewer } from '../state/viewer'
 import { policies, roles, users } from '../fixtures'
 import { Button, DetailList, Meta, PageHeader, Panel, RuledLabel, Section, StatusDot } from '../ui/primitives'
-import { COL, DataTable, RowActions, Td, Th, Tr, Trunc } from '../ui/table'
+import { COL, DataTable, RowActions, SortTh, Td, Th, Tr, Trunc, nextSort, sortRows } from '../ui/table'
+import { CommandBar, ExportMenu, PreferencesMenu, RowMenu } from '../ui/listchrome'
+import { ConfirmDialog, MenuItem, useToast } from '../ui/overlay'
+import { CreatePolicyDialog, CreateRoleDialog } from '../surfaces/CreateForms'
 import { DeniedState, EmptyState } from '../ui/states'
 import { relative } from '../lib/format'
 
@@ -107,7 +110,13 @@ function RoleDrawer({ role, onClose }) {
 
 export function RolesPage() {
   const { isAdmin } = useViewer()
+  const toast = useToast()
   const [open, setOpen] = useState(null)
+  const [createOpen, setCreateOpen] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState(null)
+  const [sort, setSort] = useState({ key: 'role', dir: 'asc' })
+  const rows = sortRows(roles, sort, { role: (r) => r.name, kind: (r) => (r.is_system ? 0 : 1), created: (r) => r.created_at })
+  const onSort = (key) => setSort((s2) => nextSort(s2, key))
   if (!isAdmin) return <DeniedState requires="admin" what="Roles" />
 
   return (
@@ -116,21 +125,27 @@ export function RolesPage() {
         eyebrow="Admin Center"
         title="Roles"
         description="A role is a bundle of policies. Membership of a role is what gates the MFA rules and the Admin Center."
-        actions={<Button variant="primary" icon={Plus}>New role</Button>}
       />
 
-      <DataTable minWidth="56rem">
+      <CommandBar
+        primary={<Button variant="primary" icon={Plus} onClick={() => setCreateOpen(true)}>New role</Button>}
+        summary={`${roles.length} roles`}
+      >
+        <ExportMenu count={roles.length} />
+      </CommandBar>
+
+      <DataTable minWidth="52rem">
         <thead>
           <tr>
-            <Th width={COL.name} sticky edge>Role</Th>
-            <Th width="w-[28rem]">Description</Th>
-            <Th width={COL.short}>Kind</Th>
-            <Th width={COL.timestamp} align="right">Created</Th>
+            <SortTh columnKey="role" sort={sort} onSort={onSort} width={COL.name} sticky edge>Role</SortTh>
+            <Th width="w-[26rem]">Description</Th>
+            <SortTh columnKey="kind" sort={sort} onSort={onSort} width={COL.short}>Kind</SortTh>
+            <SortTh columnKey="created" sort={sort} onSort={onSort} align="right" width={COL.timestamp}>Created</SortTh>
             <Th width={COL.actions} align="right"><span className="sr-only">Actions</span></Th>
           </tr>
         </thead>
         <tbody>
-          {roles.map((r) => (
+          {rows.map((r) => (
             <Tr key={r.id} onClick={() => setOpen(r)}>
               <Td sticky edge>
                 <span className="truncate text-sm font-semibold text-primary">{r.name}</span>
@@ -140,11 +155,19 @@ export function RolesPage() {
               <Td align="right"><span className="text-tertiary">{relative(r.created_at)}</span></Td>
               <Td align="right">
                 <RowActions>
-                  {r.is_system ? (
-                    <Meta title="System roles are part of the install and cannot be deleted">locked</Meta>
-                  ) : (
-                    <Button size="sm" variant="dangerQuiet" onClick={(e) => e.stopPropagation()}>Delete</Button>
-                  )}
+                  <span onClick={(e) => e.stopPropagation()}>
+                    <RowMenu label={`Actions for ${r.name}`}>
+                      <MenuItem onClick={() => setOpen(r)}>What it grants…</MenuItem>
+                      {r.is_system ? (
+                        <p className="px-3 py-2 text-xs leading-relaxed text-tertiary">
+                          System role — part of the install. The policy engine resolves against it, so it cannot
+                          be deleted, by an admin or by root.
+                        </p>
+                      ) : (
+                        <MenuItem danger onClick={() => setDeleteTarget(r)}>Delete role…</MenuItem>
+                      )}
+                    </RowMenu>
+                  </span>
                 </RowActions>
               </Td>
             </Tr>
@@ -160,13 +183,31 @@ export function RolesPage() {
       </p>
 
       <RoleDrawer role={open} onClose={() => setOpen(null)} />
+
+      <CreateRoleDialog
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onDone={(name) => { setCreateOpen(false); toast({ title: `Role “${name}” created`, description: 'It grants nothing until a policy is attached.' }) }}
+      />
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        title={`Delete role “${deleteTarget?.name}”?`}
+        consequence="Everyone holding it loses whatever it granted, immediately. Any MFA policy rule that targets this role stops applying — check MFA Policy before deleting a role that is gated."
+        confirmLabel="Delete role"
+        destructive
+        onConfirm={() => { const n = deleteTarget.name; setDeleteTarget(null); toast({ title: `Role “${n}” deleted`, tone: 'error' }) }}
+      />
     </>
   )
 }
 
 export function PoliciesPage() {
   const { isAdmin } = useViewer()
-  const [open, setOpen] = useState(null)
+  const toast = useToast()
+  const [createOpen, setCreateOpen] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState(null)
   if (!isAdmin) return <DeniedState requires="admin" what="Policies" />
 
   return (
@@ -175,8 +216,14 @@ export function PoliciesPage() {
         eyebrow="Admin Center"
         title="Policies"
         description="Allow and deny rules over actions and resources. A deny always beats an allow."
-        actions={<Button variant="primary" icon={Plus}>New policy</Button>}
       />
+
+      <CommandBar
+        primary={<Button variant="primary" icon={Plus} onClick={() => setCreateOpen(true)}>New policy</Button>}
+        summary={`${policies.length} policies`}
+      >
+        <ExportMenu count={policies.length} />
+      </CommandBar>
 
       <div className="space-y-8">
         {policies.map((p) => (
@@ -192,7 +239,7 @@ export function PoliciesPage() {
               </div>
               <div className="flex flex-none items-center gap-2">
                 <Button size="sm" disabled={p.is_system} title={p.is_system ? 'System policies are part of the install' : undefined}>Edit</Button>
-                <Button size="sm" variant="dangerQuiet" disabled={p.is_system}>Delete</Button>
+                <Button size="sm" variant="dangerQuiet" disabled={p.is_system} onClick={() => setDeleteTarget(p)}>Delete</Button>
               </div>
             </div>
             <RuleLines policy={p} />
@@ -203,6 +250,26 @@ export function PoliciesPage() {
           </div>
         ))}
       </div>
+
+      <CreatePolicyDialog
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onDone={(name) => { setCreateOpen(false); toast({ title: `Policy “${name}” created`, description: 'Attach it to a role or an account for it to take effect.' }) }}
+      />
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        title={`Delete policy “${deleteTarget?.name}”?`}
+        consequence={
+          deleteTarget?.effect === 'deny'
+            ? 'This is a DENY policy. Deleting it does not remove access — it removes a refusal, so anyone an allow-policy already covers gains what this was blocking.'
+            : 'Every role and account it is attached to loses these actions immediately.'
+        }
+        confirmLabel="Delete policy"
+        destructive
+        onConfirm={() => { const n = deleteTarget.name; setDeleteTarget(null); toast({ title: `Policy “${n}” deleted`, tone: 'error' }) }}
+      />
     </>
   )
 }
