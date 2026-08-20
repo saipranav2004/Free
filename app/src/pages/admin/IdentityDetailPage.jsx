@@ -5,7 +5,6 @@ import { z } from 'zod'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams, useSearchParams, Link } from 'react-router-dom'
 import {
-  ArrowLeft,
   KeyRound,
   Trash2,
   X,
@@ -69,7 +68,6 @@ import { Badge, MetaTag } from '../../components/common/Badge'
 import { Button } from '../../components/common/Button'
 import { StatusDot } from '../../components/ui/bits'
 import { TabBar } from '../../components/common/TabBar'
-import { Avatar } from '../../components/common/UserMenu'
 import { Field, inputClass, selectClass } from '../../components/common/FormFields'
 import { ConfirmDialog } from '../../components/common/ConfirmDialog'
 import { AuditTable } from '../../components/audit/AuditTable'
@@ -703,6 +701,14 @@ export default function IdentityDetailPage() {
   // the console never offers those actions to an ordinary admin.
   const isRoot = useAuthStore((s) => s.isRoot())
 
+  // The signed-in account's own id. When this page is that account, the two
+  // actions that would lock the operator out of the console, deleting and
+  // disabling their own account, are withheld. This is the guard AWS IAM and
+  // Okta both apply: you can edit your own record, but you cannot be the one
+  // who signs yourself out for good. The seeded root is is_protected on top of
+  // this, so the server refuses regardless, but the rule holds for any admin.
+  const viewerId = useAuthStore((s) => s.user?.user_id)
+
   const userQuery = useQuery({
     queryKey: ['admin', 'users', id],
     queryFn: ({ signal }) => getUser(id, signal),
@@ -739,21 +745,32 @@ export default function IdentityDetailPage() {
   // it out meant navigating Back showed access one edit out of date.
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['admin', 'users'] })
 
+  // Both lockout mutations re-check the self rule at call time rather than
+  // trusting that the button that triggered them was correctly disabled, the
+  // same defence the role mutations use below.
   const statusMutation = useMutation({
-    mutationFn: (status) => setUserStatus(id, status),
+    mutationFn: (status) => {
+      if (id === viewerId && status === 'DISABLED') {
+        throw blockedError('You cannot disable your own account.')
+      }
+      return setUserStatus(id, status)
+    },
     onSuccess: (_d, status) => {
       toast.success(`Account set to ${status}`)
       invalidate()
       setConfirmStatus(null)
     },
     onError: (err) => {
-      toast.error(apiErrorMessage(err))
+      toast.error(mutationErrorMessage(err))
       setConfirmStatus(null)
     },
   })
 
   const deleteMutation = useMutation({
-    mutationFn: () => deleteUser(id),
+    mutationFn: () => {
+      if (id === viewerId) throw blockedError('You cannot delete your own account.')
+      return deleteUser(id)
+    },
     onSuccess: () => {
       toast.success('Account deleted', {
         description: 'The account can no longer sign in. Its audit history is kept.',
@@ -762,7 +779,7 @@ export default function IdentityDetailPage() {
       navigate('/admin/identity')
     },
     onError: (err) => {
-      toast.error(apiErrorMessage(err))
+      toast.error(mutationErrorMessage(err))
       setConfirmDelete(false)
     },
   })
@@ -908,6 +925,11 @@ export default function IdentityDetailPage() {
           const roles = rolesOfAccess(data)
           const policies = data.access?.direct_policies || []
 
+          // Is this the signed-in operator's own account? Delete and Disable
+          // are withheld when it is, so nobody can lock themselves out.
+          const isSelf = !!viewerId && (user.user_id === viewerId || user.id === viewerId)
+          const selfLockReason = 'You cannot delete or disable your own account.'
+
           // ROLES. The catalogue is every role the install actually has ,
           // built-in and custom alike, read from GET /admin/rbac/roles, not
           // from the three-name SYSTEM_ROLES constant this used to filter.
@@ -993,7 +1015,13 @@ export default function IdentityDetailPage() {
                     <Button variant="secondary" icon={KeyRound} onClick={() => setTab('security')}>
                       Reset password
                     </Button>
-                    <Button variant="dangerGhost" icon={Trash2} onClick={() => setConfirmDelete(true)}>
+                    <Button
+                      variant="dangerGhost"
+                      icon={Trash2}
+                      disabled={isSelf}
+                      title={isSelf ? selfLockReason : undefined}
+                      onClick={() => setConfirmDelete(true)}
+                    >
                       Delete
                     </Button>
                   </>
@@ -1028,6 +1056,12 @@ export default function IdentityDetailPage() {
                 <span className="text-sm text-secondary">
                   Created <span className="text-primary">{formatRelativeToNow(user.created_at)}</span>
                 </span>
+
+                {isSelf && (
+                  <span className="inline-flex items-center gap-1.5 rounded bg-accent-soft px-2 py-0.5 text-sm font-medium text-accent">
+                    Your account
+                  </span>
+                )}
 
                 {privileged && (
                   <span className="inline-flex items-center gap-1.5 text-sm font-medium text-warn">
@@ -1545,24 +1579,31 @@ export default function IdentityDetailPage() {
                         </Badge>
                       </CardHeader>
                       <div className="grid gap-2 p-4 sm:grid-cols-3">
-                        {STATUS_TRANSITIONS.filter((s) => s.value !== user.status).map((s) => (
-                          <button
-                            key={s.value}
-                            type="button"
-                            onClick={() => setConfirmStatus(s.value)}
-                            className="flex items-start gap-3 rounded-xl border border-surface-700 bg-surface-850 px-3 py-2.5 text-left transition-colors hover:border-surface-600 hover:bg-surface-800"
-                          >
-                            <span className="mt-0.5 flex h-7 w-7 flex-none items-center justify-center rounded-lg border border-surface-700 bg-surface-900 text-ink-400">
-                              <s.icon className="h-3.5 w-3.5" strokeWidth={1.75} />
-                            </span>
-                            <span className="min-w-0">
-                              <span className="block text-sm font-medium text-ink-100">{s.label}</span>
-                              <span className="mt-0.5 block text-2xs leading-relaxed text-ink-500">
-                                {s.note}
+                        {STATUS_TRANSITIONS.filter((s) => s.value !== user.status).map((s) => {
+                          // Disabling your own account signs you out for good,
+                          // so that one transition is withheld on your own page.
+                          const blocked = isSelf && s.value === 'DISABLED'
+                          return (
+                            <button
+                              key={s.value}
+                              type="button"
+                              disabled={blocked}
+                              title={blocked ? selfLockReason : undefined}
+                              onClick={() => setConfirmStatus(s.value)}
+                              className="flex items-start gap-3 rounded-xl border border-surface-700 bg-surface-850 px-3 py-2.5 text-left transition-colors hover:border-surface-600 hover:bg-surface-800 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-surface-700 disabled:hover:bg-surface-850"
+                            >
+                              <span className="mt-0.5 flex h-7 w-7 flex-none items-center justify-center rounded-lg border border-surface-700 bg-surface-900 text-ink-400">
+                                <s.icon className="h-3.5 w-3.5" strokeWidth={1.75} />
                               </span>
-                            </span>
-                          </button>
-                        ))}
+                              <span className="min-w-0">
+                                <span className="block text-sm font-medium text-ink-100">{s.label}</span>
+                                <span className="mt-0.5 block text-2xs leading-relaxed text-ink-500">
+                                  {blocked ? 'You cannot disable your own account.' : s.note}
+                                </span>
+                              </span>
+                            </button>
+                          )
+                        })}
                       </div>
                       <CardFooter>
                         <p className="text-xs leading-relaxed text-ink-500">
@@ -1580,14 +1621,16 @@ export default function IdentityDetailPage() {
                       </CardHeader>
                       <div className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
                         <p className="max-w-xl text-sm leading-relaxed text-ink-400">
-                          Permanently removes the account. Its audit history remains - the trail is
-                          append-only - but the account cannot be restored, and any credentials or grants it
-                          held stop working immediately. Disabling is almost always the better answer.
+                          {isSelf
+                            ? 'This is your own account, so it cannot be deleted from here. Ask another administrator if the account genuinely needs to be removed.'
+                            : 'Permanently removes the account. Its audit history remains - the trail is append-only - but the account cannot be restored, and any credentials or grants it held stop working immediately. Disabling is almost always the better answer.'}
                         </p>
                         <Button
                           variant="danger"
                           icon={Trash2}
                           className="flex-none"
+                          disabled={isSelf}
+                          title={isSelf ? selfLockReason : undefined}
                           onClick={() => setConfirmDelete(true)}
                         >
                           Delete account

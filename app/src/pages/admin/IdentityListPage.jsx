@@ -5,6 +5,7 @@ import { Ban, Copy, Download, KeyRound, Lock, Trash2, UserPlus, Users } from 'lu
 import clsx from 'clsx'
 import { toast } from 'sonner'
 import { listUsers, getUser } from '../../api/identity'
+import { useAuthStore } from '../../store/authStore'
 import { rolesOfUser, rolesOfAccess } from '../../lib/roles'
 import { listRoles } from '../../api/rbac'
 import { normalizeApiError } from '../../lib/apiError'
@@ -179,6 +180,12 @@ function isPrivileged(user) {
 // confirm, never one click from a list.
 export default function IdentityListPage() {
   const [createOpen, setCreateOpen] = useState(false)
+
+  // The signed-in account appears in this list like any other, which is the
+  // convention AWS IAM and Okta both follow: hiding yourself makes the
+  // inventory lie about who exists. It is marked instead, so an admin editing
+  // the directory can see at a glance which row is their own.
+  const viewerId = useAuthStore((s) => s.user?.user_id)
 
   // Deep link from the dashboard's Administration shortcuts: /…?new=1 opens
   // the create form directly. The param is stripped immediately so a reload
@@ -694,6 +701,11 @@ export default function IdentityListPage() {
                                 </span>
                               )}
                             </div>
+                            {u.user_id === viewerId && (
+                              <span className="flex-none rounded bg-accent-soft px-1.5 py-0.5 text-xs font-medium text-accent">
+                                You
+                              </span>
+                            )}
                             {u.is_protected && <Meta>protected</Meta>}
                           </div>
                         </Td>
