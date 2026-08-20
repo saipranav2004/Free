@@ -38,7 +38,7 @@ import { listMyGrants, listMyJitRequests } from '../api/jit'
 import { listMySessions } from '../api/sessions'
 import { searchAudit } from '../api/audit'
 import { Card, CardHeader, CardTitle, CardFooter, EmptyState } from '../components/common/Layout'
-import { KpiCell } from '../components/common/KpiStrip'
+import { PageTitle } from '../components/ui/layout'
 import { QueryState } from '../components/common/QueryState'
 import { Badge, MetaTag } from '../components/common/Badge'
 import { Button } from '../components/common/Button'
@@ -267,7 +267,7 @@ function ActivityToolbar({ range, onRangeChange, limitKey, onLimitChange, idSuff
         options={RANGES.map((r) => ({ key: r.key, label: r.label }))}
       />
       <span className="flex flex-none items-center gap-2">
-        <label htmlFor={id} className="text-2xs font-semibold uppercase tracking-[0.09em] text-ink-500">
+        <label htmlFor={id} className="text-sm text-secondary">
           Sample
         </label>
         <select
@@ -311,10 +311,10 @@ function SectionLink({ to, children }) {
 function PrimarySection({ title, count, children }) {
   return (
     <section className="mt-8">
-      <div className="mb-3.5 flex items-center gap-2.5">
-        <h2 className="text-[0.9375rem] font-semibold tracking-[-0.01em] text-ink-50">{title}</h2>
+      <div className="mb-3 flex items-center gap-2.5">
+        <h2 className="text-xl font-bold leading-tight text-primary">{title}</h2>
         {count > 0 && (
-          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-2xs font-bold tabular-nums text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
+          <span className="rounded-full bg-warn-soft px-2 py-0.5 text-xs font-bold tabular text-warn">
             {count}
           </span>
         )}
@@ -329,8 +329,8 @@ function QuietSection({ label, action, children }) {
   return (
     <section className="mt-9">
       <div className="mb-3.5 flex items-center gap-3">
-        <h2 className="flex-none text-2xs font-semibold uppercase tracking-[0.11em] text-ink-500">{label}</h2>
-        <span className="h-px flex-1 bg-surface-800" aria-hidden="true" />
+        <h2 className="flex-none text-xl font-bold leading-tight text-primary">{label}</h2>
+        <span className="h-px flex-1 bg-line-soft" aria-hidden="true" />
         {action && <div className="flex flex-none items-center gap-3">{action}</div>}
       </div>
       {children}
@@ -441,29 +441,69 @@ function AdminShortcuts() {
 // Masthead: greeting plus posture, welded into one object
 // ---------------------------------------------------------------------------
 
-function Masthead({ eyebrow, title, description, cells, columns = 5, loading, aside }) {
-  const cols = {
-    4: 'sm:grid-cols-2 lg:grid-cols-4',
-    5: 'sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5',
-  }[columns]
+// ---------------------------------------------------------------------------
+// The dashboard header
+// ---------------------------------------------------------------------------
+// WAS: a bordered plate carrying an eyebrow, a greeting, a sentence of prose
+// and a five cell KPI grid, which is a KPI wall inside a card. Three problems.
+//
+// The greeting is not information. "Good to see you, d.okonkwo" is 26px of
+// the fold spent on something the reader already knows.
+//
+// Five equal weight cells say all five numbers matter equally. They do not:
+// pending approvals and break glass are things you act on, the rest are
+// context. Equal weight is a decision not to rank, and ranking is the whole
+// job of a dashboard.
+//
+// And a bordered card around the page's own title makes the title look like
+// content rather than like the page.
+//
+// NOW: the page title, then the numbers on a rule. Each one is a link to the
+// screen that owns it, and the ones that need action carry colour while the
+// rest stay quiet. None of them shows a trend, because GET /admin/stats
+// returns point in time counts with no history.
+function Fact({ label, value, to, tone = 'default', description, live = false, loading }) {
+  const toneClass = tone === 'danger' ? 'text-danger' : tone === 'warn' ? 'text-warn' : 'text-primary'
 
+  const body = (
+    <>
+      <span className="flex items-baseline gap-2">
+        {loading ? (
+          <span className="skeleton block h-7 w-10 rounded" />
+        ) : (
+          <span className={clsx('text-2xl font-bold leading-none tabular', toneClass)}>{value}</span>
+        )}
+        <span className="flex items-center gap-1.5 text-sm text-secondary">
+          {label}
+          {live && !loading && (
+            <span className="relative flex h-1.5 w-1.5 flex-none rounded-full bg-ok" aria-hidden="true">
+              <span className="dot-live absolute inset-0 rounded-full bg-ok" />
+            </span>
+          )}
+        </span>
+      </span>
+      {description && <span className="mt-0.5 block text-xs text-tertiary">{description}</span>}
+    </>
+  )
+
+  if (!to) return <span className="min-w-0">{body}</span>
   return (
-    <div className="overflow-hidden rounded-2xl border border-surface-700/70 bg-surface-900">
-      <div className="flex flex-col gap-5 px-5 py-5 lg:flex-row lg:items-start lg:justify-between lg:gap-8">
-        <div className="min-w-0">
-          <p className="text-2xs font-semibold uppercase tracking-[0.13em] text-ink-500">{eyebrow}</p>
-          <h1 className="mt-1.5 truncate text-[1.6rem] font-semibold leading-tight tracking-[-0.022em] text-ink-50">
-            {title}
-          </h1>
-          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-ink-400">{description}</p>
-        </div>
-        {aside && <div className="flex-none lg:max-w-[22rem]">{aside}</div>}
-      </div>
+    <Link
+      to={to}
+      className="min-w-0 rounded transition-colors hover:[&_span]:text-accent focus-visible:outline-2"
+    >
+      {body}
+    </Link>
+  )
+}
 
-      <div className={clsx('grid border-t border-surface-800 bg-surface-850/35 grid-cols-1', cols)}>
+function Masthead({ title, description, cells, loading }) {
+  return (
+    <div>
+      <PageTitle title={title} description={description} />
+      <div className="mt-4 flex flex-wrap items-start gap-x-10 gap-y-4 border-y border-line-soft py-4">
         {cells.map((c) => (
-          // key is pulled out of the spread, never passed through it.
-          <KpiCell key={c.key} {...withoutKey(c)} loading={loading || c.loading} />
+          <Fact key={c.key} {...withoutKey(c)} loading={loading || c.loading} />
         ))}
       </div>
     </div>
@@ -773,17 +813,15 @@ function AdminDashboard({ user }) {
  been cut, because a number with a two-word caption is read faster
  than a paragraph telling you what to feel about it. */}
       <Masthead
-        eyebrow="Control plane"
-        title={`Good to see you${user?.username ? `, ${user.username}` : ''}`}
-        description="Org-wide posture, and what's waiting on you."
+        title="Dashboard"
+        description="Organisation wide posture, and what is waiting on you."
         loading={statsQuery.isLoading}
-        columns={5}
         cells={[
           {
             key: 'sessions',
             label: 'Active sessions',
             icon: Activity,
-            tone: 'emerald',
+            tone: 'default',
             live: true,
             value: pick(s, 'active_sessions') ?? 'n/a',
             description: 'Live now',
@@ -793,7 +831,7 @@ function AdminDashboard({ user }) {
             key: 'pending',
             label: 'Pending approvals',
             icon: KeyRound,
-            tone: (pick(s, 'pending_approvals') ?? 0) > 0 ? 'amber' : 'default',
+            tone: (pick(s, 'pending_approvals') ?? 0) > 0 ? 'warn' : 'default',
             value: pick(s, 'pending_approvals') ?? 'n/a',
             // Four-eyes splits the queue in two, and the split is the useful
             // half: the requests already carrying one approval need a single
@@ -810,7 +848,6 @@ function AdminDashboard({ user }) {
             key: 'grants',
             label: 'Active grants',
             icon: Lock,
-            tone: 'emerald',
             value: pick(s, 'active_grants') ?? 'n/a',
             description: 'Elevation in force',
             to: '/admin/jit',
@@ -827,7 +864,7 @@ function AdminDashboard({ user }) {
             key: 'breakglass',
             label: 'Break-glass active',
             icon: ShieldAlert,
-            tone: (pick(s, 'active_breakglass_grants') ?? 0) > 0 ? 'red' : 'default',
+            tone: (pick(s, 'active_breakglass_grants') ?? 0) > 0 ? 'danger' : 'default',
             value: pick(s, 'active_breakglass_grants') ?? 'n/a',
             description: 'Emergency use',
             to: '/admin/jit',
@@ -882,7 +919,7 @@ function AdminDashboard({ user }) {
                             </p>
                             <p className="mt-0.5 truncate text-xs text-ink-500">
                               {formatRelativeToNow(r?.created_at)}
-                              {r?.reason ? ` · ${r.reason}` : ''}
+                              {r?.justification || r?.reason ? ` · ${r.justification || r.reason}` : ''}
                             </p>
                           </div>
                           <div className="flex flex-none items-center gap-2">
@@ -1075,7 +1112,6 @@ function UserDashboard({ user }) {
             key: 'grants',
             label: 'Active grants',
             icon: Lock,
-            tone: 'emerald',
             loading: grantsQuery.isLoading,
             value: grantsQuery.data?.pagination?.total ?? grants.length,
             description: 'Elevation available to you right now',
