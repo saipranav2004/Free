@@ -358,7 +358,7 @@ function RecordingsTab() {
                           <th
                             key={h}
                             scope="col"
-                            className="sticky top-0 z-10 whitespace-nowrap border-b border-surface-800 bg-surface-850 px-4 py-2.5 text-left text-2xs font-semibold uppercase tracking-[0.08em] text-ink-400"
+                            className="sticky top-0 z-10 whitespace-nowrap border-b border-surface-800 bg-surface-850 px-4 py-2.5 text-left text-xs font-semibold text-ink-400"
                           >
                             {h}
                           </th>
@@ -596,9 +596,7 @@ function ChainTab() {
               <dl className="grid gap-px border-t border-surface-800 bg-surface-800 sm:grid-cols-2 lg:grid-cols-4">
                 {stats.map((s) => (
                   <div key={s.label} className="bg-surface-900 px-4 py-3">
-                    <dt className="text-2xs font-semibold uppercase tracking-[0.09em] text-ink-500">
-                      {s.label}
-                    </dt>
+                    <dt className="text-xs font-semibold text-ink-500">{s.label}</dt>
                     <dd className="mt-1 font-mono text-sm tabular-nums text-ink-100">{String(s.value)}</dd>
                   </div>
                 ))}

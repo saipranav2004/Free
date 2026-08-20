@@ -382,7 +382,7 @@ function StatTile({ icon: Icon, label, value, hint, accent = false }) {
           )}
           strokeWidth={1.9}
         />
-        <span className="text-2xs font-semibold uppercase tracking-[0.09em] text-ink-500">{label}</span>
+        <span className="text-xs font-semibold text-ink-500">{label}</span>
       </div>
       <p className="mt-2 truncate text-[0.95rem] font-semibold leading-tight text-ink-50">{value}</p>
       {hint && <p className="mt-1 truncate text-xs text-ink-500">{hint}</p>}
@@ -997,7 +997,7 @@ export default function IdentityDetailPage() {
                       <MetaTag>Delegation ends {formatRelativeToNow(delegation.expires_at)}</MetaTag>
                     )}
                     {privileged && (
-                      <span className="inline-flex items-center gap-1.5 rounded-md border border-red-300/60 bg-red-50 px-2 py-1 text-2xs font-semibold uppercase tracking-[0.06em] text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300">
+                      <span className="inline-flex items-center gap-1.5 rounded-md border border-red-300/60 bg-red-50 px-2 py-1 text-xs font-semibold text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300">
                         <ShieldCheck className="h-3 w-3" strokeWidth={2} /> Privileged
                       </span>
                     )}
@@ -1029,12 +1029,8 @@ export default function IdentityDetailPage() {
                     <p className="mt-1 truncate text-sm text-ink-400">{user.email || '-'}</p>
                   </div>
                   <dl className="grid flex-none grid-cols-2 gap-x-8 gap-y-1 sm:text-right">
-                    <dt className="text-2xs font-semibold uppercase tracking-[0.09em] text-ink-500">
-                      Created
-                    </dt>
-                    <dt className="text-2xs font-semibold uppercase tracking-[0.09em] text-ink-500">
-                      Last sign-in
-                    </dt>
+                    <dt className="text-xs font-semibold text-ink-500">Created</dt>
+                    <dt className="text-xs font-semibold text-ink-500">Last sign-in</dt>
                     <dd className="text-sm tabular-nums text-ink-100">
                       {user.created_at ? formatDateTime(user.created_at) : '-'}
                     </dd>

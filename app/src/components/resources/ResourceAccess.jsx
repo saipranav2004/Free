@@ -329,7 +329,7 @@ export function ResourceAccessPanel({ resource, resourceId, compact = false }) {
   //         </div>
   //         {cliOpen && command && (
   //           <div className="mt-3">
-  //             <p className="mb-1.5 text-2xs font-semibold uppercase tracking-[0.09em] text-emerald-800/80 dark:text-emerald-300/75">
+  //             <p className="mb-1.5 text-xs font-semibold text-emerald-800/80 dark:text-emerald-300/75">
   //               Run this in your own client
   //             </p>
   //             <CopyRow value={command} />

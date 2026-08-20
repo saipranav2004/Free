@@ -51,7 +51,7 @@ export function StatCard({
 
       <div className="relative flex items-start justify-between gap-3 px-4 pb-4 pt-4">
         <div className="min-w-0 flex-1">
-          <p className="truncate text-2xs font-semibold uppercase tracking-[0.11em] text-ink-500">{label}</p>
+          <p className="truncate text-xs font-semibold text-ink-500">{label}</p>
 
           <div className="mt-3 flex items-baseline gap-2">
             {loading ? (

@@ -109,7 +109,7 @@ function Block({ icon: Icon, title, children }) {
   if (kids.length === 0) return null
   return (
     <section className="border-b border-surface-800">
-      <h3 className="flex items-center gap-2 px-4 pb-1 pt-3.5 text-2xs font-semibold uppercase tracking-[0.09em] text-ink-500">
+      <h3 className="flex items-center gap-2 px-4 pb-1 pt-3.5 text-xs font-semibold text-ink-500">
         <Icon className="h-3.5 w-3.5" strokeWidth={1.75} /> {title}
       </h3>
       <dl className="pb-2.5">{kids}</dl>
@@ -317,7 +317,7 @@ export function AuditEventDrawer({ event, onClose, onFilterActor, onFilterAction
       {/* 4. EVIDENCE. */}
       {(event.justification || event.details) && (
         <section className="border-b border-surface-800">
-          <h3 className="flex items-center gap-2 px-4 pb-2 pt-3.5 text-2xs font-semibold uppercase tracking-[0.09em] text-ink-500">
+          <h3 className="flex items-center gap-2 px-4 pb-2 pt-3.5 text-xs font-semibold text-ink-500">
             <FileText className="h-3.5 w-3.5" strokeWidth={1.75} /> Recorded detail
           </h3>
           <Evidence label="Justification" raw={event.justification} />
@@ -335,9 +335,7 @@ export function AuditEventDrawer({ event, onClose, onFilterActor, onFilterAction
             className="flex w-full items-center gap-2 px-4 py-3 text-left transition-colors hover:bg-surface-850"
           >
             <ShieldCheck className="h-3.5 w-3.5 flex-none text-ink-500" strokeWidth={1.75} />
-            <span className="text-2xs font-semibold uppercase tracking-[0.09em] text-ink-500">
-              Chain integrity
-            </span>
+            <span className="text-xs font-semibold text-ink-500">Chain integrity</span>
             <span className="text-2xs text-ink-600">tamper-evidence hashes</span>
             <ChevronDown
               className={clsx(
@@ -367,7 +365,7 @@ export function AuditEventDrawer({ event, onClose, onFilterActor, onFilterAction
           className="flex w-full items-center gap-2 px-4 py-3 text-left transition-colors hover:bg-surface-850"
         >
           <Braces className="h-3.5 w-3.5 flex-none text-ink-500" strokeWidth={1.75} />
-          <span className="text-2xs font-semibold uppercase tracking-[0.09em] text-ink-500">Raw record</span>
+          <span className="text-xs font-semibold text-ink-500">Raw record</span>
           <ChevronDown
             className={clsx(
               'ml-auto h-3.5 w-3.5 flex-none text-ink-500 transition-transform duration-200',

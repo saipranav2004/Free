@@ -229,9 +229,7 @@ function RequestDetailDrawer({ id, onClose, viewerId }) {
         <>
           {request.reason && (
             <div className="border-b border-surface-800 px-4 py-4">
-              <p className="mb-2 text-2xs font-semibold uppercase tracking-[0.11em] text-ink-500">
-                Justification
-              </p>
+              <p className="mb-2 text-xs font-semibold text-ink-500">Justification</p>
               <blockquote className="border-l-2 border-surface-700 pl-3 text-sm leading-relaxed text-ink-200">
                 {request.reason}
               </blockquote>
@@ -260,9 +258,7 @@ function RequestDetailDrawer({ id, onClose, viewerId }) {
           />
           {grant && (
             <div className="border-t border-surface-800 px-4 py-4">
-              <p className="mb-2 text-2xs font-semibold uppercase tracking-[0.11em] text-ink-500">
-                Resulting grant
-              </p>
+              <p className="mb-2 text-xs font-semibold text-ink-500">Resulting grant</p>
               <div className="flex flex-wrap items-center gap-2">
                 <Badge className={GRANT_STATUS_BADGE[grant.status]}>{grant.status}</Badge>
                 {grant.expires_at && <MetaTag>Expires {formatDateTime(grant.expires_at)}</MetaTag>}
@@ -272,9 +268,7 @@ function RequestDetailDrawer({ id, onClose, viewerId }) {
           {!isBreakglass(request) && (
             <div className="border-t border-surface-800 py-4">
               <div className="mb-1 flex flex-wrap items-center gap-3 px-4">
-                <p className="text-2xs font-semibold uppercase tracking-[0.11em] text-ink-500">
-                  Four-eyes approvals
-                </p>
+                <p className="text-xs font-semibold text-ink-500">Four-eyes approvals</p>
                 <ApprovalProgress request={request} approvals={approvals} className="ml-auto" />
               </div>
               <ApprovalTrail request={request} approvals={approvals} viewerId={viewerId} />
@@ -283,9 +277,7 @@ function RequestDetailDrawer({ id, onClose, viewerId }) {
 
           {Array.isArray(trail) && trail.length > 0 && (
             <div className="border-t border-surface-800 px-4 py-4">
-              <p className="mb-3 text-2xs font-semibold uppercase tracking-[0.11em] text-ink-500">
-                Audit trail
-              </p>
+              <p className="mb-3 text-xs font-semibold text-ink-500">Audit trail</p>
               <ol className="space-y-3">
                 {trail.map((e, i) => (
                   <li key={e.id || i} className="flex gap-3">

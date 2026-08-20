@@ -248,7 +248,7 @@ export function ExportMenu({ onExportCsv, onExportJson, count, disabled }) {
     >
       {({ close }) => (
         <div className="p-1.5">
-          <p className="px-2.5 pb-1.5 pt-1 text-2xs font-semibold uppercase tracking-[0.09em] text-ink-500">
+          <p className="px-2.5 pb-1.5 pt-1 text-xs font-semibold text-ink-500">
             {typeof count === 'number' ? `${count.toLocaleString()} rows in view` : 'Current view'}
           </p>
           <button
@@ -464,7 +464,7 @@ export function ActiveFilters({ chips, onClearAll }) {
   if (!chips || chips.length === 0) return null
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <span className="text-2xs font-semibold uppercase tracking-[0.09em] text-ink-500">Filtered by</span>
+      <span className="text-xs font-semibold text-ink-500">Filtered by</span>
       {chips.map((c) => (
         <span
           key={c.key}

@@ -380,9 +380,7 @@ export function GlobalSearch({ isAdmin = false }) {
             )}
 
             {!query && results.length > 0 && (
-              <p className="px-2.5 pb-1 pt-1.5 text-2xs font-semibold uppercase tracking-[0.11em] text-ink-600">
-                Jump to
-              </p>
+              <p className="px-2.5 pb-1 pt-1.5 text-xs font-semibold text-ink-600">Jump to</p>
             )}
 
             {results.map((r, i) => {
@@ -394,9 +392,7 @@ export function GlobalSearch({ isAdmin = false }) {
               return (
                 <div key={r.id}>
                   {showGroup && (
-                    <p className="px-2.5 pb-1 pt-2 text-2xs font-semibold uppercase tracking-[0.11em] text-ink-600">
-                      {r.group}
-                    </p>
+                    <p className="px-2.5 pb-1 pt-2 text-xs font-semibold text-ink-600">{r.group}</p>
                   )}
                   <button
                     type="button"

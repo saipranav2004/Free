@@ -394,7 +394,7 @@ export default function AdminOverviewPage() {
                   {data.events.map((e, idx) => (
                     <li key={e?.id ?? idx} className="px-4 py-3.5 transition-colors hover:bg-surface-850">
                       <p className="flex flex-wrap items-center gap-2 text-sm font-medium text-ink-100">
-                        <span className="rounded border border-surface-700 bg-surface-850 px-1.5 py-0.5 text-2xs font-semibold uppercase tracking-[0.06em] text-ink-500">
+                        <span className="rounded border border-surface-700 bg-surface-850 px-1.5 py-0.5 text-xs font-semibold text-ink-500">
                           {e?.category || 'OTHER'}
                         </span>
                         <span className="font-mono text-xs">{e?.action || '-'}</span>

@@ -136,6 +136,7 @@ export const roleNameRules = {
 export const policyNameRules = {
   test: (v) => {
     const s = String(v || '').trim()
+    // eslint-disable-next-line no-control-regex -- rejecting control characters is the point
     return s.length >= 3 && s.length <= 120 && !/[\u0000-\u001F\u007F]/.test(s)
   },
   message: 'Give the policy a descriptive name of 3–120 characters.',
@@ -149,6 +150,7 @@ export const policyNameRules = {
 export const objectNameRules = {
   sanitize: (raw) =>
     String(raw || '')
+      // eslint-disable-next-line no-control-regex -- stripping control characters is the point
       .replace(/[\u0000-\u001F\u007F]/g, '')
       .slice(0, 120),
   test: (v) => String(v || '').trim().length >= 2,

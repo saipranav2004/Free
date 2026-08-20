@@ -259,7 +259,7 @@ function MetaField({ icon: Icon, label, value, mono = false }) {
     <div className="flex min-w-0 items-start gap-2.5 px-4 py-2.5">
       {Icon && <Icon className="mt-0.5 h-3.5 w-3.5 flex-none text-ink-500" strokeWidth={1.75} />}
       <div className="min-w-0 flex-1">
-        <p className="text-2xs font-semibold uppercase tracking-[0.09em] text-ink-500">{label}</p>
+        <p className="text-xs font-semibold text-ink-500">{label}</p>
         <p className={clsx('mt-0.5 break-words text-xs text-ink-100', mono && 'font-mono')}>{value}</p>
       </div>
     </div>
@@ -1247,7 +1247,7 @@ function Viewer({ recording, autoplay, onClose }) {
                 </div>
 
                 <div className="border-t border-surface-800 px-4 py-4">
-                  <p className="flex items-center gap-2 text-2xs font-semibold uppercase tracking-[0.09em] text-ink-500">
+                  <p className="flex items-center gap-2 text-xs font-semibold text-ink-500">
                     <ShieldAlert className="h-3.5 w-3.5" strokeWidth={1.9} />
                     Risk indicators
                   </p>
@@ -1276,7 +1276,7 @@ function Viewer({ recording, autoplay, onClose }) {
                 </div>
 
                 <div className="border-t border-surface-800 px-4 py-4">
-                  <p className="text-2xs font-semibold uppercase tracking-[0.09em] text-ink-500">Export</p>
+                  <p className="text-xs font-semibold text-ink-500">Export</p>
                   <div className="mt-2.5 flex flex-wrap gap-2">
                     <Button size="sm" variant="secondary" icon={Download} onClick={downloadCast}>
                       Recording transcript

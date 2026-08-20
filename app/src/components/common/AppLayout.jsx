@@ -77,7 +77,7 @@ function NavSection({ label, items, collapsed, onNavigate }) {
     <div>
       {!collapsed && label && (
         <div className="mb-1.5 flex items-center gap-2 px-2.5">
-          <p className="flex-none text-2xs font-semibold uppercase tracking-[0.12em] text-ink-600">{label}</p>
+          <p className="flex-none text-xs font-semibold text-ink-600">{label}</p>
           <span className="h-px flex-1 bg-surface-800" aria-hidden="true" />
         </div>
       )}

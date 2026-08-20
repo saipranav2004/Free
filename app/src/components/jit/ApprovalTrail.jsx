@@ -108,7 +108,7 @@ function ApprovalRow({ row, isViewer }) {
           <span className="text-ink-500">{approved ? 'approved' : 'denied'}</span>
           <span
             className={clsx(
-              'inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-2xs font-semibold uppercase tracking-[0.04em] ring-1 ring-inset',
+              'inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-semibold ring-1 ring-inset',
               root
                 ? 'text-amber-700 ring-amber-600/25 dark:text-amber-300 dark:ring-amber-500/30'
                 : 'text-ink-400 ring-surface-700'

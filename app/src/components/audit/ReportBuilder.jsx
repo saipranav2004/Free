@@ -145,7 +145,7 @@ export function ReportBuilder({ filters, onClose }) {
         </div>
 
         <div className="flex flex-col gap-3 rounded-xl border border-dashed border-surface-600 bg-surface-850/70 p-3.5">
-          <p className="text-2xs font-semibold uppercase tracking-[0.09em] text-ink-500">Report scope</p>
+          <p className="text-xs font-semibold text-ink-500">Report scope</p>
           <ul className="space-y-1 text-xs leading-relaxed text-ink-400">
             <li>
               {from} → {to}

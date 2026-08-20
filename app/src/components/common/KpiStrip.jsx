@@ -71,7 +71,7 @@ export function KpiCell({
     <>
       <div className="flex items-center gap-2">
         {Icon && <Icon className={clsx('h-[0.9rem] w-[0.9rem] flex-none', t.icon)} strokeWidth={1.75} />}
-        <p className="truncate text-2xs font-semibold uppercase tracking-[0.11em] text-ink-400">{label}</p>
+        <p className="truncate text-xs font-semibold text-ink-400">{label}</p>
         {live && (
           <span
             className={clsx('relative ml-auto flex h-1.5 w-1.5 flex-none rounded-full', t.dot)}

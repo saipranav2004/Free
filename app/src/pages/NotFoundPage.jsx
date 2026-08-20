@@ -7,7 +7,7 @@ export default function NotFoundPage() {
       <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-xl border border-surface-700 bg-surface-900 text-ink-400 ">
         <Compass className="h-5 w-5" strokeWidth={1.5} />
       </div>
-      <p className="text-2xs font-semibold uppercase tracking-[0.12em] text-ink-500">Error 404</p>
+      <p className="text-xs font-semibold text-ink-500">Error 404</p>
       <h1 className="mt-2 text-xl font-semibold tracking-tight text-ink-50">Page not found</h1>
       <p className="mt-2 max-w-sm text-sm leading-relaxed text-ink-400">
         This route doesn&apos;t exist, or you no longer have access to it. Check the address, or head back to

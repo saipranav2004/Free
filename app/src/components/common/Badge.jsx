@@ -81,7 +81,7 @@ export function Badge({ children, className, dot = false }) {
   return (
     <span
       className={clsx(
-        'inline-flex items-center gap-1.5 whitespace-nowrap rounded-md px-2 py-0.5 text-2xs font-semibold uppercase tracking-[0.04em] ring-1 ring-inset',
+        'inline-flex items-center gap-1.5 whitespace-nowrap rounded-md px-2 py-0.5 text-xs font-semibold ring-1 ring-inset',
         className || 'bg-ink-500/10 text-ink-400 ring-ink-500/25'
       )}
     >

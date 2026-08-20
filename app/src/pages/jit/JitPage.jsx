@@ -123,7 +123,7 @@ function isBreakglass(x) {
 
 function BreakglassChip() {
   return (
-    <span className="inline-flex flex-none items-center gap-1 rounded px-1.5 py-0.5 text-2xs font-semibold uppercase tracking-[0.04em] text-red-700 ring-1 ring-inset ring-red-600/25 dark:text-red-300 dark:ring-red-500/30">
+    <span className="inline-flex flex-none items-center gap-1 rounded px-1.5 py-0.5 text-xs font-semibold text-red-700 ring-1 ring-inset ring-red-600/25 dark:text-red-300 dark:ring-red-500/30">
       <ShieldAlert className="h-3 w-3" strokeWidth={1.9} />
       break-glass
     </span>

@@ -378,7 +378,7 @@ export function AuditFilterBar({
 
       {chips.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5 border-t border-surface-800 bg-surface-850/40 px-3 py-2">
-          <span className="text-2xs font-semibold uppercase tracking-[0.08em] text-ink-600">Filtered by</span>
+          <span className="text-xs font-semibold text-ink-600">Filtered by</span>
           {chips.map((c) => (
             <Chip key={c.key} label={c.label} value={c.value} onClear={c.onClear} />
           ))}

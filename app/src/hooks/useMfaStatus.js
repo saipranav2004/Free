@@ -27,6 +27,11 @@ import { readMfaStatus, mfaSummary } from '../lib/mfaStatus'
 // trigger.
 export function useMfaStatus(me) {
   const version = useSyncExternalStore(subscribeMfaEvidence, getMfaEvidenceVersion, getMfaEvidenceVersion)
+  // `version` is deliberately a dependency even though it does not appear in
+  // the body. readMfaStatus reads the evidence map that `version` tracks, and
+  // the lint rule cannot see through the call. Removing it is what caused the
+  // "only updates after refresh" bug this hook exists to fix.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   return useMemo(() => readMfaStatus(me), [me, version])
 }
 

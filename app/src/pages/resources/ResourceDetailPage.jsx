@@ -137,7 +137,7 @@ function SummaryRail({ resource }) {
           key={f.label}
           className="min-w-0 border-t border-surface-800 px-4 py-3 first:border-t-0 sm:border-t-0 sm:border-l sm:first:border-l-0"
         >
-          <p className="text-2xs font-semibold uppercase tracking-[0.11em] text-ink-500">{f.label}</p>
+          <p className="text-xs font-semibold text-ink-500">{f.label}</p>
           <p
             className={`mt-1.5 truncate text-sm font-medium text-ink-100 ${f.mono ? 'font-mono text-xs' : ''}`}
             title={f.value}

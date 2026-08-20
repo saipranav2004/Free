@@ -109,11 +109,11 @@ export function ResourceCard({ resource, onPeek }) {
 
       <dl className="mx-4 grid grid-cols-2 gap-x-4 gap-y-2 border-t border-surface-800 py-3 text-xs">
         <div className="min-w-0">
-          <dt className="text-2xs font-semibold uppercase tracking-[0.09em] text-ink-600">Type</dt>
+          <dt className="text-xs font-semibold text-ink-600">Type</dt>
           <dd className="mt-0.5 truncate text-ink-200">{resourceTypeLabel(resource.resource_type)}</dd>
         </div>
         <div className="min-w-0">
-          <dt className="text-2xs font-semibold uppercase tracking-[0.09em] text-ink-600">
+          <dt className="text-xs font-semibold text-ink-600">
             {resource.database_name ? 'Database' : 'Group'}
           </dt>
           <dd className="mt-0.5 truncate text-ink-200">{resource.database_name || resource.group || '-'}</dd>

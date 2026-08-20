@@ -341,9 +341,7 @@ export function CreatePolicyModal({ open, onClose }) {
           <div className="space-y-3 rounded-xl border border-surface-700 bg-surface-850/50 p-3">
             {grouped.map((g) => (
               <div key={g.key}>
-                <p className="mb-1.5 text-2xs font-semibold uppercase tracking-[0.09em] text-ink-500">
-                  {g.key}
-                </p>
+                <p className="mb-1.5 text-xs font-semibold text-ink-500">{g.key}</p>
                 <div className="flex flex-wrap gap-1.5">
                   {g.items.map((a) => {
                     const on = actions.includes(a)

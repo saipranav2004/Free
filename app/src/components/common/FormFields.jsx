@@ -56,9 +56,7 @@ export const selectClass = (hasError) => clsx(inputClass(hasError), 'cursor-poin
 export function FieldSet({ title, description, children, className = '' }) {
   return (
     <fieldset className={className}>
-      {title && (
-        <legend className="mb-1 text-base font-bold text-primary">{title}</legend>
-      )}
+      {title && <legend className="mb-1 text-base font-bold text-primary">{title}</legend>}
       {description && <p className="mb-3 text-sm leading-relaxed text-tertiary">{description}</p>}
       <div className="space-y-4">{children}</div>
     </fieldset>

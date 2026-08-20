@@ -105,7 +105,7 @@ function Kpi({ icon: Icon, label, value, sub, tone = 'default', progress }) {
     <div className={clsx('relative overflow-hidden rounded-xl border bg-surface-900 px-4 py-3.5', toneRing)}>
       <div className="flex items-center gap-2">
         <Icon className={clsx('h-3.5 w-3.5 flex-none', toneText)} strokeWidth={1.9} />
-        <span className="text-2xs font-semibold uppercase tracking-[0.09em] text-ink-500">{label}</span>
+        <span className="text-xs font-semibold text-ink-500">{label}</span>
       </div>
       <p className="mt-2 text-2xl font-semibold leading-none tabular-nums text-ink-50">{value}</p>
       {typeof progress === 'number' && (
@@ -233,9 +233,7 @@ function RuleEditor({ open, onClose, role, rule, stats, onSave, onRemove, saving
     >
       <div className="space-y-5">
         <section>
-          <h4 className="mb-2 text-2xs font-semibold uppercase tracking-[0.09em] text-ink-500">
-            What happens at sign-in
-          </h4>
+          <h4 className="mb-2 text-xs font-semibold text-ink-500">What happens at sign-in</h4>
           <div className="flex flex-col gap-2 sm:flex-row">
             <ChoiceCard
               icon={ShieldAlert}
@@ -265,9 +263,7 @@ function RuleEditor({ open, onClose, role, rule, stats, onSave, onRemove, saving
 
         {mode === 'enforce' && (
           <section>
-            <h4 className="mb-2 text-2xs font-semibold uppercase tracking-[0.09em] text-ink-500">
-              When it starts
-            </h4>
+            <h4 className="mb-2 text-xs font-semibold text-ink-500">When it starts</h4>
             <div className="flex flex-col gap-2 sm:flex-row">
               {[PHASE_IN.IMMEDIATE, PHASE_IN.GRACE, PHASE_IN.DATE].map((p) => (
                 <ChoiceCard
@@ -316,7 +312,7 @@ function RuleEditor({ open, onClose, role, rule, stats, onSave, onRemove, saving
 
         <section>
           <label className="block">
-            <span className="mb-1.5 block text-2xs font-semibold uppercase tracking-[0.09em] text-ink-500">
+            <span className="mb-1.5 block text-xs font-semibold text-ink-500">
               Reason <span className="font-normal normal-case tracking-normal text-ink-600">(optional)</span>
             </span>
             <input
@@ -795,10 +791,7 @@ export default function MfaPolicyPage() {
                   <thead>
                     <tr className="border-b border-surface-800 bg-surface-850/50 text-left">
                       {['Account', 'Roles', 'Second factor', 'Policy'].map((h) => (
-                        <th
-                          key={h}
-                          className="px-4 py-2 text-2xs font-semibold uppercase tracking-[0.08em] text-ink-500"
-                        >
+                        <th key={h} className="px-4 py-2 text-xs font-semibold text-ink-500">
                           {h}
                         </th>
                       ))}

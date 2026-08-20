@@ -143,11 +143,11 @@ function RoleDrawer({ role, onClose, onDelete }) {
             {role.name}
           </Badge>
           {system ? (
-            <span className="rounded border border-surface-700 bg-surface-850 px-1.5 py-0.5 text-2xs font-semibold uppercase tracking-[0.06em] text-ink-400">
+            <span className="rounded border border-surface-700 bg-surface-850 px-1.5 py-0.5 text-xs font-semibold text-ink-400">
               System role
             </span>
           ) : (
-            <span className="rounded border border-surface-700 bg-surface-850 px-1.5 py-0.5 text-2xs font-semibold uppercase tracking-[0.06em] text-ink-500">
+            <span className="rounded border border-surface-700 bg-surface-850 px-1.5 py-0.5 text-xs font-semibold text-ink-500">
               Custom
             </span>
           )}
@@ -168,7 +168,7 @@ function RoleDrawer({ role, onClose, onDelete }) {
       )}
 
       <section>
-        <h3 className="flex items-center gap-2 border-b border-surface-800 bg-surface-850/60 px-4 py-2 text-2xs font-semibold uppercase tracking-[0.09em] text-ink-500">
+        <h3 className="flex items-center gap-2 border-b border-surface-800 bg-surface-850/60 px-4 py-2 text-xs font-semibold text-ink-500">
           <FileKey2 className="h-3.5 w-3.5" strokeWidth={1.75} /> Attached policies
         </h3>
 

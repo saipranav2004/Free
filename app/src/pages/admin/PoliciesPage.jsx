@@ -143,7 +143,7 @@ function PolicyDrawer({ policy, onClose, onDelete }) {
         <div className="mb-2 flex flex-wrap items-center gap-2">
           <Badge className={POLICY_EFFECT_BADGE[policy.effect]}>{policy.effect || 'unknown'}</Badge>
           {wildcard && (
-            <span className="inline-flex items-center gap-1.5 rounded border border-amber-300/70 bg-amber-50 px-1.5 py-0.5 text-2xs font-semibold uppercase tracking-[0.06em] text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-300">
+            <span className="inline-flex items-center gap-1.5 rounded border border-amber-300/70 bg-amber-50 px-1.5 py-0.5 text-xs font-semibold text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-300">
               <Globe className="h-3 w-3" strokeWidth={2} /> All resources
             </span>
           )}
@@ -179,7 +179,7 @@ function PolicyDrawer({ policy, onClose, onDelete }) {
       )}
 
       <section>
-        <h3 className="flex items-center gap-2 border-b border-surface-800 bg-surface-850/60 px-4 py-2 text-2xs font-semibold uppercase tracking-[0.09em] text-ink-500">
+        <h3 className="flex items-center gap-2 border-b border-surface-800 bg-surface-850/60 px-4 py-2 text-xs font-semibold text-ink-500">
           <Terminal className="h-3.5 w-3.5" strokeWidth={1.75} /> Actions ({actions.length})
         </h3>
         {actions.length === 0 ? (
@@ -199,7 +199,7 @@ function PolicyDrawer({ policy, onClose, onDelete }) {
       </section>
 
       <section>
-        <h3 className="flex items-center gap-2 border-b border-surface-800 bg-surface-850/60 px-4 py-2 text-2xs font-semibold uppercase tracking-[0.09em] text-ink-500">
+        <h3 className="flex items-center gap-2 border-b border-surface-800 bg-surface-850/60 px-4 py-2 text-xs font-semibold text-ink-500">
           <Boxes className="h-3.5 w-3.5" strokeWidth={1.75} /> Resource patterns ({resources.length})
         </h3>
         {resources.length === 0 ? (

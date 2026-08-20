@@ -63,9 +63,7 @@ export function ResourceDrawer({ resource, open, onClose }) {
       </div>
 
       <div className="border-t border-surface-800">
-        <p className="px-5 pb-1 pt-4 text-2xs font-semibold uppercase tracking-[0.11em] text-ink-500">
-          Connection
-        </p>
+        <p className="px-5 pb-1 pt-4 text-xs font-semibold text-ink-500">Connection</p>
         <DetailList
           items={[
             { label: 'Type', value: resourceTypeLabel(resource.resource_type) },
@@ -97,9 +95,7 @@ export function ResourceDrawer({ resource, open, onClose }) {
       </div>
 
       <div className="border-t border-surface-800">
-        <p className="px-5 pb-1 pt-4 text-2xs font-semibold uppercase tracking-[0.11em] text-ink-500">
-          Access & policy
-        </p>
+        <p className="px-5 pb-1 pt-4 text-xs font-semibold text-ink-500">Access & policy</p>
         <DetailList
           items={[
             { label: 'Group', value: resource.group || '-' },

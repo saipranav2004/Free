@@ -26,16 +26,13 @@ import { Spinner } from './Spinner'
 // #002b66). Lightening on hover reads as the control receding; darkening
 // reads as it firming up under the pointer.
 const VARIANTS = {
-  primary:
-    'border border-transparent bg-accent text-white hover:bg-accent-hover active:bg-accent-hover',
-  secondary:
-    'border border-line-strong bg-surface text-accent hover:bg-accent-soft active:bg-accent-active',
+  primary: 'border border-transparent bg-accent text-white hover:bg-accent-hover active:bg-accent-hover',
+  secondary: 'border border-line-strong bg-surface text-accent hover:bg-accent-soft active:bg-accent-active',
   // A neutral secondary, for toolbars where a row of blue labels would be
   // louder than the data underneath them.
   subtle: 'border border-line bg-surface text-primary hover:bg-hover active:bg-subtle',
   ghost: 'border border-transparent text-secondary hover:bg-hover hover:text-primary active:bg-subtle',
-  danger:
-    'border border-transparent bg-danger-fill text-white hover:brightness-110 active:brightness-95',
+  danger: 'border border-transparent bg-danger-fill text-white hover:brightness-110 active:brightness-95',
   dangerGhost: 'border border-danger/40 text-danger hover:bg-danger-soft active:bg-danger-soft',
   link: 'border border-transparent px-0 text-accent hover:text-accent-hover hover:underline',
 }

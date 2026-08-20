@@ -1,5 +1,8 @@
 module.exports = {
   root: true,
+  // `eslint .` was linting the build output, which is minified and reported
+  // 275 style errors that belong to a bundler, not to this codebase.
+  ignorePatterns: ['dist', 'node_modules', 'tools/mock-api/requests.log'],
   env: { browser: true, es2021: true, node: true },
   extends: [
     'eslint:recommended',

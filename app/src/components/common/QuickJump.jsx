@@ -146,9 +146,7 @@ export function QuickJump({ isAdmin = false }) {
                 return (
                   <div key={t.to}>
                     {showGroup && (
-                      <p className="px-2.5 pb-1 pt-2.5 text-2xs font-semibold uppercase tracking-[0.11em] text-ink-600">
-                        {t.group}
-                      </p>
+                      <p className="px-2.5 pb-1 pt-2.5 text-xs font-semibold text-ink-600">{t.group}</p>
                     )}
                     <button
                       type="button"

@@ -7,7 +7,11 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview --port 4173",
-    "lint": "eslint . --report-unused-disable-directives --max-warnings 0"
+    "lint": "eslint . --report-unused-disable-directives --max-warnings 0",
+    "check:imports": "node tools/check-exports.cjs",
+    "check:contract": "node tools/mock-api/contract-check.cjs",
+    "mock-api": "node tools/mock-api/server.cjs",
+    "verify": "npm run check:imports && npm run lint && npm run build"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",

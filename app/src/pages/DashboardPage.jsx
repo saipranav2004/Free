@@ -666,7 +666,7 @@ function DeniedList({ events, href }) {
           <li key={e?.id ?? i} className="relative px-4 py-3 pl-5">
             <span aria-hidden="true" className="absolute inset-y-0 left-0 w-[3px] bg-red-400/70" />
             <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded border border-surface-700 bg-surface-850 px-1.5 py-0.5 text-2xs font-semibold uppercase tracking-[0.06em] text-ink-500">
+              <span className="rounded border border-surface-700 bg-surface-850 px-1.5 py-0.5 text-xs font-semibold text-ink-500">
                 {e?.category || 'OTHER'}
               </span>
               <span
