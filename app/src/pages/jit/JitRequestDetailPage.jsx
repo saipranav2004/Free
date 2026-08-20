@@ -4,7 +4,6 @@ import { useParams, Link } from 'react-router-dom'
 import { toast } from 'sonner'
 import clsx from 'clsx'
 import {
-  ArrowLeft,
   ShieldAlert,
   Clock,
   CheckCircle2,
@@ -332,7 +331,6 @@ function Timeline({ request, grant, grantExpired }) {
   const cancelled = status === JIT_STATUS.CANCELLED
   const approved = status === JIT_STATUS.APPROVED
   const waiting = status === JIT_STATUS.WAITING
-  const pending = status === JIT_STATUS.PENDING
   const partial = status === JIT_STATUS.PARTIALLY_APPROVED
   const breakglass = isBreakglassRequest(request)
 
@@ -548,13 +546,6 @@ export default function JitRequestDetailPage() {
 
   return (
     <div>
-      <Link
-        to="/jit"
-        className="mb-4 inline-flex items-center gap-1.5 text-sm text-ink-400 transition-colors hover:text-ink-100"
-      >
-        <ArrowLeft className="h-3.5 w-3.5" strokeWidth={2} /> Just-in-Time Access
-      </Link>
-
       <QueryState query={requestQuery} skeletonRows={5}>
         {(req) => {
           const breakglass = isBreakglassRequest(req)
@@ -562,7 +553,6 @@ export default function JitRequestDetailPage() {
           return (
             <>
               <PageHeader
-                eyebrow={breakglass ? 'Break-glass request' : 'Access request'}
                 title={
                   <span className="flex min-w-0 items-center gap-2.5">
                     <span
@@ -649,11 +639,14 @@ export default function JitRequestDetailPage() {
                         },
                         {
                           label: 'Justification',
-                          value: req?.reason ? (
-                            <span className="block whitespace-pre-line leading-relaxed">{req.reason}</span>
-                          ) : (
-                            '-'
-                          ),
+                          value:
+                            req?.justification || req?.reason ? (
+                              <span className="block whitespace-pre-line leading-relaxed">
+                                {req.justification || req.reason}
+                              </span>
+                            ) : (
+                              '-'
+                            ),
                         },
                         { label: 'Ticket', value: req?.ticket_ref || '-' },
                         { label: 'Requested', value: formatDateTime(raisedAt(req)) },

@@ -3,13 +3,11 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useNavigate, useParams, Link, useLocation } from 'react-router-dom'
+import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import {
-  ArrowLeft,
   KeyRound,
   RefreshCw,
   Trash2,
-  Terminal,
   ScrollText,
   Radio,
   FileKey2,
@@ -24,6 +22,7 @@ import { deleteResource, storeResourceCredential, rotateResourceCredential } fro
 import { useAuthStore } from '../../store/authStore'
 import { CREDENTIAL_TYPES } from '../../config/constants'
 import { PageHeader, Card, CardHeader, CardTitle } from '../../components/common/Layout'
+import { StatusDot } from '../../components/ui/bits'
 import { QueryState } from '../../components/common/QueryState'
 import { TabBar } from '../../components/common/TabBar'
 import { Button } from '../../components/common/Button'
@@ -32,11 +31,7 @@ import { ConfirmDialog } from '../../components/common/ConfirmDialog'
 import { ResourceTypeIcon } from '../../components/resources/ResourceTypeIcon'
 import { ResourceAccessPanel, OpenInDesktopButton } from '../../components/resources/ResourceAccess'
 import { PairAgentPanel } from '../../components/agent/PairAgentPanel'
-import {
-  ResourceStatusBadges,
-  CredentialState,
-  resourceTypeLabel,
-} from '../../components/resources/ResourceCard'
+import { CredentialState, resourceTypeLabel } from '../../components/resources/ResourceCard'
 import {
   OverviewTab,
   PoliciesTab,
@@ -124,28 +119,37 @@ function CopyableId({ value }) {
 // gated, recorded, credentialed or live. This IS the non-admin's information
 // surface; for an admin it is the summary above the tabs.
 function SummaryRail({ resource }) {
-  const facts = [
-    { label: 'Type', value: resourceTypeLabel(resource.resource_type) },
-    { label: 'Endpoint', value: `${resource.host}:${resource.port}`, mono: true },
-    { label: 'Elevation', value: resource.requires_jit ? 'JIT approval required' : 'Standing access' },
-    { label: 'Recording', value: resource.always_record ? 'Always recorded' : 'Per session policy' },
-  ]
   return (
-    <div className="mb-5 grid overflow-hidden rounded-xl border border-surface-700/70 bg-surface-900 sm:grid-cols-2 lg:grid-cols-4">
-      {facts.map((f) => (
-        <div
-          key={f.label}
-          className="min-w-0 border-t border-surface-800 px-4 py-3 first:border-t-0 sm:border-t-0 sm:border-l sm:first:border-l-0"
-        >
-          <p className="text-xs font-semibold text-ink-500">{f.label}</p>
-          <p
-            className={`mt-1.5 truncate text-sm font-medium text-ink-100 ${f.mono ? 'font-mono text-xs' : ''}`}
-            title={f.value}
-          >
-            {f.value}
-          </p>
-        </div>
-      ))}
+    <div className="mb-6 flex flex-wrap items-center gap-x-8 gap-y-3 border-y border-line-soft py-3">
+      <span className="text-sm text-secondary">
+        Type <span className="text-primary">{resourceTypeLabel(resource.resource_type)}</span>
+      </span>
+      <span className="text-sm text-secondary">
+        Endpoint{' '}
+        <span className="font-mono text-xs text-primary">
+          {resource.host}
+          {resource.port ? `:${resource.port}` : ''}
+        </span>
+      </span>
+      <StatusDot
+        tone={resource.requires_jit ? 'warn' : 'accent'}
+        label={resource.requires_jit ? 'JIT approval required' : 'Standing access'}
+      />
+      <StatusDot
+        tone={resource.always_record || resource.recording_required ? 'ok' : 'muted'}
+        label={
+          resource.always_record
+            ? 'Always recorded'
+            : resource.recording_required
+              ? 'Recorded'
+              : 'Not recorded'
+        }
+      />
+      <StatusDot
+        tone={resource.vault_entry_id ? 'ok' : 'warn'}
+        label={resource.vault_entry_id ? 'Credential stored' : 'No credential'}
+      />
+      {!resource.is_active && <span className="text-sm font-medium text-warn">Inactive</span>}
     </div>
   )
 }
@@ -244,7 +248,7 @@ function CredentialsTab({ resource, resourceId, isAdmin }) {
               noValidate
               className="mt-5 space-y-4 rounded-xl border border-surface-700 bg-surface-850 p-4"
             >
-              <p className="text-xs font-semibold uppercase tracking-[0.09em] text-ink-500">
+              <p className="text-sm font-bold text-primary">
                 {mode === 'rotate' ? 'Rotate credential' : 'Store credential'}
               </p>
 
@@ -388,18 +392,10 @@ export default function ResourceDetailPage() {
 
   return (
     <div>
-      <Link
-        to="/resources"
-        className="mb-4 inline-flex items-center gap-1.5 text-sm text-ink-400 transition-colors hover:text-ink-100"
-      >
-        <ArrowLeft className="h-3.5 w-3.5" strokeWidth={2} /> Resources
-      </Link>
-
       <QueryState query={resourceQuery} skeletonRows={5}>
         {(resource) => (
           <>
             <PageHeader
-              eyebrow={resource.group || 'Resource'}
               title={
                 <span className="flex min-w-0 items-center gap-2.5">
                   <span className="flex h-8 w-8 flex-none items-center justify-center rounded-lg border border-surface-700 bg-surface-850">
@@ -409,12 +405,7 @@ export default function ResourceDetailPage() {
                 </span>
               }
               description={resource.description || undefined}
-              meta={
-                <>
-                  <ResourceStatusBadges resource={resource} />
-                  <CopyableId value={resource.id} />
-                </>
-              }
+              meta={<CopyableId value={resource.id} />}
               actions={
                 <>
                   {/* Was "Connect", which only switched a tab. This performs
