@@ -40,7 +40,11 @@ createRoot(document.getElementById('root')).render(
   <StrictMode>
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
-        <BrowserRouter>
+        {/* Opt in to the v7 behaviours now. Both are already how this app
+            expects to behave, and leaving them off meant every page load
+            logged two upgrade warnings to the console, which is noise that
+            hides real ones. */}
+        <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
           {/* Row density is one preference for the whole console, persisted,
               not a per page control that forgets itself on navigation. */}
           <DensityProvider>

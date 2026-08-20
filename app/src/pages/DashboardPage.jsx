@@ -462,7 +462,8 @@ function Masthead({ eyebrow, title, description, cells, columns = 5, loading, as
 
       <div className={clsx('grid border-t border-surface-800 bg-surface-850/35 grid-cols-1', cols)}>
         {cells.map((c) => (
-          <KpiCell key={c.key} {...c} loading={loading || c.loading} />
+          // key is pulled out of the spread, never passed through it.
+          <KpiCell key={c.key} {...withoutKey(c)} loading={loading || c.loading} />
         ))}
       </div>
     </div>
@@ -1254,6 +1255,11 @@ function UserDashboard({ user }) {
       </QuietSection>
     </div>
   )
+}
+
+function withoutKey(item) {
+  const { key, ...rest } = item
+  return rest
 }
 
 export default function DashboardPage() {

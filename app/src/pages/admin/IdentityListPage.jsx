@@ -1,48 +1,43 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link, useSearchParams } from 'react-router-dom'
-import {
-  Plus,
-  ChevronRight,
-  UserPlus,
-  Users,
-  ShieldAlert,
-  SearchX,
-  Download,
-  Lock,
-  Ban,
-  Trash2,
-  ShieldCheck,
-  MoreHorizontal,
-  Copy,
-  KeyRound,
-} from 'lucide-react'
+import { Ban, Copy, Download, KeyRound, Lock, Trash2, UserPlus, Users } from 'lucide-react'
 import clsx from 'clsx'
 import { toast } from 'sonner'
 import { listUsers, getUser } from '../../api/identity'
 import { rolesOfUser, rolesOfAccess } from '../../lib/roles'
 import { listRoles } from '../../api/rbac'
-import { PageHeader, Card, EmptyState, ListPanel } from '../../components/common/Layout'
-import { QueryState } from '../../components/common/QueryState'
-import { StatusIndicator } from '../../components/common/Badge'
-import { stickyCell, stickyHeader, cell, COL, TruncCell } from '../../components/common/tableStyles'
-import { Button } from '../../components/common/Button'
-import { Checkbox } from '../../components/common/Checkbox'
-import { Pagination } from '../../components/common/Pagination'
-import { BulkActionBar } from '../../components/common/BulkActionBar'
-import { SegmentedControl } from '../../components/common/SegmentedControl'
+import { normalizeApiError } from '../../lib/apiError'
+import { Container, PageTitle, Stack } from '../../components/ui/layout'
 import {
-  SearchField,
-  SortHeader,
-  ColumnChooser,
-  ExportMenu,
-  RefreshControl,
+  DataTable,
+  RowActions,
+  RowCheckbox,
+  SelectAll,
+  SkeletonGrid,
+  SortTh,
+  Td,
+  Th,
+  Tr,
+  Trunc,
+} from '../../components/ui/grid'
+import { MenuItem, RowMenu } from '../../components/ui/menu'
+import { FilterChip, Meta, StatusDot } from '../../components/ui/bits'
+import {
   ActiveFilters,
+  BulkBar,
+  CommandBar,
+  ExportMenu,
+  Pagination,
+  PreferencesMenu,
+  RefreshControl,
   SavedViewsMenu,
-  useSavedViews,
-} from '../../components/common/TableControls'
+  SearchField,
+} from '../../components/ui/chrome'
+import { DeniedState, EmptyState, ErrorState, NoMatchState, OfflineState } from '../../components/ui/states'
+import { Button } from '../../components/common/Button'
 import { CreateUserModal } from '../../components/admin/CreateUserModal'
-import { Avatar } from '../../components/common/UserMenu'
+import { useSavedViews } from '../../components/common/TableControls'
 import { useTableState } from '../../hooks/useTableState'
 import { exportRowsToCsv, exportRowsToJson } from '../../lib/exportRows'
 import { formatDateTime, formatRelativeToNow } from '../../lib/format'
@@ -54,8 +49,12 @@ import { isPrivilegedRoleName, normalizeRoleList, SEARCH_DEBOUNCE_MS } from '../
 // Up to two role names, then a count. Two is what fits without wrapping at
 // the width this column gets, and the count is honest about the rest: hover
 // or open the account to see them all.
-function RoleCells({ roles }) {
-  if (!roles || roles.length === 0) return <span className="text-xs text-ink-600">-</span>
+function RoleCells({ roles, unknown }) {
+  // "None" is a claim about the account. "-" is a claim about this screen.
+  // The list payload does not always carry roles, so the two must not be
+  // rendered the same way.
+  if (unknown) return <span className="text-sm text-tertiary">Not loaded</span>
+  if (!roles || roles.length === 0) return <span className="text-sm text-tertiary">None</span>
   const shown = roles.slice(0, 2)
   const rest = roles.length - shown.length
   return (
@@ -64,26 +63,38 @@ function RoleCells({ roles }) {
         <span
           key={r}
           className={clsx(
-            'max-w-[7.5rem] flex-none truncate rounded border px-1.5 py-0.5 text-xs font-medium',
-            isPrivilegedRoleName(r)
-              ? 'border-warn/30 bg-warn-soft text-warn'
-              : 'border-surface-700 bg-surface-850 text-ink-400'
+            'max-w-[7rem] flex-none truncate rounded px-1.5 py-0.5 text-xs font-medium',
+            isPrivilegedRoleName(r) ? 'bg-warn-soft text-warn' : 'bg-subtle text-secondary'
           )}
         >
           {r}
         </span>
       ))}
-      {rest > 0 && <span className="flex-none text-xs tabular-nums text-ink-500">+{rest}</span>}
+      {rest > 0 && <span className="flex-none text-xs tabular text-tertiary">+{rest}</span>}
     </span>
   )
 }
 
-const STATUS_TONE = {
-  ACTIVE: 'emerald',
-  DISABLED: 'neutral',
-  INACTIVE: 'neutral',
-  LOCKED: 'amber',
-  SUSPENDED: 'red',
+// Status appears twice on a row, and that is deliberate: as a dot beside the
+// username where the eye already is, and as a word in its own sortable column.
+// The dot carries the colour, the word carries the meaning, and neither is a
+// filled pill.
+const DOT_TONE = {
+  ACTIVE: 'ok',
+  DISABLED: 'muted',
+  INACTIVE: 'muted',
+  LOCKED: 'warn',
+  SUSPENDED: 'danger',
+  DELETED: 'danger',
+}
+
+const STATUS_TEXT = {
+  ACTIVE: 'text-ok',
+  LOCKED: 'text-warn',
+  SUSPENDED: 'text-danger',
+  DELETED: 'text-danger',
+  DISABLED: 'text-tertiary',
+  INACTIVE: 'text-tertiary',
 }
 
 // ---------------------------------------------------------------------------
@@ -166,66 +177,6 @@ function isPrivileged(user) {
 // Row menu, per-row actions that don't need the detail page. Deliberately
 // short: everything destructive lives on the account's own page behind a
 // confirm, never one click from a list.
-function RowMenu({ user }) {
-  const [open, setOpen] = useState(false)
-
-  useEffect(() => {
-    if (!open) return undefined
-    const onKey = (e) => e.key === 'Escape' && setOpen(false)
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
-  }, [open])
-
-  const item =
-    'flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm text-ink-200 transition-colors hover:bg-surface-800 hover:text-ink-50'
-
-  return (
-    <div className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-label={`Actions for ${user.username}`}
-        aria-expanded={open}
-        className="flex h-7 w-7 items-center justify-center rounded-md text-ink-500 transition-colors hover:bg-surface-800 hover:text-ink-100"
-      >
-        <MoreHorizontal className="h-4 w-4" strokeWidth={2} />
-      </button>
-      {open && (
-        <>
-          <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} aria-hidden="true" />
-          <div className="animate-menu-in absolute right-0 z-40 mt-1 w-52 overflow-hidden rounded-xl border border-surface-700 bg-surface-900 p-1.5 shadow-overlay">
-            <Link to={`/admin/identity/${user.user_id}`} className={item} onClick={() => setOpen(false)}>
-              <Users className="h-3.5 w-3.5 text-ink-500" strokeWidth={1.75} /> Open account
-            </Link>
-            <Link
-              to={`/admin/identity/${user.user_id}?tab=security`}
-              className={item}
-              onClick={() => setOpen(false)}
-            >
-              <KeyRound className="h-3.5 w-3.5 text-ink-500" strokeWidth={1.75} /> Reset password
-            </Link>
-            <button
-              type="button"
-              className={item}
-              onClick={async () => {
-                try {
-                  await navigator.clipboard.writeText(user.user_id)
-                  toast.success('User ID copied')
-                } catch {
-                  toast.error('Clipboard unavailable in this browser')
-                }
-                setOpen(false)
-              }}
-            >
-              <Copy className="h-3.5 w-3.5 text-ink-500" strokeWidth={1.75} /> Copy user ID
-            </button>
-          </div>
-        </>
-      )}
-    </div>
-  )
-}
-
 export default function IdentityListPage() {
   const [createOpen, setCreateOpen] = useState(false)
 
@@ -432,7 +383,6 @@ export default function IdentityListPage() {
   }, [focusedId, table])
 
   const show = (key) => !table.visibleColumns || table.visibleColumns.includes(key)
-  const pad = table.density === 'compact' ? 'py-1.5' : 'py-2'
 
   const chips = []
   if (search) chips.push({ key: 'q', label: 'Search', value: search, onClear: () => setSearchInput('') })
@@ -475,405 +425,360 @@ export default function IdentityListPage() {
     },
   ]
 
+  const err = usersQuery.isError ? normalizeApiError(usersQuery.error) : null
+  const colSpan = COLUMNS.length + 2
+
+  const clearAll = () => {
+    setSearchInput('')
+    table.setFilters({ status: 'all', role: 'all' })
+    setActiveView(null)
+  }
+
   return (
-    <div className="pb-24">
-      <PageHeader
-        eyebrow="Admin Center"
+    <Stack gap="lg">
+      <PageTitle
         title="Identity"
+        counter={usersQuery.isSuccess ? counts.total : undefined}
         description="Every account in this install, and the roles and policies that decide what it can reach."
-        actions={
-          <Button variant="primary" icon={Plus} onClick={() => setCreateOpen(true)}>
-            Create user
-          </Button>
-        }
       />
 
-      {/* THE KPI STRIP THAT USED TO SIT HERE IS GONE, see CHANGES.md. On an
- inventory screen those five figures restated three things the page
- already says: the status facet counts one row below, the pagination
- total under the table, and the role column itself. What is genuinely
- worth pulling out is the exceptions, so they are one line of
- clickable facts rather than five hero numbers. */}
-      <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-ink-500">
-        <span>
-          <span className="font-semibold tabular-nums text-ink-100">{counts.total}</span> accounts
-        </span>
-        <span aria-hidden="true" className="h-3 w-px bg-surface-700" />
-        <span>
-          <span className="font-semibold tabular-nums text-ink-200">{counts.active}</span> active
-        </span>
-        {counts.locked > 0 && (
-          <button
-            type="button"
-            onClick={() => table.setFilter('status', 'LOCKED')}
-            className="inline-flex items-center gap-1.5 font-medium text-amber-600 transition-colors hover:text-amber-500 dark:text-amber-400"
-          >
-            <ShieldAlert className="h-3 w-3" strokeWidth={2} />
-            <span className="tabular-nums">{counts.locked}</span> locked
-          </button>
-        )}
-        {counts.privileged > 0 && (
-          <button
-            type="button"
-            onClick={() => table.setFilter('role', 'admin')}
-            className="inline-flex items-center gap-1.5 font-medium text-red-600 transition-colors hover:text-red-500 dark:text-red-400"
-          >
-            <ShieldCheck className="h-3 w-3" strokeWidth={2} />
-            <span className="tabular-nums">{counts.privileged}</span> privileged
-          </button>
-        )}
-        {counts.neverSignedIn > 0 && (
-          <span>
-            <span className="tabular-nums text-ink-300">{counts.neverSignedIn}</span> never signed in
-          </span>
-        )}
-      </div>
-
-      <ListPanel
-        toolbar={
-          <div className="space-y-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <SearchField
-                value={searchInput}
-                onChange={setSearchInput}
-                placeholder="Search username or email…"
-                className="min-w-[15rem] sm:max-w-sm"
-              />
-
-              {/* Status as a one-click facet with live counts, the single most
- used filter on an account list, so it doesn't hide in a select. */}
-              {statusFacets.length > 1 && (
-                <SegmentedControl
-                  size="sm"
-                  ariaLabel="Filter by status"
-                  value={table.filters.status}
-                  onChange={(v) => table.setFilter('status', v)}
-                  options={statusFacets}
-                />
-              )}
-
-              <label className="flex items-center gap-2">
-                <span className="whitespace-nowrap text-xs font-medium text-ink-400">Role</span>
-                <select
-                  value={table.filters.role}
-                  disabled={roleFilterDisabled}
-                  title={
-                    roleFilterDisabled
-                      ? rolesPending
-                        ? 'Reading each account’s roles…'
-                        : 'This directory is too large to read roles for every account here, open an account to see its roles.'
-                      : undefined
-                  }
-                  onChange={(e) => table.setFilter('role', e.target.value)}
-                  className="h-9 cursor-pointer rounded-lg border border-surface-700 bg-surface-900 pl-2.5 pr-7 text-xs font-medium text-ink-100 shadow-sm transition-colors hover:border-surface-600 focus:border-blue-500 focus:outline-none disabled:cursor-not-allowed disabled:opacity-45"
-                >
-                  <option value="all">{rolesPending ? 'Loading roles…' : 'Any'}</option>
-                  {roleFacets.map((r) => (
-                    <option key={r.value} value={r.value}>
-                      {r.label} ({r.count})
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <span className="ml-auto flex flex-wrap items-center gap-2">
-                <SavedViewsMenu
-                  views={savedViews.views}
-                  activeName={activeView}
-                  canSave={table.activeFilterCount > 0 || !!search}
-                  onApply={(v) => {
-                    setActiveView(v.name)
-                    setSearchInput(v.state.search || '')
-                    table.setFilters(v.state.filters || { status: 'all', role: 'all' })
-                  }}
-                  onSave={(name) => {
-                    savedViews.saveView(name, { search, filters: table.filters })
-                    setActiveView(name)
-                    toast.success(`View “${name}” saved`)
-                  }}
-                  onRemove={(name) => {
-                    savedViews.removeView(name)
-                    if (activeView === name) setActiveView(null)
-                  }}
-                />
-                <ColumnChooser
-                  columns={COLUMNS}
-                  visible={table.visibleColumns}
-                  onChange={table.setVisibleColumns}
-                />
-                <ExportMenu
-                  count={table.total}
-                  disabled={table.total === 0}
-                  onExportCsv={() => exportRowsToCsv(table.filteredRows, CSV_COLUMNS, 'identity')}
-                  onExportJson={() => exportRowsToJson(table.filteredRows, CSV_COLUMNS, 'identity')}
-                />
-                <RefreshControl
-                  onRefresh={() => usersQuery.refetch()}
-                  isFetching={usersQuery.isFetching}
-                  updatedAt={usersQuery.dataUpdatedAt}
-                />
-              </span>
-            </div>
-
-            {chips.length > 0 && (
-              <div className="border-t border-surface-800 pt-3">
-                <ActiveFilters
-                  chips={chips}
-                  onClearAll={() => {
-                    setSearchInput('')
-                    table.resetFilters()
-                    setActiveView(null)
-                  }}
-                />
-              </div>
-            )}
-          </div>
-        }
-      >
-        <QueryState
-          query={usersQuery}
-          empty={(data) => !data?.users || data.users.length === 0}
-          emptyTitle={search ? 'No matching accounts' : 'No user accounts yet'}
-          emptyMessage={
-            search
-              ? 'No account matches that username or email. Try a broader term.'
-              : 'Create the first account to start assigning roles and policies.'
+      <Stack gap="sm">
+        <CommandBar
+          primary={
+            <Button variant="primary" icon={UserPlus} onClick={() => setCreateOpen(true)}>
+              Create user
+            </Button>
           }
-          emptyAction={
-            !search && (
-              <Button variant="primary" icon={UserPlus} onClick={() => setCreateOpen(true)}>
-                Create user
-              </Button>
-            )
+          summary={
+            usersQuery.isSuccess && table.total !== counts.total
+              ? `${table.total} of ${counts.total} shown`
+              : undefined
           }
         >
-          {() =>
-            table.total === 0 ? (
-              <Card>
-                <EmptyState
-                  icon={SearchX}
-                  title="No accounts match these filters"
-                  description="Every returned account was filtered out by the current status or role selection."
-                  action={
-                    <Button variant="secondary" onClick={() => table.resetFilters()}>
-                      Clear filters
-                    </Button>
-                  }
-                />
-              </Card>
-            ) : (
-              <>
-                <div className="relative overflow-x-auto overscroll-x-contain">
-                  <table className="w-full min-w-[62rem] table-fixed border-separate border-spacing-0 text-sm">
-                    <colgroup>
-                      <col className={COL.select} />
-                      {show('username') && <col className="w-[19rem] min-w-[15rem]" />}
-                      {show('full_name') && <col className={COL.medium} />}
-                      {show('roles') && <col className="w-[13rem]" />}
-                      {show('status') && <col className={COL.status} />}
-                      {show('created_at') && <col className={COL.timestamp} />}
-                      {show('last_login_at') && <col className={COL.short} />}
-                      <col className={COL.actions} />
-                    </colgroup>
-                    <thead>
-                      <tr>
-                        <th
-                          scope="col"
-                          className={clsx(
-                            stickyHeader({ left: 'left-0', edge: !show('username') }),
-                            'px-4 py-2.5'
-                          )}
-                        >
-                          <Checkbox
-                            checked={table.allOnPageSelected}
-                            indeterminate={table.someOnPageSelected}
-                            onChange={table.toggleAllOnPage}
-                            srLabel="Select all accounts on this page"
-                          />
-                        </th>
-                        {show('username') && (
-                          <SortHeader
-                            label="User"
-                            columnKey="username"
-                            sort={table.sort}
-                            onSort={table.toggleSort}
-                            className={clsx(stickyHeader({ left: 'left-12', edge: true }), 'z-30')}
-                          />
-                        )}
-                        {show('full_name') && (
-                          <SortHeader
-                            label="Full name"
-                            columnKey="full_name"
-                            sort={table.sort}
-                            onSort={table.toggleSort}
-                          />
-                        )}
-                        {show('roles') && <SortHeader label="Roles" columnKey="_roles" srOnly={false} />}
-                        {show('status') && (
-                          <SortHeader
-                            label="Status"
-                            columnKey="status"
-                            sort={table.sort}
-                            onSort={table.toggleSort}
-                          />
-                        )}
-                        {show('created_at') && (
-                          <SortHeader
-                            label="Created"
-                            columnKey="created_at"
-                            sort={table.sort}
-                            onSort={table.toggleSort}
-                          />
-                        )}
-                        {show('last_login_at') && (
-                          <SortHeader
-                            label="Last sign-in"
-                            columnKey="last_login_at"
-                            sort={table.sort}
-                            onSort={table.toggleSort}
-                          />
-                        )}
-                        <SortHeader label="Actions" columnKey="_actions" srOnly />
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {table.pageRows.map((u) => {
-                        const selected = table.isSelected(u)
-                        return (
-                          <tr
-                            key={u.user_id}
-                            className={clsx(
-                              'group',
-                              focusedId === u.user_id &&
-                                'outline outline-1 -outline-offset-1 outline-blue-500/40'
-                            )}
-                          >
-                            <td
-                              className={clsx(
-                                stickyCell({ left: 'left-0', selected, edge: !show('username') }),
-                                'px-3',
-                                pad
-                              )}
-                            >
-                              <Checkbox
-                                checked={selected}
-                                onChange={() => table.toggleRow(u)}
-                                srLabel={`Select ${u.username}`}
-                              />
-                            </td>
-                            {show('username') && (
-                              <td
-                                className={clsx(
-                                  stickyCell({ left: 'left-10', selected, edge: true }),
-                                  'px-3',
-                                  pad
-                                )}
+          <SavedViewsMenu
+            views={savedViews.views}
+            activeName={activeView}
+            canSave={table.activeFilterCount > 0 || !!search}
+            onApply={(v) => {
+              setSearchInput(v.state.query || '')
+              table.setFilters({ status: 'all', role: 'all', ...(v.state.filters || {}) })
+              setActiveView(v.name)
+            }}
+            onSave={(name) => {
+              savedViews.saveView(name, { query: search, filters: table.filters })
+              setActiveView(name)
+              toast.success(`Saved view "${name}"`)
+            }}
+            onRemove={(name) => {
+              savedViews.removeView(name)
+              if (activeView === name) setActiveView(null)
+            }}
+          />
+          <ExportMenu
+            count={table.filteredRows.length}
+            disabled={table.filteredRows.length === 0}
+            onExportCsv={() => exportRowsToCsv(table.filteredRows, CSV_COLUMNS, 'identity')}
+            onExportJson={() => exportRowsToJson(table.filteredRows, CSV_COLUMNS, 'identity')}
+          />
+          <RefreshControl
+            onRefresh={() => usersQuery.refetch()}
+            isFetching={usersQuery.isFetching}
+            updatedAt={usersQuery.dataUpdatedAt}
+          />
+          <PreferencesMenu
+            columns={COLUMNS}
+            visible={table.visibleColumns}
+            onVisibleChange={table.setVisibleColumns}
+            pageSize={table.pageSize}
+            onPageSize={table.setPageSize}
+          />
+        </CommandBar>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Search is SERVER SIDE and debounced, because listUsers(q) genuinely
+              takes the parameter. Everything the endpoint does not support,
+              status, role, sort and paging, is applied over the returned
+              collection, which is honest and stays correct. */}
+          <SearchField
+            value={searchInput}
+            onChange={setSearchInput}
+            placeholder="Search username or email"
+            label="Search accounts"
+          />
+          {statusFacets.length > 2 &&
+            statusFacets.map((f) => (
+              <FilterChip
+                key={f.key}
+                active={table.filters.status === f.key}
+                count={f.count}
+                onClick={() => table.setFilter('status', f.key)}
+              >
+                {f.label}
+              </FilterChip>
+            ))}
+          <label className="flex flex-none items-center gap-2">
+            <span className="whitespace-nowrap text-sm text-secondary">Role</span>
+            <select
+              value={table.filters.role}
+              disabled={roleFilterDisabled}
+              onChange={(e) => table.setFilter('role', e.target.value)}
+              title={roleFilterDisabled ? 'Roles are not on the list payload for this directory' : undefined}
+              className="h-9 cursor-pointer rounded-lg border border-line-strong bg-surface pl-2.5 pr-7 text-sm text-primary transition-colors hover:border-primary/40 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/25 disabled:cursor-not-allowed disabled:bg-subtle disabled:text-disabled"
+            >
+              <option value="all">Any role</option>
+              {roleFacets.map((r) => (
+                <option key={r.value} value={r.value}>
+                  {r.label} ({r.count})
+                </option>
+              ))}
+            </select>
+          </label>
+          {rolesPending && <span className="text-xs text-tertiary">Loading roles</span>}
+        </div>
+
+        <ActiveFilters chips={chips} onClearAll={clearAll} />
+
+        <BulkBar count={table.selectedCount} onClear={table.clearSelection}>
+          {bulkActions.map((a) => (
+            <Button
+              key={a.key}
+              size="sm"
+              variant={a.key === 'delete' ? 'dangerGhost' : 'subtle'}
+              icon={a.icon}
+              disabled={a.disabled}
+              title={a.disabledReason}
+              onClick={a.onClick}
+            >
+              {a.label}
+            </Button>
+          ))}
+        </BulkBar>
+      </Stack>
+
+      <Container padded={false}>
+        {usersQuery.isLoading ? (
+          <table className="w-full">
+            <tbody>
+              <SkeletonGrid colSpan={colSpan} rows={10} />
+            </tbody>
+          </table>
+        ) : err ? (
+          err.status === 403 ? (
+            <DeniedState description={err.message} />
+          ) : err.code === 'network_error' ? (
+            <OfflineState onRetry={() => usersQuery.refetch()} retrying={usersQuery.isFetching} />
+          ) : (
+            <ErrorState
+              description={err.message}
+              onRetry={() => usersQuery.refetch()}
+              retrying={usersQuery.isFetching}
+            />
+          )
+        ) : counts.total === 0 ? (
+          <EmptyState
+            icon={Users}
+            title="No accounts yet"
+            description="Create the first account and it will appear here with its roles and sign-in history."
+            action={
+              <Button variant="primary" icon={UserPlus} onClick={() => setCreateOpen(true)}>
+                Create the first user
+              </Button>
+            }
+          />
+        ) : table.total === 0 ? (
+          <NoMatchState description="No account matches the current search and filters." onClear={clearAll} />
+        ) : (
+          <>
+            <DataTable minWidth="62rem">
+              {/* Budgeted to fit without clipping: 44 + 288 + 176 + 208 + 128
+                  + 160 + 60 = 1064 inside a ~1130px panel. */}
+              <colgroup>
+                <col className="w-11" />
+                {show('username') && <col className="w-[18rem] min-w-[14rem]" />}
+                {show('full_name') && <col className="w-[11rem]" />}
+                {show('roles') && <col className="w-[13rem]" />}
+                {show('status') && <col className="w-[8rem]" />}
+                {show('created_at') && <col className="w-[10rem]" />}
+                {show('last_login_at') && <col className="w-[10rem]" />}
+                <col className="w-[3.75rem]" />
+              </colgroup>
+
+              <thead>
+                <tr>
+                  <Th sticky left="left-0">
+                    <SelectAll
+                      total={table.pageRows.length}
+                      selected={table.pageRows.filter((u) => table.isSelected(u)).length}
+                      onChange={(all) => (all ? table.clearSelection() : table.selectPage())}
+                    />
+                  </Th>
+                  {show('username') && (
+                    <SortTh
+                      columnKey="username"
+                      sort={table.sort}
+                      onSort={table.toggleSort}
+                      sticky
+                      left="left-11"
+                      edge
+                    >
+                      User
+                    </SortTh>
+                  )}
+                  {show('full_name') && (
+                    <SortTh columnKey="full_name" sort={table.sort} onSort={table.toggleSort}>
+                      Full name
+                    </SortTh>
+                  )}
+                  {show('roles') && <Th>Roles</Th>}
+                  {show('status') && (
+                    <SortTh columnKey="status" sort={table.sort} onSort={table.toggleSort}>
+                      Status
+                    </SortTh>
+                  )}
+                  {show('created_at') && (
+                    <SortTh columnKey="created_at" sort={table.sort} onSort={table.toggleSort}>
+                      Created
+                    </SortTh>
+                  )}
+                  {show('last_login_at') && (
+                    <SortTh columnKey="last_login_at" sort={table.sort} onSort={table.toggleSort}>
+                      Last sign-in
+                    </SortTh>
+                  )}
+                  <Th align="right">
+                    <span className="sr-only">Actions</span>
+                  </Th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {table.pageRows.map((u) => {
+                  const selected = table.isSelected(u)
+                  return (
+                    <Tr key={u.user_id} selected={selected}>
+                      <Td sticky left="left-0" selected={selected}>
+                        <RowCheckbox
+                          checked={selected}
+                          onChange={() => table.toggleRow(u)}
+                          label={`Select ${u.username}`}
+                        />
+                      </Td>
+                      {show('username') && (
+                        <Td sticky left="left-11" edge selected={selected}>
+                          {/* Status rides as a dot next to the name instead of
+                              taking its own column: the eye is already here,
+                              and a populated status column spends 8rem on a
+                              word the colour has already said. The word is
+                              still in the Status column for scanning and in
+                              the title for screen readers. */}
+                          <div className="flex min-w-0 items-center gap-2.5">
+                            <StatusDot
+                              tone={DOT_TONE[u.status] || 'muted'}
+                              title={u.status || 'Unknown'}
+                              className="flex-none"
+                            />
+                            <div className="min-w-0">
+                              <Link
+                                to={`/admin/identity/${u.user_id}`}
+                                title={u.username}
+                                className="block truncate text-sm font-medium text-primary transition-colors hover:text-accent hover:underline"
                               >
-                                {/* No avatar tile. Six rows of the same blue
- circle with two initials in it is colour
- spent on nothing: it identifies no one that
- the username next to it does not already
- identify, and it sets the row height. */}
-                                <Link
-                                  to={`/admin/identity/${u.user_id}`}
-                                  title={u.username}
-                                  className="block truncate text-sm font-medium text-ink-50 transition-colors hover:text-accent hover:underline hover:underline-offset-2"
+                                {u.username}
+                              </Link>
+                              {u.email && (
+                                <span
+                                  className="block truncate font-mono text-xs text-tertiary"
+                                  title={u.email}
                                 >
-                                  {u.username}
-                                </Link>
-                                {u.email && (
-                                  <span
-                                    className="mt-0.5 block truncate text-xs text-ink-500"
-                                    title={u.email}
-                                  >
-                                    {u.email}
-                                  </span>
-                                )}
-                              </td>
-                            )}
-                            {show('full_name') && (
-                              <td className={clsx(cell({ selected }), 'px-3', pad)}>
-                                <TruncCell value={u.full_name} muted />
-                              </td>
-                            )}
-                            {show('roles') && (
-                              <td className={clsx(cell({ selected }), 'px-3', pad)}>
-                                <RoleCells roles={rolesOfUser(u)} />
-                              </td>
-                            )}
-                            {show('status') && (
-                              <td className={clsx(cell({ selected }), 'px-3', pad)}>
-                                <StatusIndicator tone={STATUS_TONE[u.status] || 'neutral'}>
-                                  {u.status
-                                    ? u.status.charAt(0) + u.status.slice(1).toLowerCase()
-                                    : 'Unknown'}
-                                </StatusIndicator>
-                              </td>
-                            )}
-                            {show('created_at') && (
-                              <td className={clsx(cell({ selected }), 'px-3', pad)}>
-                                <TruncCell
-                                  value={u.created_at ? formatDateTime(u.created_at) : null}
-                                  className="text-xs tabular-nums text-ink-400"
-                                />
-                              </td>
-                            )}
-                            {show('last_login_at') && (
-                              <td className={clsx(cell({ selected }), 'px-3 text-xs tabular-nums', pad)}>
-                                {u.last_login_at ? (
-                                  <span className="text-ink-400" title={formatDateTime(u.last_login_at)}>
-                                    {formatRelativeToNow(u.last_login_at)}
-                                  </span>
-                                ) : (
-                                  <span className="text-ink-500">Never</span>
-                                )}
-                              </td>
-                            )}
-                            <td className={clsx(cell({ selected }), 'px-2', pad)}>
-                              <div className="flex items-center justify-end gap-0.5">
-                                <RowMenu user={u} />
-                                <Link
-                                  to={`/admin/identity/${u.user_id}`}
-                                  aria-label={`Open ${u.username}`}
-                                  className="flex h-7 w-7 items-center justify-center rounded-md text-ink-500 transition-colors hover:bg-surface-800 hover:text-ink-50"
-                                >
-                                  <ChevronRight className="h-4 w-4" strokeWidth={2} />
-                                </Link>
-                              </div>
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+                                  {u.email}
+                                </span>
+                              )}
+                            </div>
+                            {u.is_protected && <Meta>protected</Meta>}
+                          </div>
+                        </Td>
+                      )}
+                      {show('full_name') && (
+                        <Td selected={selected}>
+                          <Trunc value={u.full_name} muted />
+                        </Td>
+                      )}
+                      {show('roles') && (
+                        <Td selected={selected}>
+                          <RoleCells roles={rolesOf(u)} unknown={rolesUnknown} />
+                        </Td>
+                      )}
+                      {show('status') && (
+                        <Td selected={selected}>
+                          <span className={clsx('text-sm', STATUS_TEXT[u.status] || 'text-secondary')}>
+                            {u.status ? u.status.charAt(0) + u.status.slice(1).toLowerCase() : 'Unknown'}
+                          </span>
+                        </Td>
+                      )}
+                      {show('created_at') && (
+                        <Td selected={selected}>
+                          <Trunc value={u.created_at ? formatDateTime(u.created_at) : null} muted />
+                        </Td>
+                      )}
+                      {show('last_login_at') && (
+                        <Td selected={selected}>
+                          {u.last_login_at ? (
+                            <span className="text-sm text-secondary" title={formatDateTime(u.last_login_at)}>
+                              {formatRelativeToNow(u.last_login_at)}
+                            </span>
+                          ) : (
+                            <span className="text-sm text-tertiary">Never</span>
+                          )}
+                        </Td>
+                      )}
+                      <Td align="right" selected={selected}>
+                        <RowActions>
+                          <RowMenu label={`Actions for ${u.username}`}>
+                            <MenuItem icon={Users}>
+                              <Link to={`/admin/identity/${u.user_id}`} className="block">
+                                Open account
+                              </Link>
+                            </MenuItem>
+                            <MenuItem icon={KeyRound}>
+                              <Link to={`/admin/identity/${u.user_id}?tab=security`} className="block">
+                                Reset password
+                              </Link>
+                            </MenuItem>
+                            <MenuItem
+                              icon={Copy}
+                              onClick={async () => {
+                                try {
+                                  await navigator.clipboard.writeText(u.user_id)
+                                  toast.success('User ID copied')
+                                } catch {
+                                  toast.error('Clipboard is not available in this browser')
+                                }
+                              }}
+                            >
+                              Copy user ID
+                            </MenuItem>
+                          </RowMenu>
+                        </RowActions>
+                      </Td>
+                    </Tr>
+                  )
+                })}
+              </tbody>
+            </DataTable>
 
-                <Pagination
-                  page={table.page}
-                  pageSize={table.pageSize}
-                  total={table.total}
-                  totalPages={table.totalPages}
-                  onPageChange={table.setPage}
-                  onPageSizeChange={table.setPageSize}
-                  label="accounts"
-                />
-              </>
-            )
-          }
-        </QueryState>
-      </ListPanel>
-
-      <BulkActionBar
-        count={table.selectedCount}
-        total={table.total}
-        noun="account"
-        actions={bulkActions}
-        allMatchingSelected={table.allMatchingSelected}
-        onSelectAllMatching={table.selectAllMatching}
-        onClear={table.clearSelection}
-      />
+            <Pagination
+              page={table.page}
+              pageSize={table.pageSize}
+              total={table.total}
+              totalPages={table.totalPages}
+              onPageChange={table.setPage}
+              label="accounts"
+            />
+          </>
+        )}
+      </Container>
 
       <CreateUserModal open={createOpen} onClose={() => setCreateOpen(false)} />
-    </div>
+    </Stack>
   )
 }

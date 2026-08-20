@@ -1,5 +1,15 @@
 import clsx from 'clsx'
-import { ChevronLeft, ChevronRight, Download, RefreshCw, Search, Settings2, X } from 'lucide-react'
+import {
+  Bookmark,
+  ChevronLeft,
+  ChevronRight,
+  Download,
+  RefreshCw,
+  Search,
+  Settings2,
+  Trash2,
+  X,
+} from 'lucide-react'
 import { Menu, MenuButton, MenuDivider, MenuItem, MenuLabel, MenuNote } from './menu'
 import { useDensity } from './grid'
 import { Button } from '../common/Button'
@@ -172,6 +182,55 @@ export function ExportMenu({ onExportCsv, onExportJson, count, disabled }) {
         Exports the {count ?? 0} rows currently loaded. There is no server side export route, so a wider
         export means paging further first.
       </MenuNote>
+    </Menu>
+  )
+}
+
+/**
+ * Saved views. A named filter set, stored per browser, which is all this
+ * backend supports: no endpoint persists a view per account, and the menu says
+ * so rather than implying it syncs.
+ */
+export function SavedViewsMenu({ views, activeName, canSave, onApply, onSave, onRemove }) {
+  return (
+    <Menu
+      label="Saved views"
+      width="w-64"
+      trigger={(open) => (
+        <MenuButton icon={Bookmark} open={open}>
+          {activeName || 'Views'}
+        </MenuButton>
+      )}
+    >
+      <MenuLabel>Saved views</MenuLabel>
+      {(!views || views.length === 0) && <MenuNote>None yet. Filter the list, then save it.</MenuNote>}
+      {(views || []).map((v) => (
+        <div key={v.name} className="flex items-center">
+          <MenuItem className="flex-1" checked={activeName === v.name} onClick={() => onApply(v)}>
+            {v.name}
+          </MenuItem>
+          <button
+            type="button"
+            onClick={() => onRemove(v.name)}
+            aria-label={`Delete view ${v.name}`}
+            className="mr-2 flex h-7 w-7 flex-none items-center justify-center rounded text-tertiary hover:bg-danger-soft hover:text-danger"
+          >
+            <Trash2 className="h-3.5 w-3.5" strokeWidth={1.75} />
+          </button>
+        </div>
+      ))}
+      <MenuDivider />
+      <MenuItem
+        icon={Bookmark}
+        disabled={!canSave}
+        onClick={() => {
+          const name = window.prompt('Name this view')
+          if (name && name.trim()) onSave(name.trim())
+        }}
+      >
+        {canSave ? 'Save current filters' : 'Nothing to save yet'}
+      </MenuItem>
+      <MenuNote>Stored in this browser. No endpoint persists views per account.</MenuNote>
     </Menu>
   )
 }

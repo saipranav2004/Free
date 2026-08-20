@@ -60,7 +60,7 @@ const uid = (p) => `${p}-${Math.random().toString(36).slice(2, 10)}`
 // every client side gate, so a session response has to carry all three.
 function issueSession(user) {
   const token = uid('tok')
-  db.tokens[token] = user.id
+  db.tokens[token] = user.user_id
   auditRow(user, 'AUTH', 'auth.login.success', 'SUCCESS')
   return {
     access_token: token,
@@ -106,7 +106,7 @@ function userOf(req) {
   const auth = req.headers.authorization || ''
   if (!auth.startsWith('Bearer ')) return null
   const id = db.tokens[auth.slice(7)]
-  return db.users.find((u) => u.id === id) || null
+  return db.users.find((u) => u.user_id === id) || null
 }
 const isAdmin = (u) => !!u && (u.roles.includes('admin') || u.roles.includes('root'))
 const isRoot = (u) => !!u && u.roles.includes('root')
@@ -114,7 +114,7 @@ const isRoot = (u) => !!u && u.roles.includes('root')
 function auditRow(actor, category, action, outcome, resource, details) {
   const row = {
     id: uid('aud'), org_id: F.ORG, sequence_number: ++db.seq, occurred_at: new Date().toISOString(),
-    actor_type: 'USER', user_id: actor ? actor.id : null, username: actor ? actor.username : 'anonymous',
+    actor_type: 'USER', user_id: actor ? actor.user_id : null, username: actor ? actor.username : 'anonymous',
     category, action, outcome, severity: outcome === 'SUCCESS' ? 'INFO' : 'WARN',
     resource: resource || '', source_ip: '127.0.0.1', details: details || {},
     prev_hash: 'a'.repeat(64), entry_hash: 'b'.repeat(64), hash_version: 1,
@@ -154,7 +154,7 @@ on('POST', '/api/v1/auth/login', (ctx) => {
   if (user.status !== 'ACTIVE') return fail(ctx.res, 403, 'ACCOUNT_DISABLED', 'This account is disabled.')
   if (user.mfa_enabled) {
     const challenge = uid('chal')
-    db.tokens[`challenge:${challenge}`] = user.id
+    db.tokens[`challenge:${challenge}`] = user.user_id
     return ok(ctx.res, { mfa_required: true, challenge_token: challenge, expires_in_seconds: 300 })
   }
   return ok(ctx.res, issueSession(user))
@@ -166,7 +166,7 @@ on('POST', '/api/v1/auth/mfa/verify', (ctx) => {
   if (!userId) return fail(ctx.res, 401, 'CHALLENGE_EXPIRED', 'That verification session has expired. Sign in again.')
   if (!/^\d{6}$/.test(String(code || ''))) return fail(ctx.res, 422, 'VALIDATION_FAILED', 'Enter the 6 digit code.', { code: 'Enter the 6 digit code from your authenticator app.' })
   if (code !== '123456') return fail(ctx.res, 401, 'INVALID_CODE', 'That code is not right. Check your authenticator app and try again.')
-  const user = db.users.find((u) => u.id === userId)
+  const user = db.users.find((u) => u.user_id === userId)
   const session = issueSession(user)
   session.mfa_verified = true
   db.verified[session.access_token] = true
@@ -222,7 +222,7 @@ on('GET', '/api/v1/pam/resources/:id', (ctx) => {
 on('GET', '/api/v1/pam/resources/:id/connect-info', (ctx) => {
   const r = db.resources.find((x) => x.id === ctx.params.id)
   if (!r) return fail(ctx.res, 404, 'NOT_FOUND', 'That resource does not exist.')
-  const grant = db.grants.find((g) => g.resource_id === r.id && g.user_id === ctx.user.id && g.status === 'ACTIVE')
+  const grant = db.grants.find((g) => g.resource_id === r.id && g.user_id === ctx.user.user_id && g.status === 'ACTIVE')
   if (r.requires_jit && !grant)
     return fail(ctx.res, 403, 'JIT_REQUIRED', 'This resource needs an approved just in time grant before you can connect.')
   return ok(ctx.res, {
@@ -236,7 +236,7 @@ on('POST', '/api/v1/pam/resources/:id/sessions', (ctx) => {
   const r = db.resources.find((x) => x.id === ctx.params.id)
   if (!r) return fail(ctx.res, 404, 'NOT_FOUND', 'That resource does not exist.')
   const s = {
-    id: uid('sess'), org_id: F.ORG, user_id: ctx.user.id, username: ctx.user.username,
+    id: uid('sess'), org_id: F.ORG, user_id: ctx.user.user_id, username: ctx.user.username,
     resource_id: r.id, resource_name: r.name, protocol: ctx.body?.protocol || 'tcp',
     status: 'ACTIVE', started_at: new Date().toISOString(), source_ip: '127.0.0.1', recording_id: null,
   }
@@ -248,7 +248,7 @@ on('POST', '/api/v1/pam/resources/:id/launch', (ctx) =>
   ok(ctx.res, { launch_url: `https://agent.local/launch/${uid('lch')}`, expires_at: F.iso(2), expires_in_seconds: 120 }))
 
 on('GET', '/api/v1/pam/sessions/mine', (ctx) => {
-  let rows = db.sessions.filter((s) => s.user_id === ctx.user.id)
+  let rows = db.sessions.filter((s) => s.user_id === ctx.user.user_id)
   if (ctx.query.status) rows = rows.filter((s) => s.status === ctx.query.status)
   if (ctx.query.active_only === 'true') rows = rows.filter((s) => s.status === 'ACTIVE')
   const { items, pagination } = paginate(rows, ctx.query)
@@ -267,7 +267,7 @@ on('POST', '/api/v1/pam/sessions/:id/end', (ctx) => {
 on('POST', '/api/v1/pam/agent/pair/init', (ctx) =>
   ok(ctx.res, { pairing_code: 'HK4M-2QPD-91XZ', expires_at: F.iso(Number(ctx.body?.ttl_minutes || 10)), expires_in_seconds: 60 * Number(ctx.body?.ttl_minutes || 10) }))
 on('GET', '/api/v1/pam/agent/devices', (ctx) => {
-  const rows = db.devices.filter((d) => d.user_id === ctx.user.id)
+  const rows = db.devices.filter((d) => d.user_id === ctx.user.user_id)
   return ok(ctx.res, { devices: rows, count: rows.length })
 })
 on('DELETE', '/api/v1/pam/agent/devices/:id', (ctx) => {
@@ -290,7 +290,7 @@ on('POST', '/api/v1/pam/safes', (ctx) => {
   if (!name) return fail(ctx.res, 422, 'VALIDATION_FAILED', 'Check the highlighted fields.', { name: 'Give the safe a name.' })
   if (db.safes.some((s) => s.name.toLowerCase() === name.toLowerCase()))
     return fail(ctx.res, 409, 'ALREADY_EXISTS', `A safe called "${name}" already exists.`, { name: 'That name is taken.' })
-  const s = { id: uid('safe'), org_id: F.ORG, name, description: ctx.body.description || '', owner_id: ctx.user.id, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }
+  const s = { id: uid('safe'), org_id: F.ORG, name, description: ctx.body.description || '', owner_id: ctx.user.user_id, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }
   db.safes.push(s)
   db.folders[s.id] = []
   db.credentials[s.id] = []
@@ -396,7 +396,7 @@ on('POST', '/api/v1/pam/jit/requests', (ctx) => {
   if (Object.keys(fields).length) return fail(ctx.res, 422, 'VALIDATION_FAILED', 'Check the highlighted fields.', fields)
   const r = db.resources.find((x) => x.id === b.resource_id)
   const req = {
-    id: uid('jit'), org_id: F.ORG, requester_user_id: ctx.user.id, requester_username: ctx.user.username,
+    id: uid('jit'), org_id: F.ORG, requester_user_id: ctx.user.user_id, requester_username: ctx.user.username,
     resource_id: b.resource_id, resource_name: r ? r.name : b.resource_id, request_type: 'STANDARD',
     status: 'PENDING', justification: b.justification, duration_minutes: mins,
     requested_at: new Date().toISOString(), request_expires_at: F.iso(120), ticket_ref: b.ticket_ref || null,
@@ -413,7 +413,7 @@ on('POST', '/api/v1/pam/jit/breakglass', (ctx) => {
   if (Object.keys(fields).length) return fail(ctx.res, 422, 'VALIDATION_FAILED', 'Check the highlighted fields.', fields)
   const r = db.resources.find((x) => x.id === b.resource_id)
   const req = {
-    id: uid('jit'), org_id: F.ORG, requester_user_id: ctx.user.id, requester_username: ctx.user.username,
+    id: uid('jit'), org_id: F.ORG, requester_user_id: ctx.user.user_id, requester_username: ctx.user.username,
     resource_id: b.resource_id, resource_name: r ? r.name : b.resource_id, request_type: 'BREAKGLASS',
     status: 'WAITING', justification: b.justification, duration_minutes: Number(b.duration_minutes || 60),
     requested_at: new Date().toISOString(), available_at: F.iso(15), request_expires_at: F.iso(75),
@@ -424,7 +424,7 @@ on('POST', '/api/v1/pam/jit/breakglass', (ctx) => {
   return ok(ctx.res, { request: req, available_at: req.available_at, waiting_period_min: 15 }, 201)
 })
 on('GET', '/api/v1/pam/jit/requests', (ctx) => {
-  let rows = db.jit.filter((r) => r.requester_user_id === ctx.user.id)
+  let rows = db.jit.filter((r) => r.requester_user_id === ctx.user.user_id)
   if (ctx.query.status) rows = rows.filter((r) => r.status === ctx.query.status)
   if (ctx.query.type) rows = rows.filter((r) => r.request_type === ctx.query.type)
   if (ctx.query.resource_id) rows = rows.filter((r) => r.resource_id === ctx.query.resource_id)
@@ -452,7 +452,7 @@ on('POST', '/api/v1/pam/jit/requests/:id/cancel', (ctx) => {
   return ok(ctx.res, { request: r })
 })
 on('GET', '/api/v1/pam/jit/grants', (ctx) => {
-  let rows = db.grants.filter((g) => g.user_id === ctx.user.id)
+  let rows = db.grants.filter((g) => g.user_id === ctx.user.user_id)
   if (ctx.query.status) rows = rows.filter((g) => g.status === ctx.query.status)
   if (ctx.query.active_only === 'true') rows = rows.filter((g) => g.status === 'ACTIVE')
   if (ctx.query.resource_id) rows = rows.filter((g) => g.resource_id === ctx.query.resource_id)
@@ -553,10 +553,10 @@ on('POST', '/api/v1/pam/admin/actions/jit-requests/:id/approve', (ctx) => {
   if (!['PENDING', 'PARTIALLY_APPROVED'].includes(r.status))
     return fail(ctx.res, 409, 'ALREADY_DECIDED', `This request is already ${r.status.toLowerCase()}.`)
   const existing = (db.approvals[r.id] ||= [])
-  if (existing.some((a) => a.approver_user_id === ctx.user.id))
+  if (existing.some((a) => a.approver_user_id === ctx.user.user_id))
     return fail(ctx.res, 409, 'DUPLICATE_APPROVER', 'You have already approved this request. A second, different administrator has to approve it.')
   existing.push({
-    id: uid('ap'), jit_request_id: r.id, approver_user_id: ctx.user.id, approver_username: ctx.user.username,
+    id: uid('ap'), jit_request_id: r.id, approver_user_id: ctx.user.user_id, approver_username: ctx.user.username,
     approver_rank: isRoot(ctx.user) ? 100 : 80, decision: 'APPROVE', reason: ctx.body?.reason || '',
     decided_at: new Date().toISOString(),
   })
@@ -569,7 +569,7 @@ on('POST', '/api/v1/pam/admin/actions/jit-requests/:id/approve', (ctx) => {
       id: uid('gr'), org_id: F.ORG, jit_request_id: r.id, user_id: r.requester_user_id,
       username: r.requester_username, resource_id: r.resource_id, resource_name: r.resource_name,
       status: 'ACTIVE', is_breakglass: r.request_type === 'BREAKGLASS',
-      granted_at: new Date().toISOString(), expires_at: F.iso(r.duration_minutes), granted_by: ctx.user.id,
+      granted_at: new Date().toISOString(), expires_at: F.iso(r.duration_minutes), granted_by: ctx.user.user_id,
     }
     db.grants.unshift(grant)
   }
@@ -588,7 +588,7 @@ on('POST', '/api/v1/pam/admin/actions/jit-requests/:id/deny', (ctx) => {
   r.decided_at = new Date().toISOString()
   r.decision_reason = reason
   ;(db.approvals[r.id] ||= []).push({
-    id: uid('ap'), jit_request_id: r.id, approver_user_id: ctx.user.id, approver_username: ctx.user.username,
+    id: uid('ap'), jit_request_id: r.id, approver_user_id: ctx.user.user_id, approver_username: ctx.user.username,
     approver_rank: isRoot(ctx.user) ? 100 : 80, decision: 'DENY', reason, decided_at: new Date().toISOString(),
   })
   auditRow(ctx.user, 'JIT', 'jit.request.denied', 'DENIED', `resource:${r.resource_name}`, { reason })
@@ -611,14 +611,14 @@ on('POST', '/api/v1/pam/admin/actions/grants/:id/revoke', (ctx) => {
     return fail(ctx.res, 422, 'VALIDATION_FAILED', 'Check the highlighted fields.', { reason: 'Say why this access is being taken back.' })
   g.status = 'REVOKED'
   g.revoked_at = new Date().toISOString()
-  g.revoked_by = ctx.user.id
+  g.revoked_by = ctx.user.user_id
   g.revoke_reason = reason
   const killed = db.sessions.filter((s) => s.status === 'ACTIVE' && s.grant_id === g.id)
   for (const s of killed) {
     s.status = 'KILLED'
     s.ended_at = new Date().toISOString()
     s.kill_reason = 'Grant revoked'
-    s.killed_by = ctx.user.id
+    s.killed_by = ctx.user.user_id
   }
   auditRow(ctx.user, 'JIT', 'jit.grant.revoked', 'SUCCESS', `resource:${g.resource_name}`, { reason })
   return ok(ctx.res, { grant: g, sessions_killed: killed.length })
@@ -641,7 +641,7 @@ on('POST', '/api/v1/pam/admin/actions/sessions/:id/kill', (ctx) => {
   s.status = 'KILLED'
   s.ended_at = new Date().toISOString()
   s.kill_reason = reason
-  s.killed_by = ctx.user.id
+  s.killed_by = ctx.user.user_id
   auditRow(ctx.user, 'SESSION', 'session.killed', 'SUCCESS', `resource:${s.resource_name}`, { reason })
   return ok(ctx.res, s)
 }, 'admin')
@@ -757,13 +757,13 @@ on('GET', '/api/v1/pam/admin/identity/users', (ctx) => {
   return ok(ctx.res, { users: rows, count: rows.length })
 }, 'admin')
 on('GET', '/api/v1/pam/admin/identity/users/:id', (ctx) => {
-  const u = db.users.find((x) => x.id === ctx.params.id)
+  const u = db.users.find((x) => x.user_id === ctx.params.id)
   if (!u) return fail(ctx.res, 404, 'NOT_FOUND', 'That account does not exist.')
   return ok(ctx.res, {
     user: u,
     access: {
       roles: u.roles.map((n) => db.roles.find((r) => r.name === n) || { name: n }),
-      policies: (db.userPolicies[u.id] || []).map((pid) => db.policies.find((p) => p.id === pid)).filter(Boolean),
+      policies: (db.userPolicies[u.user_id] || []).map((pid) => db.policies.find((p) => p.id === pid)).filter(Boolean),
     },
   })
 }, 'admin')
@@ -777,7 +777,7 @@ on('POST', '/api/v1/pam/admin/identity/users', (ctx) => {
   if (db.users.some((u) => u.username.toLowerCase() === String(b.username).trim().toLowerCase()))
     return fail(ctx.res, 409, 'ALREADY_EXISTS', `The username "${b.username}" is already taken.`, { username: 'That username is taken.' })
   const u = {
-    id: uid('u'), org_id: F.ORG, username: String(b.username).trim(), email: b.email,
+    user_id: uid('u'), org_id: F.ORG, username: String(b.username).trim(), email: b.email,
     full_name: b.full_name || '', status: 'ACTIVE', mfa_enabled: false, is_protected: false,
     roles: b.role && b.role !== 'user' ? ['user', b.role] : ['user'],
     failed_login_attempts: 0, last_login_at: null, last_login_ip: null,
@@ -788,7 +788,7 @@ on('POST', '/api/v1/pam/admin/identity/users', (ctx) => {
   return ok(ctx.res, { user: u }, 201)
 }, 'admin')
 on('PATCH', '/api/v1/pam/admin/identity/users/:id', (ctx) => {
-  const u = db.users.find((x) => x.id === ctx.params.id)
+  const u = db.users.find((x) => x.user_id === ctx.params.id)
   if (!u) return fail(ctx.res, 404, 'NOT_FOUND', 'That account does not exist.')
   if (ctx.body.email !== undefined) {
     if (!/^\S+@\S+\.\S+$/.test(String(ctx.body.email)))
@@ -801,7 +801,7 @@ on('PATCH', '/api/v1/pam/admin/identity/users/:id', (ctx) => {
   return ok(ctx.res, { user: u })
 }, 'admin')
 on('POST', '/api/v1/pam/admin/identity/users/:id/status', (ctx) => {
-  const u = db.users.find((x) => x.id === ctx.params.id)
+  const u = db.users.find((x) => x.user_id === ctx.params.id)
   if (!u) return fail(ctx.res, 404, 'NOT_FOUND', 'That account does not exist.')
   if (u.is_protected)
     return fail(ctx.res, 403, 'PROTECTED_ACCOUNT', 'This account is protected and its status cannot be changed from the console.')
@@ -815,12 +815,12 @@ on('POST', '/api/v1/pam/admin/identity/users/:id/status', (ctx) => {
   return ok(ctx.res, u)
 }, 'admin')
 on('DELETE', '/api/v1/pam/admin/identity/users/:id', (ctx) => {
-  const u = db.users.find((x) => x.id === ctx.params.id)
+  const u = db.users.find((x) => x.user_id === ctx.params.id)
   if (!u) return fail(ctx.res, 404, 'NOT_FOUND', 'That account does not exist.')
   if (u.is_protected) return fail(ctx.res, 403, 'PROTECTED_ACCOUNT', 'This account is protected and cannot be deleted.')
   u.status = 'DELETED'
   auditRow(ctx.user, 'ADMIN', 'admin.user.deleted', 'SUCCESS', `user:${u.username}`)
-  return ok(ctx.res, { deleted: true, id: u.id })
+  return ok(ctx.res, { deleted: true, id: u.user_id })
 }, 'admin')
 on('POST', '/api/v1/pam/admin/identity/users/:id/reset-password', (ctx) => {
   if (String(ctx.body?.new_password || '').length < 12)
@@ -829,7 +829,7 @@ on('POST', '/api/v1/pam/admin/identity/users/:id/reset-password', (ctx) => {
   return ok(ctx.res, { reset: true })
 }, 'admin')
 on('POST', '/api/v1/pam/admin/identity/users/:id/reset-mfa', (ctx) => {
-  const u = db.users.find((x) => x.id === ctx.params.id)
+  const u = db.users.find((x) => x.user_id === ctx.params.id)
   if (!u) return fail(ctx.res, 404, 'NOT_FOUND', 'That account does not exist.')
   if (String(ctx.body?.reason || '').trim().length < 5)
     return fail(ctx.res, 422, 'VALIDATION_FAILED', 'Check the highlighted fields.', { reason: 'Say why the device is being removed.' })
@@ -838,7 +838,7 @@ on('POST', '/api/v1/pam/admin/identity/users/:id/reset-mfa', (ctx) => {
   return ok(ctx.res, u)
 }, 'admin')
 on('POST', '/api/v1/pam/admin/identity/users/:id/roles', (ctx) => {
-  const u = db.users.find((x) => x.id === ctx.params.id)
+  const u = db.users.find((x) => x.user_id === ctx.params.id)
   if (!u) return fail(ctx.res, 404, 'NOT_FOUND', 'That account does not exist.')
   const role = ctx.body?.role_name
   if (['admin', 'root'].includes(role))
@@ -848,7 +848,7 @@ on('POST', '/api/v1/pam/admin/identity/users/:id/roles', (ctx) => {
   return ok(ctx.res, u)
 }, 'admin')
 on('DELETE', '/api/v1/pam/admin/identity/users/:id/roles/:role', (ctx) => {
-  const u = db.users.find((x) => x.id === ctx.params.id)
+  const u = db.users.find((x) => x.user_id === ctx.params.id)
   if (!u) return fail(ctx.res, 404, 'NOT_FOUND', 'That account does not exist.')
   u.roles = u.roles.filter((r) => r !== ctx.params.role)
   auditRow(ctx.user, 'ADMIN', 'admin.role.removed', 'SUCCESS', `user:${u.username}`, { role: ctx.params.role })
@@ -865,7 +865,7 @@ on('DELETE', '/api/v1/pam/admin/identity/users/:id/policies/:policyId', (ctx) =>
 }, 'admin')
 on('GET', '/api/v1/pam/admin/identity/users/:id/delegation', (ctx) => {
   const d = db.delegations[ctx.params.id]
-  const u = db.users.find((x) => x.id === ctx.params.id)
+  const u = db.users.find((x) => x.user_id === ctx.params.id)
   if (!d) {
     const inherent = u && u.roles.includes('admin')
     return ok(ctx.res, inherent
@@ -877,29 +877,29 @@ on('GET', '/api/v1/pam/admin/identity/users/:id/delegation', (ctx) => {
 on('POST', '/api/v1/pam/admin/identity/users/:id/delegate-admin', (ctx) => {
   if (!isRoot(ctx.user))
     return fail(ctx.res, 403, 'ROOT_REQUIRED', 'Only root can grant administrative access.')
-  const u = db.users.find((x) => x.id === ctx.params.id)
+  const u = db.users.find((x) => x.user_id === ctx.params.id)
   if (!u) return fail(ctx.res, 404, 'NOT_FOUND', 'That account does not exist.')
   if (u.is_protected) return fail(ctx.res, 403, 'PROTECTED_ACCOUNT', 'This account is protected.')
   if (String(ctx.body?.reason || '').trim().length < 10)
     return fail(ctx.res, 422, 'VALIDATION_FAILED', 'Check the highlighted fields.', { reason: 'Give at least 10 characters of justification.' })
   if (!u.roles.includes('admin')) u.roles.push('admin')
-  db.delegations[u.id] = {
+  db.delegations[u.user_id] = {
     status: 'active', granted_at: new Date().toISOString(),
     expires_at: ctx.body.expires_at || null, reason: ctx.body.reason, granted_by: ctx.user.username,
   }
   auditRow(ctx.user, 'ADMIN', 'admin.delegation.granted', 'SUCCESS', `user:${u.username}`)
-  return ok(ctx.res, db.delegations[u.id])
+  return ok(ctx.res, db.delegations[u.user_id])
 }, 'admin')
 on('DELETE', '/api/v1/pam/admin/identity/users/:id/delegate-admin', (ctx) => {
   if (!isRoot(ctx.user)) return fail(ctx.res, 403, 'ROOT_REQUIRED', 'Only root can revoke administrative access.')
-  const u = db.users.find((x) => x.id === ctx.params.id)
+  const u = db.users.find((x) => x.user_id === ctx.params.id)
   if (!u) return fail(ctx.res, 404, 'NOT_FOUND', 'That account does not exist.')
   if (String(ctx.body?.reason || '').trim().length < 10)
     return fail(ctx.res, 422, 'VALIDATION_FAILED', 'Check the highlighted fields.', { reason: 'Give at least 10 characters of justification.' })
   u.roles = u.roles.filter((r) => r !== 'admin')
-  db.delegations[u.id] = { status: 'revoked', revoked_at: new Date().toISOString(), reason: ctx.body.reason, revoked_by: ctx.user.username }
+  db.delegations[u.user_id] = { status: 'revoked', revoked_at: new Date().toISOString(), reason: ctx.body.reason, revoked_by: ctx.user.username }
   auditRow(ctx.user, 'ADMIN', 'admin.delegation.revoked', 'SUCCESS', `user:${u.username}`)
-  return ok(ctx.res, db.delegations[u.id])
+  return ok(ctx.res, db.delegations[u.user_id])
 }, 'admin')
 
 // rbac
@@ -998,7 +998,7 @@ on('GET', '/api/v1/pam/admin/mfa-policy', (ctx) =>
 on('GET', '/api/v1/pam/admin/mfa-policy/compliance', (ctx) =>
   ok(ctx.res, {
     accounts: db.users.map((u) => ({
-      user_id: u.id, username: u.username, email: u.email, roles: u.roles,
+      user_id: u.user_id, username: u.username, email: u.email, roles: u.roles,
       mfa_enabled: u.mfa_enabled, status: u.status,
     })),
     total: db.users.length,

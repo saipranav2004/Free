@@ -132,6 +132,11 @@ export function KpiCell({
   return <div className={cellClass}>{body}</div>
 }
 
+function withoutKey(item) {
+  const { key, ...rest } = item
+  return rest
+}
+
 export function KpiStrip({ items, columns, loading = false, className, children }) {
   const cells = items || []
   const count = columns || cells.length || 4
@@ -145,7 +150,11 @@ export function KpiStrip({ items, columns, loading = false, className, children 
     >
       {children ||
         cells.map((item) => (
-          <KpiCell key={item.key || item.label} {...item} loading={loading || item.loading} />
+          // `key` is pulled OUT of the spread rather than passed through it.
+          // Spreading an object that carries a `key` field into JSX makes
+          // React ignore it and warn, which is how a list ends up with no
+          // stable identity and re-mounts on every render.
+          <KpiCell key={item.key || item.label} {...withoutKey(item)} loading={loading || item.loading} />
         ))}
     </div>
   )

@@ -2,77 +2,35 @@ import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import clsx from 'clsx'
-import {
-  Radio,
-  ShieldAlert,
-  Square,
-  Timer,
-  Users,
-  MonitorPlay,
-  SearchX,
-  Download,
-  ChevronRight,
-  Copy,
-  Hourglass,
-  CircleSlash,
-} from 'lucide-react'
+import { Copy, MonitorPlay, ShieldAlert, Square } from 'lucide-react'
 import { listMySessions, endSession } from '../../api/sessions'
 import { listSessions, killSession } from '../../api/admin'
 import { useAuthStore } from '../../store/authStore'
-import { PageHeader, Card, EmptyState, DetailList, ListPanel } from '../../components/common/Layout'
-import { QueryState } from '../../components/common/QueryState'
-import { KpiStrip } from '../../components/common/KpiStrip'
-import { Pagination } from '../../components/common/Pagination'
-import { Badge, StatusIndicator, MetaTag } from '../../components/common/Badge'
-import { stickyCell, stickyHeader, cell, COL, TruncCell } from '../../components/common/tableStyles'
-import { Button } from '../../components/common/Button'
-import { Checkbox } from '../../components/common/Checkbox'
-import { Drawer } from '../../components/common/Drawer'
-import { BulkActionBar } from '../../components/common/BulkActionBar'
-import { SegmentedControl, FilterToggle } from '../../components/common/SegmentedControl'
+import { Container, PageTitle, Stack } from '../../components/ui/layout'
+import { DataTable, RowActions, SkeletonGrid, SortTh, Td, Th, Tr, Trunc } from '../../components/ui/grid'
+import { MenuItem, RowMenu } from '../../components/ui/menu'
+import { AlarmTag, FilterChip, Meta, StatusDot } from '../../components/ui/bits'
 import {
-  SearchField,
-  SortHeader,
-  ColumnChooser,
-  ExportMenu,
-  RefreshControl,
   ActiveFilters,
-} from '../../components/common/TableControls'
+  CommandBar,
+  ExportMenu,
+  Pagination,
+  PreferencesMenu,
+  RefreshControl,
+  SearchField,
+} from '../../components/ui/chrome'
+import { DeniedState, EmptyState, ErrorState, NoMatchState, OfflineState } from '../../components/ui/states'
+import { Button } from '../../components/common/Button'
+import { Drawer } from '../../components/common/Drawer'
+import { SegmentedControl, FilterToggle } from '../../components/common/SegmentedControl'
 import { ConfirmDialog } from '../../components/common/ConfirmDialog'
+import { DetailList } from '../../components/common/Layout'
 import { ResourceTypeIcon } from '../../components/resources/ResourceTypeIcon'
 import { useTableState } from '../../hooks/useTableState'
 import { exportRowsToCsv, exportRowsToJson } from '../../lib/exportRows'
 import { formatDateTime, formatDuration, formatRelativeToNow } from '../../lib/format'
 import { SESSIONS_POLL_MS } from '../../config/constants'
-import { apiErrorMessage } from '../../lib/apiError'
-
-// ---------------------------------------------------------------------------
-// Sessions, the live-operations surface
-// ---------------------------------------------------------------------------
-// WHAT WAS WRONG. This page was a stack of list rows: one line per session,
-// duration buried in prose, no search, no sort, no way to see twenty sessions
-// at once, and a four-cell KPI strip whose numbers described "this page"
-// rather than the estate. A session list is the closest thing this product has
-// to a NOC screen, the questions asked of it are "what is connected right
-// now", "who has been in there for three hours", "is anything break-glass" ,
-// and none of those are answerable by scanning prose rows.
-//
-// WHAT IT IS NOW. The same dense-grid treatment as Identity: frozen identity
-// column, sortable columns, server-shaped client paging, status facets with
-// live counts, search, density, column control, export, and an explicit
-// last-updated/refresh control (a stale "no active sessions" is dangerous in a
-// way a stale user list is not). Row click opens a detail drawer instead of
-// navigating away from a screen the operator is watching.
-//
-// THE KPI BAND IS KEPT HERE, DELIBERATELY, AND ONLY HERE-ISH: unlike an
-// inventory page, "active now / break-glass / longest running" are not row
-// counts, they are the state of the estate, and they change while you watch.
-// It only renders in the live view, reading session HISTORY, the strip would
-// be summarising an arbitrary time slice, so it is suppressed.
-//
-// HONESTY: both endpoints return their whole page in one response. We ask for
-// up to MAX_ROWS and say so when there are more, rather than implying the
-// figures cover everything.
+import { apiErrorMessage, normalizeApiError } from '../../lib/apiError'
 
 const MAX_ROWS = 200
 
@@ -103,18 +61,15 @@ const CSV_COLUMNS = [
   { key: 'is_breakglass', label: 'Break-glass', value: (s) => (s.is_breakglass ? 'yes' : 'no') },
 ]
 
-const STATUS_TONE = {
-  ACTIVE: 'emerald',
-  COMPLETED: 'neutral',
-  KILLED: 'red',
-  FAILED: 'red',
+// Status is a dot plus its word in one cell. A live session's dot pulses,
+// which is the only ambient animation in the product and the one place it
+// carries information rather than decorating.
+const DOT_TONE = {
+  ACTIVE: 'ok',
+  COMPLETED: 'muted',
+  KILLED: 'danger',
+  FAILED: 'danger',
 }
-
-// A killed or failed session is an exception worth a filled chip; ACTIVE and
-// COMPLETED are on every row, so they stay quiet indicators. See Badge.jsx.
-const EXCEPTION_STATUSES = ['KILLED', 'FAILED']
-
-const NO_BULK_ENDPOINT = 'Requires a backend batch endpoint, not available yet'
 
 // Elapsed time for a still-running session. The backend only populates
 // duration_seconds once a session ends (session.go's End()), so an ACTIVE
@@ -144,14 +99,9 @@ function DurationCell({ session }) {
   const secs = elapsedSeconds(session)
   const live = session.status === 'ACTIVE'
   const tone =
-    live && secs >= 4 * 3600
-      ? 'text-red-600 dark:text-red-400'
-      : live && secs >= 1 * 3600
-        ? 'text-amber-600 dark:text-amber-400'
-        : 'text-ink-300'
+    live && secs >= 4 * 3600 ? 'text-danger' : live && secs >= 3600 ? 'text-warn' : 'text-secondary'
   return (
-    <span className={clsx('inline-flex items-center gap-1.5 font-mono text-xs tabular-nums', tone)}>
-      <Timer className="h-3 w-3 flex-none opacity-70" strokeWidth={1.75} />
+    <span className={clsx('font-mono text-sm tabular', tone)} title={live ? 'Still running' : undefined}>
       {formatDuration(secs)}
     </span>
   )
@@ -183,19 +133,10 @@ function SessionDrawer({ session, onClose, onEnd, onKill, canKill, isMutating })
         )
       }
     >
-      <div className="flex flex-wrap items-center gap-2 px-4 py-3.5">
-        <StatusIndicator tone={STATUS_TONE[session.status] || 'neutral'} pulse={isActive}>
-          {session.status}
-        </StatusIndicator>
-        {session.is_breakglass && (
-          <Badge
-            className="bg-red-100 text-red-700 ring-red-600/20 dark:bg-red-500/15 dark:text-red-300 dark:ring-red-500/30"
-            dot
-          >
-            Break-glass
-          </Badge>
-        )}
-        {session.protocol && <MetaTag mono>{session.protocol}</MetaTag>}
+      <div className="flex flex-wrap items-center gap-3 border-b border-line-soft px-4 py-3">
+        <StatusDot tone={DOT_TONE[session.status] || 'muted'} label={session.status} live={isActive} />
+        {session.is_breakglass && <AlarmTag />}
+        {session.protocol && <Meta mono>{session.protocol}</Meta>}
       </div>
 
       <DetailList
@@ -340,7 +281,6 @@ export default function SessionsPage() {
   }, [rows])
 
   const show = (key) => !table.visibleColumns || table.visibleColumns.includes(key)
-  const pad = table.density === 'compact' ? 'py-1.5' : 'py-2'
 
   const chips = []
   if (search) chips.push({ key: 'q', label: 'Search', value: search, onClear: () => setSearch('') })
@@ -363,424 +303,349 @@ export default function SessionsPage() {
 
   const scopes = SCOPES.filter((s) => s.key !== 'all' || isAdmin)
 
+  const err = query.isError ? normalizeApiError(query.error) : null
+  const colSpan = COLUMNS.length + 1
+  const clearAll = () => {
+    setSearch('')
+    table.setFilters({ status: 'all', breakglass: false })
+  }
+
   return (
-    <div className="pb-24">
-      <PageHeader
-        eyebrow="Access"
+    <Stack gap="lg">
+      <PageTitle
         title="Sessions"
-        description="Tracked connection sessions the start/end lifecycle used for audit and JIT grant expiry, not a live terminal."
-        meta={
-          <>
-            {activeOnly && (
-              <span className="inline-flex items-center gap-2 rounded-md border border-surface-700 bg-surface-900 px-2.5 py-1 text-2xs font-medium uppercase tracking-[0.08em] text-ink-400">
-                <span className="relative flex h-1.5 w-1.5 flex-none rounded-full bg-emerald-500">
-                  <span className="dot-live absolute inset-0 rounded-full bg-emerald-500" />
-                </span>
-                Auto-refreshing every {Math.round(SESSIONS_POLL_MS / 1000)}s
-              </span>
-            )}
-            {truncated && (
-              <span className="text-2xs font-medium text-ink-500">
-                Showing the {rows.length} most recent of {serverTotal}
-              </span>
-            )}
-          </>
+        counter={query.isSuccess ? rows.length : undefined}
+        description={
+          scope === 'mine'
+            ? 'Connections opened in your name, live and historic.'
+            : 'Every connection open across the organisation.'
+        }
+        actions={
+          scopes.length > 1 && (
+            <SegmentedControl
+              size="sm"
+              ariaLabel="Session scope"
+              value={scope}
+              onChange={setScope}
+              options={scopes.map((sc) => ({ key: sc.key, label: sc.label }))}
+            />
+          )
         }
       />
 
-      {/* Live band. Estate state, not row counts, and only while watching the
- live view; over history these figures would describe an arbitrary
- slice of the past. */}
-      {activeOnly && (
-        <KpiStrip
-          className="mb-5"
-          columns={3}
-          loading={query.isLoading}
-          items={[
-            {
-              key: 'active',
-              label: scope === 'mine' ? 'Your active sessions' : 'Active across the org',
-              value: activeRows.length,
-              icon: scope === 'mine' ? Radio : Users,
-              tone: 'emerald',
-              live: activeRows.length > 0,
-              description:
-                activeRows.length === 0 ? 'Nothing is connected right now' : 'Connected at this moment',
-            },
-            {
-              key: 'breakglass',
-              label: 'Break-glass in use',
-              value: breakglassActive,
-              icon: ShieldAlert,
-              tone: breakglassActive > 0 ? 'red' : 'default',
-              description: breakglassActive > 0 ? 'Emergency access is open' : 'No emergency access open',
-            },
-            {
-              key: 'longest',
-              label: 'Longest running',
-              value: activeRows.length ? formatDuration(longest) : '-',
-              icon: Hourglass,
-              tone: longest >= 4 * 3600 ? 'amber' : 'default',
-              description: 'Oldest session still open',
-            },
-          ]}
-        />
-      )}
+      {/* Live posture as three facts on a rule, not a wall of KPI cards. Each
+          is a count this page already holds, and none of them is a trend,
+          because the API returns point in time state with no history. */}
+      <div className="flex flex-wrap items-baseline gap-x-8 gap-y-2 border-y border-line-soft py-3">
+        <span className="flex items-baseline gap-2">
+          <span className="text-2xl font-bold tabular text-primary">{activeRows.length}</span>
+          <span className="text-sm text-secondary">active now</span>
+        </span>
+        {breakglassActive > 0 && (
+          <span className="flex items-baseline gap-2">
+            <span className="text-2xl font-bold tabular text-danger">{breakglassActive}</span>
+            <span className="text-sm text-secondary">under break glass</span>
+          </span>
+        )}
+        {longest > 0 && (
+          <span className="flex items-baseline gap-2">
+            <span className="text-2xl font-bold tabular text-primary">{formatDuration(longest)}</span>
+            <span className="text-sm text-secondary">longest running</span>
+          </span>
+        )}
+        {truncated && (
+          <span className="text-sm text-warn">
+            Showing the most recent {rows.length} of {serverTotal}. Narrow the filters to see the rest.
+          </span>
+        )}
+      </div>
 
-      <ListPanel
-        toolbar={
-          <div className="space-y-3">
-            <div className="flex flex-wrap items-center gap-2">
-              {scopes.length > 1 && (
-                <SegmentedControl
-                  options={scopes}
-                  value={scope}
-                  onChange={setScope}
-                  ariaLabel="Session scope"
-                />
-              )}
-
-              <SearchField
-                value={search}
-                onChange={setSearch}
-                placeholder="Search resource, user or protocol…"
-                className="min-w-[14rem] sm:max-w-xs"
-              />
-
-              {statusFacets.length > 1 && (
-                <SegmentedControl
-                  size="sm"
-                  ariaLabel="Filter by status"
-                  value={table.filters.status}
-                  onChange={(v) => table.setFilter('status', v)}
-                  options={statusFacets}
-                />
-              )}
-
-              <FilterToggle checked={activeOnly} onChange={setActiveOnly} label="Active only" />
-              <FilterToggle
-                checked={table.filters.breakglass}
-                onChange={(v) => table.setFilter('breakglass', v)}
-                label="Break-glass"
-              />
-
-              <span className="ml-auto flex flex-wrap items-center gap-2">
-                <ColumnChooser
-                  columns={COLUMNS}
-                  visible={table.visibleColumns}
-                  onChange={table.setVisibleColumns}
-                />
-                <ExportMenu
-                  count={table.total}
-                  disabled={table.total === 0}
-                  onExportCsv={() => exportRowsToCsv(table.filteredRows, CSV_COLUMNS, 'sessions')}
-                  onExportJson={() => exportRowsToJson(table.filteredRows, CSV_COLUMNS, 'sessions')}
-                />
-                <RefreshControl
-                  onRefresh={() => query.refetch()}
-                  isFetching={query.isFetching}
-                  updatedAt={query.dataUpdatedAt}
-                />
-              </span>
-            </div>
-
-            {chips.length > 0 && (
-              <div className="border-t border-surface-800 pt-3">
-                <ActiveFilters
-                  chips={chips}
-                  onClearAll={() => {
-                    setSearch('')
-                    table.resetFilters()
-                  }}
-                />
-              </div>
-            )}
-          </div>
-        }
-      >
-        <QueryState
-          query={query}
-          empty={(d) => !d?.sessions || d.sessions.length === 0}
-          emptyTitle={activeOnly ? 'No active sessions' : 'No sessions found'}
-          emptyMessage={
-            activeOnly
-              ? 'Nothing is connected right now. Sessions appear here the moment a brokered connection opens.'
-              : 'No session history matches this view.'
+      <Stack gap="sm">
+        <CommandBar
+          summary={
+            query.isSuccess && table.total !== rows.length
+              ? `${table.total} of ${rows.length} shown`
+              : undefined
           }
         >
-          {() =>
-            table.total === 0 ? (
-              <Card>
-                <EmptyState
-                  icon={SearchX}
-                  title="No sessions match these filters"
-                  description="Every returned session was filtered out by the current search or status selection."
-                  action={
-                    <Button
-                      variant="secondary"
-                      onClick={() => {
-                        setSearch('')
-                        table.resetFilters()
-                      }}
-                    >
-                      Clear filters
-                    </Button>
-                  }
-                />
-              </Card>
-            ) : (
-              <>
-                <div className="relative overflow-x-auto overscroll-x-contain">
-                  <table className="w-full min-w-[58rem] table-fixed border-separate border-spacing-0 text-sm">
-                    <colgroup>
-                      <col className={COL.select} />
-                      <col className={COL.name} />
-                      {show('username') && <col className={COL.medium} />}
-                      {show('protocol') && <col className={COL.short} />}
-                      {show('started_at') && <col className={COL.timestamp} />}
-                      {show('duration') && <col className={COL.short} />}
-                      {show('status') && <col className={COL.status} />}
-                      <col className={COL.actions} />
-                    </colgroup>
-                    <thead>
-                      <tr>
-                        <th scope="col" className={clsx(stickyHeader({ left: 'left-0' }), 'px-4 py-2.5')}>
-                          <Checkbox
-                            checked={table.allOnPageSelected}
-                            indeterminate={table.someOnPageSelected}
-                            onChange={table.toggleAllOnPage}
-                            srLabel="Select all sessions on this page"
-                          />
-                        </th>
-                        <SortHeader
-                          label="Resource"
-                          columnKey="resource_name"
-                          sort={table.sort}
-                          onSort={table.toggleSort}
-                          className={clsx(stickyHeader({ left: 'left-12', edge: true }), 'z-30')}
-                        />
-                        {show('username') && (
-                          <SortHeader
-                            label="User"
-                            columnKey="username"
-                            sort={table.sort}
-                            onSort={table.toggleSort}
-                          />
-                        )}
-                        {show('protocol') && (
-                          <SortHeader
-                            label="Protocol"
-                            columnKey="protocol"
-                            sort={table.sort}
-                            onSort={table.toggleSort}
-                          />
-                        )}
-                        {show('started_at') && (
-                          <SortHeader
-                            label="Started"
-                            columnKey="started_at"
-                            sort={table.sort}
-                            onSort={table.toggleSort}
-                          />
-                        )}
-                        {show('duration') && (
-                          <SortHeader
-                            label="Duration"
-                            columnKey="duration"
-                            sort={table.sort}
-                            onSort={table.toggleSort}
-                          />
-                        )}
-                        {show('status') && (
-                          <SortHeader
-                            label="Status"
-                            columnKey="status"
-                            sort={table.sort}
-                            onSort={table.toggleSort}
-                          />
-                        )}
-                        <SortHeader label="Actions" columnKey="_actions" srOnly />
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {table.pageRows.map((s) => {
-                        const selected = table.isSelected(s)
-                        const isActive = s.status === 'ACTIVE'
-                        return (
-                          <tr key={s.id} className="group">
-                            <td className={clsx(stickyCell({ left: 'left-0', selected }), 'px-4', pad)}>
-                              <Checkbox
-                                checked={selected}
-                                onChange={() => table.toggleRow(s)}
-                                srLabel={`Select session on ${s.resource_name}`}
-                              />
-                            </td>
-                            <td
-                              className={clsx(
-                                stickyCell({ left: 'left-12', selected, edge: true }),
-                                'px-4',
-                                pad
-                              )}
+          <FilterToggle checked={activeOnly} onChange={setActiveOnly} label="Active only" />
+          <ExportMenu
+            count={table.filteredRows.length}
+            disabled={table.filteredRows.length === 0}
+            onExportCsv={() => exportRowsToCsv(table.filteredRows, CSV_COLUMNS, 'sessions')}
+            onExportJson={() => exportRowsToJson(table.filteredRows, CSV_COLUMNS, 'sessions')}
+          />
+          <RefreshControl
+            onRefresh={() => query.refetch()}
+            isFetching={query.isFetching}
+            updatedAt={query.dataUpdatedAt}
+          />
+          <PreferencesMenu
+            columns={COLUMNS}
+            visible={table.visibleColumns}
+            onVisibleChange={table.setVisibleColumns}
+            pageSize={table.pageSize}
+            onPageSize={table.setPageSize}
+          />
+        </CommandBar>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <SearchField
+            value={search}
+            onChange={setSearch}
+            placeholder="Search resource, user or protocol"
+            label="Search sessions"
+          />
+          {statusFacets.length > 2 &&
+            statusFacets.map((f) => (
+              <FilterChip
+                key={f.key}
+                active={table.filters.status === f.key}
+                count={f.count}
+                onClick={() => table.setFilter('status', f.key)}
+              >
+                {f.label}
+              </FilterChip>
+            ))}
+          <FilterChip
+            active={table.filters.breakglass}
+            count={rows.filter((r) => r.is_breakglass).length}
+            onClick={() => table.setFilter('breakglass', !table.filters.breakglass)}
+          >
+            Break glass
+          </FilterChip>
+        </div>
+
+        <ActiveFilters chips={chips} onClearAll={clearAll} />
+      </Stack>
+
+      <Container padded={false}>
+        {query.isLoading ? (
+          <table className="w-full">
+            <tbody>
+              <SkeletonGrid colSpan={colSpan} rows={8} />
+            </tbody>
+          </table>
+        ) : err ? (
+          err.status === 403 ? (
+            <DeniedState description={err.message} />
+          ) : err.code === 'network_error' ? (
+            <OfflineState onRetry={() => query.refetch()} retrying={query.isFetching} />
+          ) : (
+            <ErrorState
+              description={err.message}
+              onRetry={() => query.refetch()}
+              retrying={query.isFetching}
+            />
+          )
+        ) : rows.length === 0 ? (
+          <EmptyState
+            icon={MonitorPlay}
+            title={activeOnly ? 'No sessions are open' : 'No sessions yet'}
+            description={
+              activeOnly
+                ? 'Nothing is connected right now. Turn off Active only to see completed sessions.'
+                : 'A session appears here as soon as somebody connects to a resource.'
+            }
+            action={
+              activeOnly ? (
+                <Button variant="subtle" onClick={() => setActiveOnly(false)}>
+                  Show all sessions
+                </Button>
+              ) : null
+            }
+          />
+        ) : table.total === 0 ? (
+          <NoMatchState description="No session matches the current search and filters." onClear={clearAll} />
+        ) : (
+          <>
+            <DataTable minWidth="62rem">
+              <colgroup>
+                {show('resource_name') && <col className="w-[17rem] min-w-[13rem]" />}
+                {show('username') && <col className="w-[11rem]" />}
+                {show('protocol') && <col className="w-[6.5rem]" />}
+                {show('started_at') && <col className="w-[11rem]" />}
+                {show('duration') && <col className="w-[8rem]" />}
+                {show('status') && <col className="w-[8.5rem]" />}
+                <col className="w-[9rem]" />
+              </colgroup>
+
+              <thead>
+                <tr>
+                  {show('resource_name') && (
+                    <SortTh columnKey="resource_name" sort={table.sort} onSort={table.toggleSort} sticky edge>
+                      Resource
+                    </SortTh>
+                  )}
+                  {show('username') && (
+                    <SortTh columnKey="username" sort={table.sort} onSort={table.toggleSort}>
+                      User
+                    </SortTh>
+                  )}
+                  {show('protocol') && (
+                    <SortTh columnKey="protocol" sort={table.sort} onSort={table.toggleSort}>
+                      Protocol
+                    </SortTh>
+                  )}
+                  {/* A timestamp is qualitative and stays left aligned. A
+                      duration is a quantity, so it is right aligned and
+                      tabular, and so is its header. */}
+                  {show('started_at') && (
+                    <SortTh columnKey="started_at" sort={table.sort} onSort={table.toggleSort}>
+                      Started
+                    </SortTh>
+                  )}
+                  {show('duration') && (
+                    <SortTh columnKey="duration" sort={table.sort} onSort={table.toggleSort} align="right">
+                      Duration
+                    </SortTh>
+                  )}
+                  {show('status') && (
+                    <SortTh columnKey="status" sort={table.sort} onSort={table.toggleSort}>
+                      Status
+                    </SortTh>
+                  )}
+                  <Th align="right">
+                    <span className="sr-only">Actions</span>
+                  </Th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {table.pageRows.map((sess) => {
+                  const isActive = sess.status === 'ACTIVE'
+                  const canKill = isAdmin && isActive
+                  const isMine = scope === 'mine'
+                  return (
+                    <Tr key={sess.id}>
+                      {show('resource_name') && (
+                        <Td sticky edge>
+                          <div className="flex min-w-0 items-center gap-2.5">
+                            <ResourceTypeIcon
+                              type={sess.resource_type}
+                              className="h-4 w-4 flex-none text-tertiary"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setDetail(sess)}
+                              title={sess.resource_name}
+                              className="min-w-0 truncate text-sm font-medium text-primary transition-colors hover:text-accent hover:underline"
                             >
-                              <div className="flex min-w-0 items-center gap-3">
-                                <span className="flex h-8 w-8 flex-none items-center justify-center rounded-lg border border-surface-700 bg-surface-850 text-ink-400">
-                                  <ResourceTypeIcon type={s.resource_type} className="h-4 w-4" />
-                                </span>
-                                <span className="min-w-0 flex-1">
-                                  <button
-                                    type="button"
-                                    onClick={() => setDetail(s)}
-                                    title={s.resource_name}
-                                    className="block max-w-full truncate text-left font-medium text-ink-50 transition-colors hover:text-blue-600 dark:hover:text-blue-300"
-                                  >
-                                    {s.resource_name || s.resource_id || '-'}
-                                  </button>
-                                  {s.is_breakglass && (
-                                    <span className="mt-0.5 flex items-center gap-1 text-2xs font-semibold uppercase tracking-[0.04em] text-red-600 dark:text-red-400">
-                                      <ShieldAlert className="h-2.5 w-2.5" strokeWidth={2.5} /> Break-glass
-                                    </span>
-                                  )}
-                                </span>
-                              </div>
-                            </td>
-                            {show('username') && (
-                              <td className={clsx(cell({ selected }), 'px-4', pad)}>
-                                <TruncCell value={s.username} className="text-ink-300" />
-                              </td>
+                              {sess.resource_name || sess.resource_id}
+                            </button>
+                            {sess.is_breakglass && <AlarmTag />}
+                          </div>
+                        </Td>
+                      )}
+                      {show('username') && (
+                        <Td>
+                          <Trunc value={sess.username} muted />
+                        </Td>
+                      )}
+                      {show('protocol') && (
+                        <Td>
+                          <Trunc value={sess.protocol} mono muted />
+                        </Td>
+                      )}
+                      {show('started_at') && (
+                        <Td>
+                          <span className="text-sm text-secondary" title={formatDateTime(sess.started_at)}>
+                            {formatRelativeToNow(sess.started_at)}
+                          </span>
+                        </Td>
+                      )}
+                      {show('duration') && (
+                        <Td align="right">
+                          <DurationCell session={sess} />
+                        </Td>
+                      )}
+                      {show('status') && (
+                        <Td>
+                          <StatusDot
+                            tone={DOT_TONE[sess.status] || 'muted'}
+                            label={
+                              sess.status
+                                ? sess.status.charAt(0) + sess.status.slice(1).toLowerCase()
+                                : 'Unknown'
+                            }
+                            live={isActive}
+                          />
+                        </Td>
+                      )}
+                      <Td align="right">
+                        <RowActions>
+                          {isActive && isMine && (
+                            <button
+                              type="button"
+                              onClick={() => setEndTarget(sess)}
+                              className="whitespace-nowrap rounded px-1 py-0.5 text-sm font-semibold text-accent transition-colors hover:text-accent-hover hover:underline"
+                            >
+                              End
+                            </button>
+                          )}
+                          <RowMenu label={`Actions for session on ${sess.resource_name || sess.resource_id}`}>
+                            <MenuItem icon={MonitorPlay} onClick={() => setDetail(sess)}>
+                              View details
+                            </MenuItem>
+                            <MenuItem
+                              icon={Copy}
+                              onClick={async () => {
+                                try {
+                                  await navigator.clipboard.writeText(sess.id)
+                                  toast.success('Session ID copied')
+                                } catch {
+                                  toast.error('Clipboard is not available in this browser')
+                                }
+                              }}
+                            >
+                              Copy session ID
+                            </MenuItem>
+                            {isActive && isMine && (
+                              <MenuItem icon={Square} onClick={() => setEndTarget(sess)}>
+                                End my session
+                              </MenuItem>
                             )}
-                            {show('protocol') && (
-                              <td className={clsx(cell({ selected }), 'px-4', pad)}>
-                                {s.protocol ? (
-                                  <MetaTag mono>{s.protocol}</MetaTag>
-                                ) : (
-                                  <span className="text-xs text-ink-500">-</span>
-                                )}
-                              </td>
+                            {canKill && (
+                              <MenuItem icon={ShieldAlert} danger onClick={() => setKillTarget(sess)}>
+                                Kill session
+                              </MenuItem>
                             )}
-                            {show('started_at') && (
-                              <td className={clsx(cell({ selected }), 'px-4 text-xs tabular-nums', pad)}>
-                                <span className="text-ink-400" title={formatDateTime(s.started_at)}>
-                                  {formatRelativeToNow(s.started_at)}
-                                </span>
-                              </td>
-                            )}
-                            {show('duration') && (
-                              <td className={clsx(cell({ selected }), 'px-4', pad)}>
-                                <DurationCell session={s} />
-                              </td>
-                            )}
-                            {show('status') && (
-                              <td className={clsx(cell({ selected }), 'px-4', pad)}>
-                                {EXCEPTION_STATUSES.includes(s.status) ? (
-                                  <Badge className="bg-red-100 text-red-700 ring-red-600/20 dark:bg-red-500/15 dark:text-red-300 dark:ring-red-500/30">
-                                    {s.status}
-                                  </Badge>
-                                ) : (
-                                  <StatusIndicator tone={STATUS_TONE[s.status] || 'neutral'} pulse={isActive}>
-                                    {s.status
-                                      ? s.status.charAt(0) + s.status.slice(1).toLowerCase()
-                                      : 'Unknown'}
-                                  </StatusIndicator>
-                                )}
-                              </td>
-                            )}
-                            <td className={clsx(cell({ selected }), 'px-2', pad)}>
-                              <div className="flex items-center justify-end gap-1">
-                                {isActive && (
-                                  <Button
-                                    size="xs"
-                                    variant="secondary"
-                                    onClick={() => setEndTarget(s)}
-                                    disabled={isMutating}
-                                  >
-                                    End
-                                  </Button>
-                                )}
-                                {isActive && scope === 'all' && (
-                                  <Button
-                                    size="xs"
-                                    variant="dangerGhost"
-                                    onClick={() => setKillTarget(s)}
-                                    disabled={isMutating}
-                                    aria-label={`Kill session on ${s.resource_name}`}
-                                  >
-                                    Kill
-                                  </Button>
-                                )}
-                                <button
-                                  type="button"
-                                  onClick={() => setDetail(s)}
-                                  aria-label={`Open session on ${s.resource_name}`}
-                                  className="flex h-7 w-7 flex-none items-center justify-center rounded-md text-ink-600 transition-colors hover:bg-surface-800 hover:text-ink-100"
-                                >
-                                  <ChevronRight className="h-4 w-4" strokeWidth={2} />
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+                          </RowMenu>
+                        </RowActions>
+                      </Td>
+                    </Tr>
+                  )
+                })}
+              </tbody>
+            </DataTable>
 
-                <Pagination
-                  page={table.page}
-                  pageSize={table.pageSize}
-                  total={table.total}
-                  totalPages={table.totalPages}
-                  onPageChange={table.setPage}
-                  onPageSizeChange={table.setPageSize}
-                  label="sessions"
-                />
-              </>
-            )
-          }
-        </QueryState>
-      </ListPanel>
-
-      <BulkActionBar
-        count={table.selectedCount}
-        total={table.total}
-        noun="session"
-        allMatchingSelected={table.allMatchingSelected}
-        onSelectAllMatching={table.selectAllMatching}
-        onClear={table.clearSelection}
-        actions={[
-          {
-            key: 'export',
-            label: 'Export',
-            icon: Download,
-            onClick: () => {
-              exportRowsToCsv(table.selectedRows, CSV_COLUMNS, 'sessions-selection')
-              toast.success(`Exported ${table.selectedCount} sessions`)
-            },
-          },
-          {
-            key: 'end',
-            label: 'End sessions',
-            icon: CircleSlash,
-            variant: 'dangerGhost',
-            disabled: true,
-            disabledReason: NO_BULK_ENDPOINT,
-          },
-        ]}
-      />
+            <Pagination
+              page={table.page}
+              pageSize={table.pageSize}
+              total={table.total}
+              totalPages={table.totalPages}
+              onPageChange={table.setPage}
+              label="sessions"
+            />
+          </>
+        )}
+      </Container>
 
       <SessionDrawer
         session={detail}
         onClose={() => setDetail(null)}
-        onEnd={(s) => setEndTarget(s)}
-        onKill={(s) => setKillTarget(s)}
-        canKill={scope === 'all'}
+        onEnd={setEndTarget}
+        onKill={setKillTarget}
+        canKill={isAdmin}
         isMutating={isMutating}
       />
 
       <ConfirmDialog
         open={!!endTarget}
-        title={`End your session on "${endTarget?.resource_name}"?`}
-        description="The connection is closed and the session is recorded as completed in the audit log."
+        title={`End your session on ${endTarget?.resource_name || 'this resource'}?`}
+        description="The session is closed and marked completed. Anything open in your own client stops being covered by it."
         confirmLabel="End session"
+        destructive={false}
         isLoading={endMutation.isPending}
         onConfirm={() => endMutation.mutate(endTarget.id)}
         onCancel={() => setEndTarget(null)}
@@ -788,16 +653,16 @@ export default function SessionsPage() {
 
       <ConfirmDialog
         open={!!killTarget}
-        title={`Kill session on "${killTarget?.resource_name}"?`}
-        description="This immediately terminates another user's tracked session and is recorded in the audit log."
+        title={`Kill the session on ${killTarget?.resource_name || 'this resource'}?`}
+        description="The session is terminated immediately for the person using it."
         confirmLabel="Kill session"
         destructive
         requireReason
-        reasonLabel="Reason (required for the audit record)"
+        reasonLabel="Reason (written to the audit record)"
         isLoading={killMutation.isPending}
         onConfirm={(reason) => killMutation.mutate({ id: killTarget.id, reason })}
         onCancel={() => setKillTarget(null)}
       />
-    </div>
+    </Stack>
   )
 }

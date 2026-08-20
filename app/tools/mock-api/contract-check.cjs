@@ -144,3 +144,4 @@ function concrete(template, consts = {}) {
   if (problems.length === 0) console.log('all shapes agree with the client')
   else { problems.forEach((p) => console.log('  MISMATCH ' + p)); process.exitCode = 1 }
 })()
+

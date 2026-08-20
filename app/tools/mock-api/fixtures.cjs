@@ -16,38 +16,38 @@ function iso(offsetMin) {
 
 const USERS = [
   {
-    id: 'u-root-0001', org_id: ORG, username: 'root', email: 'root@bharatgen.dev',
+    user_id: 'u-root-0001', org_id: ORG, username: 'root', email: 'root@bharatgen.dev',
     full_name: 'Root Operator', status: 'ACTIVE', mfa_enabled: true, is_protected: true,
     roles: ['root'], failed_login_attempts: 0, last_login_at: iso(-40), last_login_ip: '10.4.1.9',
     created_at: iso(-525600), updated_at: iso(-1440),
   },
   {
-    id: 'u-admin-0002', org_id: ORG, username: 'p.raghavan', email: 'priya.raghavan@bharatgen.dev',
+    user_id: 'u-admin-0002', org_id: ORG, username: 'p.raghavan', email: 'priya.raghavan@bharatgen.dev',
     full_name: 'Priya Raghavan', status: 'ACTIVE', mfa_enabled: true, is_protected: false,
     roles: ['admin', 'user'], failed_login_attempts: 0, last_login_at: iso(-12), last_login_ip: '10.4.2.31',
     created_at: iso(-262800), updated_at: iso(-60),
   },
   {
-    id: 'u-admin-0003', org_id: ORG, username: 'd.okonkwo', email: 'daniel.okonkwo@bharatgen.dev',
+    user_id: 'u-admin-0003', org_id: ORG, username: 'd.okonkwo', email: 'daniel.okonkwo@bharatgen.dev',
     full_name: 'Daniel Okonkwo', status: 'ACTIVE', mfa_enabled: false, is_protected: false,
     roles: ['admin', 'user'], failed_login_attempts: 0, last_login_at: iso(-320), last_login_ip: '10.4.2.44',
     created_at: iso(-175200), updated_at: iso(-4300),
   },
   {
-    id: 'u-user-0004', org_id: ORG, username: 's.mehta', email: 'sanjana.mehta@bharatgen.dev',
+    user_id: 'u-user-0004', org_id: ORG, username: 's.mehta', email: 'sanjana.mehta@bharatgen.dev',
     full_name: 'Sanjana Mehta', status: 'ACTIVE', mfa_enabled: true, is_protected: false,
     roles: ['user', 'data-platform-oncall', 'release-manager', 'reporting-readonly', 'incident-commander'],
     failed_login_attempts: 0, last_login_at: iso(-3), last_login_ip: '10.4.7.102',
     created_at: iso(-87600), updated_at: iso(-3),
   },
   {
-    id: 'u-user-0005', org_id: ORG, username: 'l.fernandes', email: 'lucas.fernandes@bharatgen.dev',
+    user_id: 'u-user-0005', org_id: ORG, username: 'l.fernandes', email: 'lucas.fernandes@bharatgen.dev',
     full_name: 'Lucas Fernandes', status: 'LOCKED', mfa_enabled: false, is_protected: false,
     roles: ['user'], failed_login_attempts: 5, locked_until: iso(28), last_login_at: iso(-2880),
     last_login_ip: '203.0.113.77', created_at: iso(-43800), updated_at: iso(-30),
   },
   {
-    id: 'u-user-0006', org_id: ORG, username: 'contractor.svc.ingestion-pipeline',
+    user_id: 'u-user-0006', org_id: ORG, username: 'contractor.svc.ingestion-pipeline',
     email: 'ingestion-pipeline@contractor.example.com',
     full_name: 'Ingestion Pipeline Service Account (Contractor)', status: 'DISABLED',
     mfa_enabled: false, is_protected: false, roles: ['user'], failed_login_attempts: 0,
