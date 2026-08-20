@@ -67,6 +67,7 @@ import {
 import { QueryState } from '../../components/common/QueryState'
 import { Badge, MetaTag } from '../../components/common/Badge'
 import { Button } from '../../components/common/Button'
+import { StatusDot } from '../../components/ui/bits'
 import { TabBar } from '../../components/common/TabBar'
 import { Avatar } from '../../components/common/UserMenu'
 import { Field, inputClass, selectClass } from '../../components/common/FormFields'
@@ -884,13 +885,6 @@ export default function IdentityDetailPage() {
 
   return (
     <div>
-      <Link
-        to="/admin/identity"
-        className="mb-4 inline-flex items-center gap-1.5 text-sm text-ink-400 transition-colors hover:text-ink-200"
-      >
-        <ArrowLeft className="h-3.5 w-3.5" strokeWidth={2} /> Back to Identity
-      </Link>
-
       <QueryState query={userQuery} skeletonRows={5}>
         {(data) => {
           const user = data.user
@@ -972,38 +966,20 @@ export default function IdentityDetailPage() {
 
           return (
             <>
+              {/* ONE HEADER, NOT A HEADER PLUS A CARD THAT REPEATS IT.
+                  This was a page title carrying the username and email, then
+                  a row of seven outlined chips (status, five roles, the id),
+                  then a bordered card with an avatar and the username and
+                  email again. Three treatments of the same identity stacked
+                  on top of each other, and a chip wall in the middle of them.
+
+                  Now: the name, the full name and email beside it, the facts
+                  that decide whether this account is a live risk on one rule,
+                  and the roles as plain text where they read as a sentence
+                  rather than as six coloured objects. */}
               <PageHeader
-                eyebrow="Identity"
                 title={user.username}
-                description={user.email}
-                meta={
-                  <>
-                    <Badge className={USER_STATUS_BADGE[user.status] || undefined}>
-                      {user.status || 'UNKNOWN'}
-                    </Badge>
-                    {roles.map((r) => (
-                      <Badge key={r} className={roleBadgeClass(r)}>
-                        {r}
-                      </Badge>
-                    ))}
-                    {/* Delegation is live but the role list has not caught up
-                        (two different reads, and the grant is a second call) , 
- say so rather than showing an account that looks
- ordinary while it holds administrative access. */}
-                    {delegationActive && !holdsAdminRole && (
-                      <Badge className={delegationStatusBadgeClass('active')}>Delegated admin</Badge>
-                    )}
-                    {delegationActive && delegation.expires_at && (
-                      <MetaTag>Delegation ends {formatRelativeToNow(delegation.expires_at)}</MetaTag>
-                    )}
-                    {privileged && (
-                      <span className="inline-flex items-center gap-1.5 rounded-md border border-red-300/60 bg-red-50 px-2 py-1 text-xs font-semibold text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300">
-                        <ShieldCheck className="h-3 w-3" strokeWidth={2} /> Privileged
-                      </span>
-                    )}
-                    <IdChip id={user.user_id || user.id} />
-                  </>
-                }
+                description={user.full_name || undefined}
                 actions={
                   <>
                     <Button variant="secondary" icon={KeyRound} onClick={() => setTab('security')}>
@@ -1016,35 +992,72 @@ export default function IdentityDetailPage() {
                 }
               />
 
-              {/* Identity card, avatar, name, and the two facts that decide
- whether this account is a live risk: is it active, and when
- was it last used. */}
-              <Card className="mb-5">
-                <div className="flex flex-col gap-5 p-5 sm:flex-row sm:items-center">
-                  <Avatar name={user.username} size="xl" />
-                  <div className="min-w-0 flex-1">
-                    <h2 className="truncate text-lg font-semibold leading-tight text-ink-50">
-                      {user.full_name || user.username}
-                    </h2>
-                    <p className="mt-1 truncate text-sm text-ink-400">{user.email || '-'}</p>
-                  </div>
-                  <dl className="grid flex-none grid-cols-2 gap-x-8 gap-y-1 sm:text-right">
-                    <dt className="text-xs font-semibold text-ink-500">Created</dt>
-                    <dt className="text-xs font-semibold text-ink-500">Last sign-in</dt>
-                    <dd className="text-sm tabular-nums text-ink-100">
-                      {user.created_at ? formatDateTime(user.created_at) : '-'}
-                    </dd>
-                    <dd
-                      className={clsx(
-                        'text-sm tabular-nums',
-                        user.last_login_at ? 'text-ink-100' : 'text-amber-600 dark:text-amber-400'
-                      )}
-                    >
-                      {user.last_login_at ? formatRelativeToNow(user.last_login_at) : 'Never'}
-                    </dd>
-                  </dl>
-                </div>
-              </Card>
+              <div className="mb-6 flex flex-wrap items-center gap-x-8 gap-y-3 border-y border-line-soft py-3">
+                <StatusDot
+                  tone={
+                    user.status === 'ACTIVE'
+                      ? 'ok'
+                      : user.status === 'LOCKED'
+                        ? 'warn'
+                        : user.status === 'SUSPENDED' || user.status === 'DELETED'
+                          ? 'danger'
+                          : 'muted'
+                  }
+                  label={user.status ? user.status.charAt(0) + user.status.slice(1).toLowerCase() : 'Unknown'}
+                />
+
+                <span className="text-sm text-secondary">
+                  <span className="font-mono text-primary">{user.email || '-'}</span>
+                </span>
+
+                <span className="text-sm text-secondary">
+                  Last sign-in{' '}
+                  <span className={user.last_login_at ? 'text-primary' : 'text-warn'}>
+                    {user.last_login_at ? formatRelativeToNow(user.last_login_at) : 'never'}
+                  </span>
+                </span>
+
+                <span className="text-sm text-secondary">
+                  Created <span className="text-primary">{formatRelativeToNow(user.created_at)}</span>
+                </span>
+
+                {privileged && (
+                  <span className="inline-flex items-center gap-1.5 text-sm font-medium text-warn">
+                    <ShieldCheck className="h-3.5 w-3.5" strokeWidth={2} /> {privilegeLabel}
+                  </span>
+                )}
+
+                {/* Delegation is live but the role list has not caught up (two
+                    different reads, and the grant is a second call). Say so,
+                    rather than showing an account that looks ordinary while it
+                    holds administrative access. */}
+                {delegationActive && !holdsAdminRole && (
+                  <span className="text-sm font-medium text-warn">Delegated admin</span>
+                )}
+                {delegationActive && delegation.expires_at && (
+                  <span className="text-sm text-secondary">
+                    Delegation ends {formatRelativeToNow(delegation.expires_at)}
+                  </span>
+                )}
+
+                <span className="ml-auto">
+                  <IdChip id={user.user_id || user.id} />
+                </span>
+              </div>
+
+              {roles.length > 0 && (
+                <p className="-mt-3 mb-6 text-sm text-secondary">
+                  Holds{' '}
+                  {roles.map((r, i) => (
+                    <span key={r}>
+                      {i > 0 && ', '}
+                      <span className={isPrivilegedRoleName(r) ? 'font-medium text-warn' : 'text-primary'}>
+                        {r}
+                      </span>
+                    </span>
+                  ))}
+                </p>
+              )}
 
               <TabBar tabs={TABS} active={tab} onChange={setTab} className="mb-6" />
 
@@ -1052,29 +1065,60 @@ export default function IdentityDetailPage() {
                 <div className="grid gap-5 lg:grid-cols-2">
                   <Card>
                     <CardHeader>
-                      <CardTitle icon={UserRound}>Account</CardTitle>
+                      <CardTitle icon={UserRound}>Sign-in posture</CardTitle>
                     </CardHeader>
+                    {/* THIS CARD USED TO REPEAT THE HEADER: username, email,
+                        full name, status and id, every one of which is now on
+                        the rule directly above it. A detail page whose first
+                        panel restates its own title teaches the reader to skip
+                        it. What belongs here is what the header cannot fit and
+                        what actually decides whether this account is a risk. */}
                     <DetailList
                       items={[
                         {
-                          label: 'Username',
-                          value: <span className="font-mono text-xs">{user.username}</span>,
-                        },
-                        { label: 'Email', value: user.email || '-' },
-                        { label: 'Full name', value: user.full_name || '-' },
-                        {
-                          label: 'Status',
-                          value: (
-                            <Badge className={USER_STATUS_BADGE[user.status]}>
-                              {user.status || 'UNKNOWN'}
-                            </Badge>
+                          label: 'Second factor',
+                          value: user.mfa_enabled ? (
+                            <StatusDot tone="ok" label="Enrolled" />
+                          ) : (
+                            <StatusDot tone="warn" label="Not set up" />
                           ),
                         },
                         {
-                          label: 'User ID',
-                          value: <span className="font-mono text-xs">{user.user_id || user.id}</span>,
+                          label: 'Failed sign-ins',
+                          value:
+                            user.failed_login_attempts > 0 ? (
+                              <span className="font-medium text-warn tabular">
+                                {user.failed_login_attempts}
+                              </span>
+                            ) : (
+                              <span className="tabular">0</span>
+                            ),
                         },
-                      ]}
+                        user.locked_until
+                          ? {
+                              label: 'Locked until',
+                              value: <span className="text-warn">{formatDateTime(user.locked_until)}</span>,
+                            }
+                          : null,
+                        {
+                          label: 'Last sign-in from',
+                          value: user.last_login_ip ? (
+                            <span className="font-mono text-xs">{user.last_login_ip}</span>
+                          ) : (
+                            'Never signed in'
+                          ),
+                        },
+                        {
+                          label: 'Protected account',
+                          value: user.is_protected
+                            ? 'Yes, cannot be suspended or deleted from the console'
+                            : 'No',
+                        },
+                        {
+                          label: 'Last changed',
+                          value: user.updated_at ? formatDateTime(user.updated_at) : '-',
+                        },
+                      ].filter(Boolean)}
                     />
                   </Card>
 
