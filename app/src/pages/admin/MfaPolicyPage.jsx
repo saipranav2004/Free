@@ -23,9 +23,11 @@ import clsx from 'clsx'
 import { getMfaPolicy, getMfaCompliance, upsertMfaRule, deleteMfaRule } from '../../api/mfaPolicy'
 import { listRoles } from '../../api/rbac'
 import { useAuthStore } from '../../store/authStore'
-import { PageHeader, Card } from '../../components/common/Layout'
+import { Card } from '../../components/common/Layout'
+import { Container, PageTitle, Stack } from '../../components/ui/layout'
 import { QueryState } from '../../components/common/QueryState'
 import { Badge, StatusIndicator, MetaTag } from '../../components/common/Badge'
+import { StatusDot } from '../../components/ui/bits'
 import { Button } from '../../components/common/Button'
 import { Modal } from '../../components/common/Modal'
 import { SearchField } from '../../components/common/TableControls'
@@ -365,22 +367,33 @@ function RuleRow({ role, rule, stats, canEdit, onEdit }) {
     <li className="group flex flex-wrap items-center gap-x-4 gap-y-2.5 px-4 py-3 transition-colors hover:bg-surface-850/50">
       <span
         className={clsx(
-          'flex h-8 w-8 flex-none items-center justify-center rounded-lg border',
-          gated
-            ? 'border-blue-500/30 bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-300'
-            : 'border-surface-700 bg-surface-850 text-ink-500'
+          'flex h-5 w-5 flex-none items-center justify-center',
+          gated ? 'text-accent' : 'text-tertiary'
         )}
       >
         <ModeIcon className="h-4 w-4" strokeWidth={1.8} />
       </span>
 
-      <div className="flex min-w-[9rem] flex-1 items-center gap-2">
-        <Badge className={roleBadgeClass(role.name)}>{role.name}</Badge>
-        <MetaTag>{isSystemRoleName(role.name) ? 'System' : 'Custom'}</MetaTag>
+      {/* THREE COLOURED CHIPS PER ROW WAS THE PROBLEM: a purple role pill, a
+          grey System pill and a green or amber mode pill, on every row, is a
+          column of colour that says nothing because every row has it. The
+          role is a name, built in versus custom is a word, and the mode is
+          the one thing here that carries state, so it is the only one that
+          keeps colour, as a dot. */}
+      <div className="flex min-w-[9rem] flex-1 items-baseline gap-2">
+        <span className="truncate text-sm font-medium text-primary">{role.name}</span>
+        <span className="flex-none text-xs text-tertiary">
+          {isSystemRoleName(role.name) ? 'built in' : 'custom'}
+        </span>
       </div>
 
       <div className="flex w-28 flex-none items-center">
-        <Badge className={mfaModeBadgeClass(mode)}>{mfaModeLabel(mode)}</Badge>
+        <StatusDot
+          tone={
+            mode === 'enforce' ? 'ok' : mode === 'grace' ? 'warn' : mode === 'monitor' ? 'accent' : 'muted'
+          }
+          label={mfaModeLabel(mode)}
+        />
       </div>
 
       <div className="w-36 flex-none truncate text-xs text-ink-400" title={describePhaseIn(rule)}>
@@ -573,60 +586,96 @@ export default function MfaPolicyPage() {
   const editingStats = editing ? statsByRole.get(String(editing.name).toLowerCase()) : null
 
   return (
-    <div>
-      <PageHeader
-        eyebrow="Admin Center"
-        title="MFA Policy"
+    <Stack gap="lg">
+      <PageTitle
+        title="MFA policy"
         description="Require a second factor from everyone holding a given role. Checked by the server on every sign-in."
-        meta={
-          !canEditPolicy ? (
-            <span className="inline-flex items-center gap-1.5 rounded-md border border-surface-700 bg-surface-850 px-2 py-1 text-2xs font-medium text-ink-400">
-              <Lock className="h-3 w-3" strokeWidth={1.9} /> Read-only - only admin or root can change policy
-            </span>
-          ) : null
-        }
         actions={
-          <Button
-            variant="secondary"
-            icon={RefreshCw}
-            loading={policyQuery.isFetching || complianceQuery.isFetching}
-            onClick={invalidate}
-          >
-            Refresh
-          </Button>
+          <>
+            {!canEditPolicy && (
+              <span className="inline-flex items-center gap-1.5 text-sm text-tertiary">
+                <Lock className="h-3.5 w-3.5" strokeWidth={1.9} /> Read only, only root can change policy
+              </span>
+            )}
+            <Button
+              variant="subtle"
+              icon={RefreshCw}
+              loading={policyQuery.isFetching || complianceQuery.isFetching}
+              onClick={invalidate}
+            >
+              Refresh
+            </Button>
+          </>
         }
       />
 
-      {/* ── 1. Coverage ── */}
-      <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Kpi
-          icon={ShieldCheck}
-          label="Protected"
-          value={`${coverage}%`}
-          progress={coverage}
-          tone={coverage === 100 ? 'good' : coverage >= 50 ? 'warn' : 'danger'}
-          sub={`${enrolled} of ${total} accounts have a second factor`}
-        />
-        <Kpi
-          icon={Users}
-          label="Covered by a rule"
-          value={gated}
-          sub={gated === 0 ? 'No role is gated yet' : `of ${total} accounts`}
-        />
-        <Kpi
-          icon={AlertTriangle}
-          label="Not compliant"
-          value={nonCompliant}
-          tone={nonCompliant > 0 ? 'warn' : 'good'}
-          sub={nonCompliant === 0 ? 'Everyone gated is enrolled' : 'Gated, with no second factor'}
-        />
-        <Kpi
-          icon={ShieldAlert}
-          label="Blocked at next sign-in"
-          value={wouldBlock}
-          tone={wouldBlock > 0 ? 'danger' : 'good'}
-          sub={wouldBlock === 0 ? 'Nobody is locked out' : 'Restricted to enrolment only'}
-        />
+      {/* ONE HERO NUMBER, NOT FOUR CARDS.
+          This page had a four card KPI wall: protected, covered, not
+          compliant, blocked. Four equal weight plates say all four matter
+          equally, and they do not: coverage is the number this page exists to
+          move, and the other three are its breakdown. So coverage gets the
+          display size and a meter, and the rest are facts on the same rule.
+          None of them is a trend, because GET /admin/mfa-policy/compliance
+          returns point in time state with no history. */}
+      <div className="border-y border-line-soft py-4">
+        <div className="flex flex-wrap items-end gap-x-10 gap-y-4">
+          <div className="min-w-[13rem]">
+            <p className="text-sm text-secondary">Accounts with a second factor</p>
+            <p className="mt-1 flex items-baseline gap-2">
+              <span
+                className={clsx(
+                  'text-[2rem] font-bold leading-none tabular',
+                  coverage === 100 ? 'text-ok' : coverage >= 50 ? 'text-warn' : 'text-danger'
+                )}
+              >
+                {coverage}%
+              </span>
+              <span className="text-sm text-tertiary tabular">
+                {enrolled} of {total}
+              </span>
+            </p>
+            <div
+              className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-subtle"
+              role="img"
+              aria-label={`${coverage} percent of accounts have a second factor`}
+            >
+              <div
+                className={clsx(
+                  'h-full rounded-full',
+                  coverage === 100 ? 'bg-ok' : coverage >= 50 ? 'bg-warn' : 'bg-danger'
+                )}
+                style={{ width: `${coverage}%` }}
+              />
+            </div>
+          </div>
+
+          <span className="flex items-baseline gap-2">
+            <span className="text-2xl font-bold tabular text-primary">{gated}</span>
+            <span className="text-sm text-secondary">
+              {gated === 0 ? 'no role is gated yet' : 'covered by a rule'}
+            </span>
+          </span>
+
+          <span className="flex items-baseline gap-2">
+            <span
+              className={clsx('text-2xl font-bold tabular', nonCompliant > 0 ? 'text-warn' : 'text-primary')}
+            >
+              {nonCompliant}
+            </span>
+            <span className="text-sm text-secondary">gated with no second factor</span>
+          </span>
+
+          <span className="flex items-baseline gap-2">
+            <span
+              className={clsx('text-2xl font-bold tabular', wouldBlock > 0 ? 'text-danger' : 'text-primary')}
+            >
+              {wouldBlock}
+            </span>
+            <span className="text-sm text-secondary">
+              {wouldBlock === 0 ? 'nobody is locked out' : 'blocked at next sign-in'}
+            </span>
+          </span>
+        </div>
       </div>
 
       {/* Empty state that teaches, shown only when there is genuinely nothing
@@ -772,7 +821,14 @@ export default function MfaPolicyPage() {
                             {(row.roles || []).length === 0 ? (
                               <span className="text-xs text-ink-500">None</span>
                             ) : (
-                              (row.roles || []).map((r) => <MetaTag key={r}>{r}</MetaTag>)
+                              (row.roles || []).map((r) => (
+                                <span
+                                  key={r}
+                                  className="rounded bg-subtle px-1.5 py-0.5 text-xs text-secondary"
+                                >
+                                  {r}
+                                </span>
+                              ))
                             )}
                           </span>
                         </td>
@@ -830,6 +886,6 @@ export default function MfaPolicyPage() {
           onRemove={(roleName) => removeMutation.mutate(roleName)}
         />
       )}
-    </div>
+    </Stack>
   )
 }

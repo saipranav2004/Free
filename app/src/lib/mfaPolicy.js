@@ -47,7 +47,9 @@ export const MFA_MODE_BADGE = {
 
 export function mfaModeLabel(mode) {
   const key = String(mode || 'off').toLowerCase()
-  return MFA_MODE_LABELS[key] || key
+  // A mode this build has never heard of still renders as a word rather than
+  // as raw lowercase wire data, so a backend that adds one degrades legibly.
+  return MFA_MODE_LABELS[key] || (key ? key.charAt(0).toUpperCase() + key.slice(1) : 'Off')
 }
 
 export function mfaModeBadgeClass(mode) {

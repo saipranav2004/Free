@@ -19,25 +19,31 @@ import {
 } from 'lucide-react'
 import clsx from 'clsx'
 import { listPolicies, deletePolicy } from '../../api/rbac'
-import { PageHeader, Card, CardFooter, EmptyState, ListPanel } from '../../components/common/Layout'
+import { Container, PageTitle, Stack } from '../../components/ui/layout'
+import { DataTable, RowActions, SkeletonGrid, SortTh, Td, Th, Tr, Trunc } from '../../components/ui/grid'
+import { MenuItem, MenuNote, RowMenu } from '../../components/ui/menu'
+import { FilterChip, Meta, StatusDot } from '../../components/ui/bits'
+import {
+  ActiveFilters,
+  CommandBar,
+  ExportMenu,
+  Pagination,
+  PreferencesMenu,
+  RefreshControl,
+  SearchField,
+} from '../../components/ui/chrome'
+import { DeniedState, EmptyState, ErrorState, NoMatchState, OfflineState } from '../../components/ui/states'
+import { CardFooter } from '../../components/common/Layout'
 import { QueryState } from '../../components/common/QueryState'
 import { ConfirmDialog } from '../../components/common/ConfirmDialog'
 import { Drawer } from '../../components/common/Drawer'
 import { Badge } from '../../components/common/Badge'
 import { Button } from '../../components/common/Button'
-import { SegmentedControl } from '../../components/common/SegmentedControl'
-import {
-  SearchField,
-  SortHeader,
-  RefreshControl,
-  ExportMenu,
-  ActiveFilters,
-} from '../../components/common/TableControls'
 import { CreatePolicyModal } from '../../components/admin/CreatePolicyModal'
 import { useTableState } from '../../hooks/useTableState'
 import { exportRowsToCsv, exportRowsToJson } from '../../lib/exportRows'
-import { apiErrorMessage } from '../../lib/apiError'
-import { formatDateTime } from '../../lib/format'
+import { apiErrorMessage, normalizeApiError } from '../../lib/apiError'
+import { formatDateTime, formatRelativeToNow } from '../../lib/format'
 import { POLICY_EFFECT_BADGE } from '../../config/constants'
 
 // ---------------------------------------------------------------------------
@@ -299,271 +305,227 @@ export default function PoliciesPage() {
   const denyCount = policies.filter((p) => p.effect === 'deny').length
   const wildcardCount = policies.filter(isWildcard).length
 
+  const err = policiesQuery.isError ? normalizeApiError(policiesQuery.error) : null
+
   const chips = []
-  if (table.query) {
+  if (table.query)
     chips.push({ key: 'q', label: 'Search', value: table.query, onClear: () => table.setQuery('') })
-  }
-  if (table.filters.effect !== 'all') {
+  if (table.filters.effect !== 'all')
     chips.push({
       key: 'effect',
       label: 'Effect',
       value: table.filters.effect,
       onClear: () => table.setFilter('effect', 'all'),
     })
-  }
-
-  const pad = table.density === 'compact' ? 'py-1.5' : 'py-2'
 
   return (
-    <div>
-      <PageHeader
-        eyebrow="Admin Center"
+    <Stack gap="lg">
+      <PageTitle
         title="Policies"
-        description="Allow and deny rules over actions and resources. Attach them to roles for reuse, or directly to an account as a deliberate exception."
-        actions={
-          <Button variant="primary" icon={Plus} onClick={() => setCreateOpen(true)}>
-            Create policy
-          </Button>
-        }
+        counter={policiesQuery.isSuccess ? policies.length : undefined}
+        description="A policy is one allow or deny rule over a set of actions and a set of resources. Roles bundle them; the policy engine evaluates them."
       />
 
-      <ListPanel
-        toolbar={
-          <div className="space-y-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <SearchField
-                value={table.query}
-                onChange={table.setQuery}
-                placeholder="Search policies…"
-                className="min-w-[14rem] sm:max-w-sm"
-              />
-              <SegmentedControl
-                size="sm"
-                ariaLabel="Filter by effect"
-                value={table.filters.effect}
-                onChange={(v) => table.setFilter('effect', v)}
-                options={[
-                  { key: 'all', label: 'All', count: policies.length },
-                  { key: 'allow', label: 'Allow', count: allowCount },
-                  { key: 'deny', label: 'Deny', count: denyCount },
-                ]}
-              />
-              <span className="ml-auto flex flex-wrap items-center gap-2">
-                <ExportMenu
-                  count={table.total}
-                  disabled={table.total === 0}
-                  onExportCsv={() => exportRowsToCsv(table.filteredRows, CSV_COLUMNS, 'policies')}
-                  onExportJson={() => exportRowsToJson(table.filteredRows, CSV_COLUMNS, 'policies')}
-                />
-                <RefreshControl
-                  onRefresh={() => policiesQuery.refetch()}
-                  isFetching={policiesQuery.isFetching}
-                  updatedAt={policiesQuery.dataUpdatedAt}
-                />
-              </span>
-            </div>
-
-            {chips.length > 0 && (
-              <div className="border-t border-surface-800 pt-3">
-                <ActiveFilters chips={chips} onClearAll={table.resetFilters} />
-              </div>
-            )}
-          </div>
-        }
-      >
-        <QueryState
-          query={policiesQuery}
-          empty={(p) => !p || p.length === 0}
-          emptyTitle="No policies defined"
-          emptyMessage="A policy is one allow-or-deny rule over actions and resources. Create the first one to start granting access."
-          emptyAction={
+      <Stack gap="sm">
+        <CommandBar
+          primary={
             <Button variant="primary" icon={Plus} onClick={() => setCreateOpen(true)}>
               Create policy
             </Button>
           }
-        >
-          {() =>
-            table.total === 0 ? (
-              <Card>
-                <EmptyState
-                  icon={SearchX}
-                  title="No policies match"
-                  description="Nothing matches the current search or effect filter."
-                  action={
-                    <Button variant="secondary" onClick={table.resetFilters}>
-                      Clear filters
-                    </Button>
-                  }
-                />
-              </Card>
-            ) : (
-              <>
-                <div className="overflow-x-auto">
-                  <table className="w-full min-w-[52rem] border-separate border-spacing-0 text-sm">
-                    <thead>
-                      <tr>
-                        <SortHeader
-                          label="Policy"
-                          columnKey="name"
-                          sort={table.sort}
-                          onSort={table.toggleSort}
-                          className="min-w-[14rem]"
-                        />
-                        <SortHeader
-                          label="Effect"
-                          columnKey="effect"
-                          sort={table.sort}
-                          onSort={table.toggleSort}
-                          className="w-24"
-                        />
-                        <SortHeader
-                          label="Actions"
-                          columnKey="actions"
-                          sort={table.sort}
-                          onSort={table.toggleSort}
-                          className="w-24"
-                        />
-                        <SortHeader
-                          label="Scope"
-                          columnKey="resources"
-                          sort={table.sort}
-                          onSort={table.toggleSort}
-                          className="w-44"
-                        />
-                        <SortHeader
-                          label="Created"
-                          columnKey="created_at"
-                          sort={table.sort}
-                          onSort={table.toggleSort}
-                          className="w-40"
-                        />
-                        <SortHeader label="Actions" columnKey="_actions" srOnly className="w-20" />
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {table.pageRows.map((p) => {
-                        const deny = p.effect === 'deny'
-                        const wildcard = isWildcard(p)
-                        const actionCount = (p.actions || []).length
-                        const resourceCount = (p.resources || []).length
-                        return (
-                          <tr
-                            key={p.id}
-                            onClick={() => setPeeked(p)}
-                            className={clsx(
-                              'group cursor-pointer transition-colors',
-                              deny ? 'hover:bg-red-50/60 dark:hover:bg-red-950/20' : 'hover:bg-surface-850'
-                            )}
-                          >
-                            <td className={clsx('relative border-b border-surface-800 px-4', pad)}>
-                              {/* Deny rules carry an edge rail for the same
- reason failed audit rows do: they invert the
- meaning of everything around them. */}
-                              <span
-                                aria-hidden="true"
-                                className={clsx(
-                                  'absolute inset-y-0 left-0 w-[3px]',
-                                  deny ? 'bg-red-400/70' : 'bg-transparent'
-                                )}
-                              />
-                              <div className="flex min-w-0 items-center gap-3">
-                                <span
-                                  className={clsx(
-                                    'flex h-8 w-8 flex-none items-center justify-center rounded-lg border transition-colors',
-                                    deny
-                                      ? 'border-red-300/60 bg-red-50 text-red-600 dark:border-red-900/50 dark:bg-red-500/10 dark:text-red-300'
-                                      : 'border-emerald-300/50 bg-emerald-50 text-emerald-600 dark:border-emerald-900/40 dark:bg-emerald-500/10 dark:text-emerald-300'
-                                  )}
-                                >
-                                  {deny ? (
-                                    <ShieldX className="h-3.5 w-3.5" strokeWidth={1.5} />
-                                  ) : (
-                                    <ShieldCheck className="h-3.5 w-3.5" strokeWidth={1.5} />
-                                  )}
-                                </span>
-                                <span className="min-w-0">
-                                  <span className="block truncate font-medium text-ink-50 transition-colors group-hover:text-blue-600 dark:group-hover:text-blue-300">
-                                    {p.name}
-                                  </span>
-                                  {p.description && (
-                                    <span className="mt-0.5 block max-w-[22rem] truncate text-xs text-ink-500">
-                                      {p.description}
-                                    </span>
-                                  )}
-                                </span>
-                              </div>
-                            </td>
-                            <td className={clsx('whitespace-nowrap border-b border-surface-800 px-4', pad)}>
-                              <Badge className={POLICY_EFFECT_BADGE[p.effect]}>{p.effect || 'unknown'}</Badge>
-                            </td>
-                            <td
-                              className={clsx(
-                                'whitespace-nowrap border-b border-surface-800 px-4 text-xs tabular-nums',
-                                pad
-                              )}
-                            >
-                              <span
-                                className={
-                                  actionCount === 0 ? 'text-amber-600 dark:text-amber-400' : 'text-ink-300'
-                                }
-                              >
-                                {actionCount}
-                              </span>
-                            </td>
-                            <td className={clsx('whitespace-nowrap border-b border-surface-800 px-4', pad)}>
-                              {wildcard ? (
-                                <span className="inline-flex items-center gap-1.5 rounded-md bg-amber-50 px-2 py-0.5 text-2xs font-semibold text-amber-700 ring-1 ring-inset ring-amber-600/20 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-500/25">
-                                  <Globe className="h-3 w-3" strokeWidth={2} /> All resources
-                                </span>
-                              ) : (
-                                <span className="text-xs tabular-nums text-ink-400">
-                                  {resourceCount} pattern{resourceCount === 1 ? '' : 's'}
-                                </span>
-                              )}
-                            </td>
-                            <td
-                              className={clsx(
-                                'whitespace-nowrap border-b border-surface-800 px-4 text-xs tabular-nums text-ink-400',
-                                pad
-                              )}
-                            >
-                              {p.created_at ? formatDateTime(p.created_at) : '-'}
-                            </td>
-                            <td className={clsx('border-b border-surface-800 px-2', pad)}>
-                              <div className="flex items-center justify-end gap-0.5">
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    setDeleteTarget(p)
-                                  }}
-                                  aria-label={`Delete ${p.name}`}
-                                  className="flex h-7 w-7 items-center justify-center rounded-md text-ink-500 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/30 dark:hover:text-red-300"
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" strokeWidth={1.75} />
-                                </button>
-                                <span className="flex h-7 w-7 items-center justify-center rounded-md text-ink-600 transition-colors group-hover:bg-surface-800 group-hover:text-ink-100">
-                                  <ChevronRight className="h-4 w-4" strokeWidth={2} />
-                                </span>
-                              </div>
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-                <CardFooter className="justify-between">
-                  <p className="text-xs text-ink-500">
-                    Showing {table.total} of {policies.length} policies
-                  </p>
-                  {denyCount > 0 && <p className="text-2xs text-ink-500">Deny rules override every allow</p>}
-                </CardFooter>
-              </>
-            )
+          summary={
+            policiesQuery.isSuccess && table.total !== policies.length
+              ? `${table.total} of ${policies.length} shown`
+              : undefined
           }
-        </QueryState>
-      </ListPanel>
+        >
+          <ExportMenu
+            count={table.total}
+            disabled={table.total === 0}
+            onExportCsv={() => exportRowsToCsv(table.filteredRows, CSV_COLUMNS, 'policies')}
+            onExportJson={() => exportRowsToJson(table.filteredRows, CSV_COLUMNS, 'policies')}
+          />
+          <RefreshControl
+            onRefresh={() => policiesQuery.refetch()}
+            isFetching={policiesQuery.isFetching}
+            updatedAt={policiesQuery.dataUpdatedAt}
+          />
+          <PreferencesMenu pageSize={table.pageSize} onPageSize={table.setPageSize} />
+        </CommandBar>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <SearchField
+            value={table.query}
+            onChange={table.setQuery}
+            placeholder="Search policies"
+            label="Search policies"
+          />
+          {[
+            { key: 'all', label: 'All', count: policies.length },
+            { key: 'allow', label: 'Allow', count: allowCount },
+            { key: 'deny', label: 'Deny', count: denyCount },
+          ].map((f) => (
+            <FilterChip
+              key={f.key}
+              active={table.filters.effect === f.key}
+              count={f.count}
+              onClick={() => table.setFilter('effect', f.key)}
+            >
+              {f.label}
+            </FilterChip>
+          ))}
+          {wildcardCount > 0 && (
+            <span className="text-sm text-warn" title="Policies whose scope includes a wildcard">
+              {wildcardCount} unscoped
+            </span>
+          )}
+        </div>
+
+        <ActiveFilters chips={chips} onClearAll={table.resetFilters} />
+      </Stack>
+
+      <Container padded={false}>
+        {policiesQuery.isLoading ? (
+          <table className="w-full">
+            <tbody>
+              <SkeletonGrid colSpan={6} rows={6} />
+            </tbody>
+          </table>
+        ) : err ? (
+          err.status === 403 ? (
+            <DeniedState description={err.message} />
+          ) : err.code === 'network_error' ? (
+            <OfflineState onRetry={() => policiesQuery.refetch()} retrying={policiesQuery.isFetching} />
+          ) : (
+            <ErrorState
+              description={err.message}
+              onRetry={() => policiesQuery.refetch()}
+              retrying={policiesQuery.isFetching}
+            />
+          )
+        ) : policies.length === 0 ? (
+          <EmptyState
+            icon={FileKey2}
+            title="No policies yet"
+            description="A policy is one allow or deny rule over actions and resources. Create the first one to start granting access."
+            action={
+              <Button variant="primary" icon={Plus} onClick={() => setCreateOpen(true)}>
+                Create the first policy
+              </Button>
+            }
+          />
+        ) : table.total === 0 ? (
+          <NoMatchState
+            description="Nothing matches the current search or effect filter."
+            onClear={table.resetFilters}
+          />
+        ) : (
+          <>
+            <DataTable minWidth="54rem">
+              <colgroup>
+                <col className="w-[16rem] min-w-[12rem]" />
+                <col className="w-[7.5rem]" />
+                <col className="w-[8.5rem]" />
+                <col className="w-auto" />
+                <col className="w-[9rem]" />
+                <col className="w-[4rem]" />
+              </colgroup>
+              <thead>
+                <tr>
+                  <SortTh columnKey="name" sort={table.sort} onSort={table.toggleSort} sticky edge>
+                    Policy
+                  </SortTh>
+                  <SortTh columnKey="effect" sort={table.sort} onSort={table.toggleSort}>
+                    Effect
+                  </SortTh>
+                  <SortTh columnKey="actions" sort={table.sort} onSort={table.toggleSort} align="right">
+                    Actions
+                  </SortTh>
+                  <Th>Scope</Th>
+                  <SortTh columnKey="created_at" sort={table.sort} onSort={table.toggleSort}>
+                    Created
+                  </SortTh>
+                  <Th align="right">
+                    <span className="sr-only">Row actions</span>
+                  </Th>
+                </tr>
+              </thead>
+              <tbody>
+                {table.pageRows.map((p) => {
+                  const deny = p.effect === 'deny'
+                  const wildcard = isWildcard(p)
+                  return (
+                    <Tr key={p.id}>
+                      {/* A deny rule carries an edge rail for the same reason a
+                          failed audit row does: it inverts the meaning of
+                          everything around it, and it has to be findable
+                          without reading across to the effect column. */}
+                      <Td
+                        sticky
+                        edge
+                        className={deny ? 'shadow-[inset_3px_0_0_0_rgb(var(--danger))]' : undefined}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => setPeeked(p)}
+                          title={p.name}
+                          className="block max-w-full truncate text-left text-sm font-medium text-primary transition-colors hover:text-accent hover:underline"
+                        >
+                          {p.name}
+                        </button>
+                      </Td>
+                      <Td>
+                        <StatusDot tone={deny ? 'danger' : 'ok'} label={deny ? 'Deny' : 'Allow'} />
+                      </Td>
+                      <Td align="right">
+                        <span className="text-sm tabular text-primary">{(p.actions || []).length}</span>
+                      </Td>
+                      <Td>
+                        {/* The scope is the whole point of a policy, so it is
+                            shown rather than counted. A wildcard is called out
+                            because "resources: 1" hides that the one is `*`. */}
+                        <span className="flex min-w-0 items-center gap-2">
+                          <Trunc value={(p.resources || []).join(', ')} mono muted />
+                          {wildcard && <Meta tone="warn">unscoped</Meta>}
+                        </span>
+                      </Td>
+                      <Td>
+                        <span className="text-sm text-secondary" title={formatDateTime(p.created_at)}>
+                          {formatRelativeToNow(p.created_at)}
+                        </span>
+                      </Td>
+                      <Td align="right">
+                        <RowActions>
+                          <RowMenu label={`Actions for ${p.name}`}>
+                            <MenuItem icon={FileKey2} onClick={() => setPeeked(p)}>
+                              Open policy
+                            </MenuItem>
+                            {!p.is_system && (
+                              <MenuItem icon={Trash2} danger onClick={() => setDeleteTarget(p)}>
+                                Delete policy
+                              </MenuItem>
+                            )}
+                            {p.is_system && <MenuNote>Built in policies cannot be deleted.</MenuNote>}
+                          </RowMenu>
+                        </RowActions>
+                      </Td>
+                    </Tr>
+                  )
+                })}
+              </tbody>
+            </DataTable>
+
+            <Pagination
+              page={table.page}
+              pageSize={table.pageSize}
+              total={table.total}
+              totalPages={table.totalPages}
+              onPageChange={table.setPage}
+              label="policies"
+            />
+          </>
+        )}
+      </Container>
 
       <PolicyDrawer policy={peeked} onClose={() => setPeeked(null)} onDelete={setDeleteTarget} />
 
@@ -581,6 +543,6 @@ export default function PoliciesPage() {
         onConfirm={() => deleteMutation.mutate(deleteTarget.id)}
         onCancel={() => setDeleteTarget(null)}
       />
-    </div>
+    </Stack>
   )
 }

@@ -992,22 +992,49 @@ on('DELETE', '/api/v1/pam/admin/rbac/policies/:id', (ctx) => {
 on('GET', '/api/v1/pam/admin/mfa-policy', (ctx) =>
   ok(ctx.res, {
     rules: db.mfaRules,
-    modes: ['off', 'monitor', 'grace', 'enforce'],
+    modes: ['off', 'monitor', 'enforce'],
     summary: { roles_covered: db.mfaRules.length, enforcing: db.mfaRules.filter((r) => r.mode === 'enforce').length },
   }), 'admin')
-on('GET', '/api/v1/pam/admin/mfa-policy/compliance', (ctx) =>
-  ok(ctx.res, {
-    accounts: db.users.map((u) => ({
-      user_id: u.user_id, username: u.username, email: u.email, roles: u.roles,
-      mfa_enabled: u.mfa_enabled, status: u.status,
-    })),
-    total: db.users.length,
-    enrolled: db.users.filter((u) => u.mfa_enabled).length,
-  }), 'admin')
+// Field names come from the client's own unwrapper (api/mfaPolicy.js reads
+// rows, total_users, gated, enrolled, non_compliant, would_block). Sending
+// `accounts` and `total` produced "0%, 3 of 0" on the coverage meter.
+on('GET', '/api/v1/pam/admin/mfa-policy/compliance', (ctx) => {
+  const gatedModes = new Set(
+    db.mfaRules.filter((r) => r.mode !== 'off').map((r) => r.role_name)
+  )
+  const enforcing = new Set(
+    db.mfaRules.filter((r) => r.mode === 'enforce').map((r) => r.role_name)
+  )
+  const rows = db.users
+    .filter((u) => u.status !== 'DELETED')
+    .map((u) => {
+      const required = u.roles.some((r) => gatedModes.has(r))
+      const blocking = u.roles.some((r) => enforcing.has(r))
+      return {
+        user_id: u.user_id,
+        username: u.username,
+        email: u.email,
+        roles: u.roles,
+        status: u.status,
+        mfa_enabled: u.mfa_enabled,
+        required,
+        compliant: !required || u.mfa_enabled,
+        would_block: blocking && !u.mfa_enabled,
+      }
+    })
+  return ok(ctx.res, {
+    rows,
+    total_users: rows.length,
+    enrolled: rows.filter((r) => r.mfa_enabled).length,
+    gated: rows.filter((r) => r.required).length,
+    non_compliant: rows.filter((r) => r.required && !r.mfa_enabled).length,
+    would_block: rows.filter((r) => r.would_block).length,
+  })
+}, 'admin')
 on('PUT', '/api/v1/pam/admin/mfa-policy/rules/:role', (ctx) => {
   if (!isRoot(ctx.user)) return fail(ctx.res, 403, 'ROOT_REQUIRED', 'Only root can change MFA enforcement.')
   const mode = ctx.body?.mode
-  if (!['off', 'monitor', 'grace', 'enforce'].includes(mode))
+  if (!['off', 'monitor', 'enforce'].includes(mode))
     return fail(ctx.res, 422, 'VALIDATION_FAILED', 'Check the highlighted fields.', { mode: 'Choose an enforcement mode.' })
   const existing = db.mfaRules.find((r) => r.role_name === ctx.params.role)
   const row = {

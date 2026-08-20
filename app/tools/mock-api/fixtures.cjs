@@ -219,7 +219,7 @@ const AGENT_DEVICES = [
 
 const MFA_RULES = [
   { role_name: 'root', mode: 'enforce', grace_hours: 0, reason: 'Root always carries a second factor.', updated_at: iso(-40000), updated_by: 'root' },
-  { role_name: 'admin', mode: 'grace', grace_hours: 72, reason: 'Rolling out to the admin group this quarter.', updated_at: iso(-2000), updated_by: 'root' },
+  { role_name: 'admin', mode: 'enforce', grace_hours: 72, reason: 'Rolling out to the admin group this quarter.', updated_at: iso(-2000), updated_by: 'root' },
   { role_name: 'data-platform-oncall', mode: 'monitor', grace_hours: 0, reason: '', updated_at: iso(-500), updated_by: 'p.raghavan' },
 ]
 
