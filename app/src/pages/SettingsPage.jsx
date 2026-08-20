@@ -188,9 +188,8 @@ export default function SettingsPage() {
   return (
     <div>
       <PageHeader
-        eyebrow="Workspace"
         title="Settings"
-        description="Your identity and second factor, how this console reaches you, the machines paired to your account, and how it looks."
+        description="Your identity and second factor, how this console reaches you, and the machines paired to your account."
       />
 
       <TabBar tabs={TABS} active={active} onChange={setActive} className="mb-7" />

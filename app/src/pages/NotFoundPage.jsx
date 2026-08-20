@@ -1,24 +1,27 @@
-import { Link } from 'react-router-dom'
-import { Compass, ArrowLeft } from 'lucide-react'
+import { Compass } from 'lucide-react'
+import { Button } from '../components/common/Button'
 
+// A 404 lands on the same plate every other empty or error state uses, so a
+// missing page reads as one of the console's own states rather than as a
+// different screen. The message covers the two real causes, a bad address, or
+// a route the account can no longer reach, and offers the one way back.
 export default function NotFoundPage() {
   return (
-    <div className="flex min-h-[55vh] flex-col items-center justify-center px-6 text-center">
-      <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-xl border border-surface-700 bg-surface-900 text-ink-400 ">
-        <Compass className="h-5 w-5" strokeWidth={1.5} />
-      </div>
-      <p className="text-xs font-semibold text-ink-500">Error 404</p>
-      <h1 className="mt-2 text-xl font-semibold tracking-tight text-ink-50">Page not found</h1>
-      <p className="mt-2 max-w-sm text-sm leading-relaxed text-ink-400">
-        This route doesn&apos;t exist, or you no longer have access to it. Check the address, or head back to
-        the dashboard.
+    <div className="flex min-h-[60vh] flex-col items-center justify-center px-6 text-center">
+      <span className="mb-5 flex h-12 w-12 items-center justify-center rounded-xl bg-subtle text-tertiary">
+        <Compass className="h-6 w-6" strokeWidth={1.5} />
+      </span>
+      <p className="text-sm font-semibold text-tertiary">Error 404</p>
+      <h1 className="mt-2 text-2xl font-bold text-primary">Page not found</h1>
+      <p className="mt-2 max-w-md text-sm leading-relaxed text-secondary">
+        This route does not exist, or your account no longer has access to it. Check the address, or head
+        back to the dashboard.
       </p>
-      <Link
-        to="/"
-        className="mt-6 inline-flex h-9 items-center gap-2 rounded-lg border border-surface-700 bg-surface-900 px-3.5 text-sm font-medium text-ink-100 transition-colors hover:border-surface-600 hover:bg-surface-850"
-      >
-        <ArrowLeft className="h-4 w-4" strokeWidth={2} /> Back to dashboard
-      </Link>
+      <div className="mt-6">
+        <Button variant="primary" to="/">
+          Back to the dashboard
+        </Button>
+      </div>
     </div>
   )
 }
