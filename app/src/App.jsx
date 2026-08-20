@@ -80,6 +80,16 @@ function SelfServiceOnly({ to, children }) {
   return isAdmin ? <Navigate to={to} replace /> : children
 }
 
+// The mirror of SelfServiceOnly, for a route that belongs to operators. Used
+// by "My activity": audit is an administrative surface in every product of
+// this class, and a standard user's own trail is already on their dashboard.
+// Redirects rather than denying, because a bookmark to a page that is simply
+// not part of your console should land you somewhere useful, not on a wall.
+function OperatorOnly({ to = '/', children }) {
+  const isAdmin = useAuthStore((s) => s.isAdmin())
+  return isAdmin ? children : <Navigate to={to} replace />
+}
+
 export default function App() {
   return (
     <>
@@ -150,14 +160,19 @@ export default function App() {
                 </SelfServiceOnly>
               }
             />
-            {/* "My activity" is the self-scoped trail. /audit was the original
-                path and stays as a redirect so old links and bookmarks land. */}
+            {/* "My activity" is the operator's own self-scoped trail, the
+                counterpart to the org-wide Admin Center, Audit and Compliance.
+                Standard users do not get it: their activity already has a
+                panel on the dashboard. /audit was the original path and stays
+                as a redirect so old links and bookmarks land. */}
             <Route
               path="activity"
               element={
-                <SuspenseRoute>
-                  <AuditPage />
-                </SuspenseRoute>
+                <OperatorOnly>
+                  <SuspenseRoute>
+                    <AuditPage />
+                  </SuspenseRoute>
+                </OperatorOnly>
               }
             />
             <Route path="audit" element={<Navigate to="/activity" replace />} />

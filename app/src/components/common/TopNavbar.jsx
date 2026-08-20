@@ -26,7 +26,6 @@ import logoMark from '../../assets/logo-mark.png'
 export const NAVBAR_HEIGHT_CLASS = 'h-12'
 
 export function TopNavbar({
-  consoleTitle,
   isAdmin = false,
   user,
   roles = [],
@@ -63,12 +62,12 @@ export function TopNavbar({
           <Menu className="h-[1.15rem] w-[1.15rem]" strokeWidth={1.75} />
         </button>
 
-        <span className="hidden h-5 w-px flex-none bg-chrome-line sm:block" aria-hidden="true" />
-
-        {/* Console identity, one line. Role dependent: administrators operate
-            the identity control plane, everyone else the privileged access
-            console. */}
-        <p className="min-w-0 flex-1 truncate text-sm font-bold text-chrome-fg">{consoleTitle}</p>
+        {/* THE CONSOLE NAME NOW HEADS THE SIDEBAR, NOT THIS BAR. It names the
+            navigation you are looking at, so it belongs to the panel that
+            holds it, which is where AWS puts the service name and Okta puts
+            the org. The top bar is left for what is global to the account:
+            the company mark, search, notifications, theme and profile. */}
+        <span className="min-w-0 flex-1" aria-hidden="true" />
 
         <div className="flex flex-none items-center gap-1 sm:gap-1.5">
           <GlobalSearch isAdmin={isAdmin} />

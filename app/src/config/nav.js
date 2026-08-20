@@ -31,11 +31,12 @@ export const CONSOLE_NAV = [
   { to: '/vault', label: 'Vault', icon: Vault },
   { to: '/sessions', label: 'Sessions', icon: Radio },
   { to: '/jit', label: 'JIT Access', icon: KeyRound },
-  // MY ACTIVITY IS BACK IN THE NAV. The route existed but was commented out
-  // here, so /audit was reachable only by typing the URL: a whole screen the
-  // product built and then hid. It is named "My activity" rather than "Audit"
-  // because that is what it is for a non-administrator, their own trail.
-  // Admin Center, Audit and Compliance is the org-wide one.
+  // "My activity" is an ADMINISTRATOR's entry, filtered out for everyone else
+  // in consoleNav() below. Audit is an operator surface in every product of
+  // this class: Okta keeps the System Log in the admin console, AWS keeps
+  // CloudTrail behind an admin policy, Entra keeps sign-in logs out of the
+  // end-user My Account page. A standard user's own trail is already on their
+  // dashboard, in "Your activity", which is where it belongs for them.
   { to: '/activity', label: 'My activity', icon: ScrollText },
 ]
 
@@ -49,7 +50,9 @@ export const CONSOLE_NAV = [
 // is dropped here, and /jit itself redirects to /admin/jit (see App.jsx) so a
 // stale link or bookmark still lands somewhere useful.
 export function consoleNav(isAdmin) {
-  return isAdmin ? CONSOLE_NAV.filter((i) => i.to !== '/jit') : CONSOLE_NAV
+  return isAdmin
+    ? CONSOLE_NAV.filter((i) => i.to !== '/jit')
+    : CONSOLE_NAV.filter((i) => i.to !== '/activity')
 }
 
 // Admin Center, only rendered for accounts holding the "admin" or "root"

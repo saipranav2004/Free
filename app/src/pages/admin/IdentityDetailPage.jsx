@@ -31,7 +31,6 @@ import {
   Tag,
   Crown,
   Layers,
-  Smartphone,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import clsx from 'clsx'
@@ -1528,7 +1527,7 @@ export default function IdentityDetailPage() {
                   <Section label="Second factor">
                     <Card>
                       <CardHeader>
-                        <CardTitle icon={Smartphone}>Multi-factor authentication</CardTitle>
+                        <CardTitle icon={ShieldCheck}>Multi-factor authentication</CardTitle>
                       </CardHeader>
                       <div className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
                         <div className="max-w-xl">

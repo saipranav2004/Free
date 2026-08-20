@@ -37,16 +37,37 @@ export function Switch({ checked = false, onChange, disabled = false, id, label,
 // A labelled preference row: name + explanation on the left, control on the
 // right. Every settings section is built from these so label width, control
 // alignment and row rhythm are identical across tabs.
+/**
+ * One setting. Name and its consequence on the left, the control that changes
+ * it on the right, on a single hairline-separated row.
+ *
+ * This is the row every mature settings surface converged on (GitHub, Stripe,
+ * Okta, Vercel): the description sits UNDER the label rather than in a tooltip,
+ * because the thing people need to know is what flipping the switch actually
+ * does, and a tooltip hides exactly that. The control is right-aligned on its
+ * own edge so a column of them scans as one list of states instead of drifting
+ * with the length of each description.
+ *
+ * Stacks to a single column below `sm`, where a right-aligned control would be
+ * pushed off the text it belongs to.
+ */
 export function SettingRow({ label, description, control, htmlFor, className = '' }) {
   return (
-    <div className={clsx('flex items-start justify-between gap-6 px-4 py-3.5', className)}>
+    <div
+      className={clsx(
+        'flex flex-col gap-3 py-4 sm:flex-row sm:items-start sm:justify-between sm:gap-8',
+        className
+      )}
+    >
       <div className="min-w-0">
-        <label htmlFor={htmlFor} className="block text-sm font-medium text-ink-100">
+        <label htmlFor={htmlFor} className="block text-sm font-semibold text-primary">
           {label}
         </label>
-        {description && <p className="mt-1 max-w-xl text-xs leading-relaxed text-ink-500">{description}</p>}
+        {description && (
+          <p className="mt-1 max-w-prose text-sm leading-relaxed text-secondary">{description}</p>
+        )}
       </div>
-      <div className="flex flex-none items-center gap-2 pt-0.5">{control}</div>
+      <div className="flex flex-none items-center gap-2 sm:pt-0.5">{control}</div>
     </div>
   )
 }

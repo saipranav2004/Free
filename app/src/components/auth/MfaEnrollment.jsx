@@ -6,7 +6,7 @@ import {
   AlertTriangle,
   RefreshCw,
   KeyRound,
-  Smartphone,
+  Clock,
   Info,
   HelpCircle,
 } from 'lucide-react'
@@ -176,7 +176,7 @@ export function MfaEnrollment({ status, onEnrolled, onDisabled }) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle icon={Smartphone}>
+          <CardTitle icon={ShieldCheck}>
             {enabled ? 'Replace authenticator' : 'Set up your authenticator'}
           </CardTitle>
           <span className="ml-auto flex items-center gap-1.5 rounded-md bg-amber-50 px-2 py-1 text-2xs font-semibold text-amber-700 ring-1 ring-inset ring-amber-600/20 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-500/25">
@@ -353,7 +353,11 @@ export function MfaEnrollment({ status, onEnrolled, onDisabled }) {
                 label: 'Method',
                 value: (
                   <span className="flex items-center gap-2">
-                    <Smartphone className="h-3.5 w-3.5 flex-none text-ink-500" strokeWidth={1.75} />
+                    {/* TOTP is a TIME-based code, and a clock reads as that at
+                        14px. The phone glyph this used to carry is a bare
+                        rounded rectangle plus a dot, which at this size is
+                        indistinguishable from an empty box. */}
+                    <Clock className="h-3.5 w-3.5 flex-none text-ink-500" strokeWidth={1.75} />
                     {status?.method || 'Authenticator app (TOTP)'}
                   </span>
                 ),

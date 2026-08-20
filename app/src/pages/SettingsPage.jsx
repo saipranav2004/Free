@@ -1,61 +1,54 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import {
-  UserRound,
-  ShieldCheck,
-  Bell,
-  Plug,
-  Palette,
-  Building2,
-  Info,
-  Clock,
-  Terminal,
-  KeyRound,
-  RotateCcw,
-  Save,
-  Copy,
-  Check,
-} from 'lucide-react'
+import { UserRound, ShieldCheck, Bell, Laptop, Palette, RotateCcw, Save, Check } from 'lucide-react'
 import clsx from 'clsx'
 import { me } from '../api/auth'
 import { useAuthStore } from '../store/authStore'
 import { mfaSummary } from '../lib/mfaStatus'
 import { useMfaStatus } from '../hooks/useMfaStatus'
-import {
-  PageHeader,
-  Card,
-  CardHeader,
-  CardTitle,
-  CardFooter,
-  Section,
-  DetailList,
-} from '../components/common/Layout'
+import { Container, PageTitle, KeyValueGrid, Stack } from '../components/ui/layout'
+import { StatusDot } from '../components/ui/bits'
 import { QueryState } from '../components/common/QueryState'
-import { TabBar } from '../components/common/TabBar'
 import { Button } from '../components/common/Button'
 import { Switch, SettingRow } from '../components/common/Switch'
 import { ThemeSegmented } from '../components/common/ThemeToggle'
-import { Avatar } from '../components/common/UserMenu'
 import { MfaEnrollment } from '../components/auth/MfaEnrollment'
 import { AgentDevicesPanel } from '../components/agent/AgentDevicesPanel'
-import { Field, inputClass } from '../components/common/FormFields'
-import { ROLE_BADGE, API_BASE_URL, JIT_DEFAULTS } from '../config/constants'
+import { JIT_DEFAULTS } from '../config/constants'
 
 // ---------------------------------------------------------------------------
 // Settings
 // ---------------------------------------------------------------------------
-// Sectioned into tabs because settings is the one page where a single stacked
-// column stops working: account facts, security posture, delivery
-// preferences, integrations and appearance are read at different times, by
-// different people, for different reasons.
+// REBUILT AROUND A NAV RAIL, NOT A TAB BAR, and that is the change that makes
+// this read like an enterprise settings surface rather than a form page.
 //
-// HONESTY RULE FOR THIS PAGE: a control that cannot persist does not pretend
-// to. Account, Security and Appearance are wired to real endpoints/stores.
-// Notification preferences persist in this browser and say so. Organization
-// and API keys have no endpoints yet, so they render as read-only with the
-// reason stated instead of as inputs that silently discard what you type.
+// Why the rail. Tabs are a 2-to-6 item control: past that they wrap, they
+// compete with the page title for the top of the screen, and there is nowhere
+// to group them. Settings is the one surface in every product that only ever
+// grows. So GitHub, Stripe, Okta, Vercel, Slack's admin and AWS account
+// settings all use the same arrangement instead: a vertical rail down the left
+// of the CONTENT area (not the product sidebar), sticky, with the panel beside
+// it. The rail names the whole surface at once, so you can see that "Devices"
+// exists without leaving the section you are on.
+//
+// Why no card walls. The previous version drew a bordered card around every
+// group, then a second header with an icon inside each card, then a footer
+// note under that. Ten borders around nothing. A section here is a heading, a
+// sentence saying what the section is FOR, and hairline-separated rows, which
+// is what Cloudscape's key-value grid and GitHub's settings panels both do.
+//
+// Why the rows look like this. A setting is a name, its consequence, and the
+// control that changes it. Description under the label, never in a tooltip:
+// the thing people need before flipping a switch is exactly what a tooltip
+// hides. See SettingRow in components/common/Switch.jsx.
+//
+// HONESTY RULE, UNCHANGED: a control that cannot persist does not pretend to.
+// Profile, Security, Devices and Appearance are wired to real endpoints or
+// stores. Notification preferences persist in this browser and say so on the
+// section header. Nothing renders as an editable input unless something is
+// listening on the other end.
 
 const NOTIFICATION_PREFS_KEY = 'pam_notification_prefs'
 
@@ -78,57 +71,72 @@ function readPrefs() {
   }
 }
 
-function ApiPendingNotice({ children }) {
-  return (
-    <div className="flex items-start gap-2.5 rounded-xl border border-dashed border-surface-600 bg-surface-850/70 px-3.5 py-3">
-      <Info className="mt-px h-3.5 w-3.5 flex-none text-ink-500" strokeWidth={1.75} />
-      <p className="text-xs leading-relaxed text-ink-400">{children}</p>
-    </div>
-  )
-}
-
-function CopyField({ label, value }) {
-  const [copied, setCopied] = useState(false)
-  useEffect(() => {
-    if (!copied) return undefined
-    const t = setTimeout(() => setCopied(false), 1600)
-    return () => clearTimeout(t)
-  }, [copied])
-  return (
-    <Field label={label}>
-      <div className="flex items-center gap-2">
-        <code className="min-w-0 flex-1 truncate rounded-lg border border-surface-700 bg-surface-800 px-3 py-2 font-mono text-xs text-ink-200">
-          {value}
-        </code>
-        <Button
-          variant="secondary"
-          size="md"
-          icon={copied ? Check : Copy}
-          onClick={async () => {
-            try {
-              await navigator.clipboard.writeText(value)
-              setCopied(true)
-            } catch {
-              toast.error('Clipboard unavailable in this browser')
-            }
-          }}
-        >
-          {copied ? 'Copied' : 'Copy'}
-        </Button>
-      </div>
-    </Field>
-  )
-}
-
 function formatExpiry(expiresAt) {
-  if (!expiresAt) return '-'
+  if (!expiresAt) return null
   const d = new Date(expiresAt)
-  if (Number.isNaN(d.getTime())) return '-'
+  if (Number.isNaN(d.getTime())) return null
   const mins = Math.round((d.getTime() - Date.now()) / 60000)
   const stamp = d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
-  if (mins <= 0) return `${stamp} · expired`
-  if (mins < 60) return `${stamp} · ${mins}m left`
-  return `${stamp} · ${Math.floor(mins / 60)}h ${mins % 60}m left`
+  if (mins <= 0) return `${stamp}, expired`
+  if (mins < 60) return `${stamp}, ${mins}m left`
+  return `${stamp}, ${Math.floor(mins / 60)}h ${mins % 60}m left`
+}
+
+// The rail. Sticky, so it stays put while a long panel scrolls beside it, and
+// aria-current marks the open one for a screen reader the same way the visual
+// state marks it for everyone else.
+function SettingsNav({ sections, active, onSelect }) {
+  return (
+    <nav aria-label="Settings sections" className="lg:sticky lg:top-6 lg:self-start">
+      <ul className="flex gap-1 overflow-x-auto pb-1 lg:block lg:space-y-0.5 lg:overflow-visible lg:pb-0">
+        {sections.map((s) => {
+          const on = s.key === active
+          return (
+            <li key={s.key} className="flex-none">
+              <button
+                type="button"
+                onClick={() => onSelect(s.key)}
+                aria-current={on ? 'page' : undefined}
+                className={clsx(
+                  'flex w-full items-center gap-2.5 whitespace-nowrap rounded-lg px-3 py-2 text-left text-sm transition-colors',
+                  on
+                    ? 'bg-accent-soft font-semibold text-accent'
+                    : 'text-secondary hover:bg-hover hover:text-primary'
+                )}
+              >
+                <s.icon
+                  className={clsx('h-4 w-4 flex-none', on ? 'text-accent' : 'text-tertiary')}
+                  strokeWidth={1.6}
+                />
+                {s.label}
+              </button>
+            </li>
+          )
+        })}
+      </ul>
+    </nav>
+  )
+}
+
+// A group inside a panel: what it is, what it is for, then the rows. The
+// heading carries the weight; the box around it went away.
+function Group({ title, description, aside, children }) {
+  return (
+    <section className="mt-9 first:mt-0">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <h2 className="text-lg font-bold leading-tight text-primary">{title}</h2>
+        {aside && <span className="flex-none text-sm text-tertiary">{aside}</span>}
+      </div>
+      {description && <p className="mt-1.5 max-w-prose text-sm leading-relaxed text-secondary">{description}</p>}
+      <div className="mt-4">{children}</div>
+    </section>
+  )
+}
+
+// Rows share one hairline rule between them and nothing around the outside,
+// so a list of settings reads as a list rather than as a stack of boxes.
+function Rows({ children }) {
+  return <div className="divide-y divide-line-soft border-y border-line-soft">{children}</div>
 }
 
 export default function SettingsPage() {
@@ -140,9 +148,9 @@ export default function SettingsPage() {
   const meQuery = useQuery({ queryKey: ['me'], queryFn: ({ signal }) => me(signal) })
   // LIVE, not "after a refresh". useMfaStatus subscribes to the enrolment
   // evidence map as well as reading the /auth/me payload, so enabling or
-  // disabling MFA repaints this page (Security card AND the Account tab's
-  // posture chip) in the same tick as the change. See hooks/useMfaStatus.js
-  // for why invalidating ['me'] alone could never do it on this backend.
+  // disabling MFA repaints this page in the same tick as the change. See
+  // hooks/useMfaStatus.js for why invalidating ['me'] alone could never do it
+  // on this backend.
   const mfa = useMfaStatus(meQuery.data)
   const posture = mfaSummary(mfa)
 
@@ -153,24 +161,27 @@ export default function SettingsPage() {
     [prefs, savedPrefs]
   )
 
-  const TABS = useMemo(
-    () =>
-      [
-        { key: 'account', label: 'Account', icon: UserRound },
-        { key: 'security', label: 'Security', icon: ShieldCheck },
-        { key: 'notifications', label: 'Notifications', icon: Bell },
-        { key: 'integrations', label: 'Local Agent', icon: Plug },
-        // { key: 'appearance', label: 'Appearance', icon: Palette },
-        // isAdmin ? { key: 'organization', label: 'Organization', icon: Building2 } : null,
-      ].filter(Boolean),
-    [isAdmin]
+  const SECTIONS = useMemo(
+    () => [
+      { key: 'profile', label: 'Profile', icon: UserRound },
+      { key: 'security', label: 'Security', icon: ShieldCheck },
+      { key: 'notifications', label: 'Notifications', icon: Bell },
+      { key: 'devices', label: 'Devices', icon: Laptop },
+      { key: 'appearance', label: 'Appearance', icon: Palette },
+    ],
+    []
   )
 
+  // `?tab=` keeps its name so links that already point at a settings section
+  // still land. Legacy values from the old tab bar are mapped rather than
+  // dropped on the floor.
+  const LEGACY = { account: 'profile', integrations: 'devices' }
   const requested = params.get('tab')
-  const active = TABS.some((t) => t.key === requested) ? requested : 'account'
+  const resolved = LEGACY[requested] || requested
+  const active = SECTIONS.some((s) => s.key === resolved) ? resolved : 'profile'
   const setActive = (key) => {
     const next = new URLSearchParams(params)
-    if (key === 'account') next.delete('tab')
+    if (key === 'profile') next.delete('tab')
     else next.set('tab', key)
     setParams(next, { replace: true })
   }
@@ -179,405 +190,324 @@ export default function SettingsPage() {
     try {
       localStorage.setItem(NOTIFICATION_PREFS_KEY, JSON.stringify(prefs))
       setSavedPrefs(prefs)
-      toast.success('Notification preferences saved')
+      toast.success('Notification preferences saved', {
+        description: 'Applied to this browser straight away.',
+      })
     } catch {
-      toast.error('Could not save - storage is unavailable in this browser')
+      toast.error('Could not save your preferences', {
+        description: 'Browser storage is unavailable, so this setting cannot be remembered.',
+      })
     }
   }
 
   return (
-    <div>
-      <PageHeader
+    <Stack gap="lg">
+      <PageTitle
         title="Settings"
-        description="Your identity and second factor, how this console reaches you, and the machines paired to your account."
+        description="Your identity and second factor, what this console tells you about, and the machines paired to your account."
       />
 
-      <TabBar tabs={TABS} active={active} onChange={setActive} className="mb-7" />
+      {/* Rail beside panel. Below `lg` the rail becomes a horizontal strip
+          above the panel rather than collapsing into a select, so every
+          section stays one tap away on a phone. */}
+      <div className="grid gap-6 lg:grid-cols-[13.5rem_minmax(0,1fr)] lg:gap-10">
+        <SettingsNav sections={SECTIONS} active={active} onSelect={setActive} />
 
-      {active === 'account' && (
-        <div className="space-y-7">
-          <QueryState query={meQuery} skeletonRows={4}>
-            {(data) => (
-              <>
-                <Card>
-                  <div className="flex flex-col gap-5 p-5 sm:flex-row sm:items-center">
-                    <Avatar name={data.username} size="xl" />
-                    <div className="min-w-0 flex-1">
-                      <h2 className="truncate text-lg font-semibold leading-tight text-ink-50">
-                        {data.username}
-                      </h2>
-                      <p className="mt-1 truncate text-sm text-ink-400">{data.email || '-'}</p>
-                      <div className="mt-2.5 flex flex-wrap gap-1.5">
-                        {(data.roles || []).length === 0 && (
-                          <span className="text-xs text-ink-500">No roles assigned</span>
-                        )}
-                        {(data.roles || []).map((r) => (
-                          <span
-                            key={r}
-                            className={clsx(
-                              'rounded px-1.5 py-0.5 text-2xs font-semibold ring-1 ring-inset',
-                              ROLE_BADGE[r] || ROLE_BADGE.user
-                            )}
-                          >
-                            {r}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="flex-none sm:self-start">
-                      <span
-                        className={clsx(
-                          'inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium ring-1 ring-inset',
-                          posture.tone === 'emerald' &&
-                            'bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-500/25',
-                          posture.tone === 'amber' &&
-                            'bg-amber-50 text-amber-700 ring-amber-600/20 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-500/25',
-                          posture.tone === 'ink' && 'bg-surface-800 text-ink-400 ring-surface-700'
-                        )}
-                      >
-                        <ShieldCheck className="h-3.5 w-3.5" strokeWidth={1.75} />
-                        {posture.label}
-                      </span>
-                    </div>
-                  </div>
-                </Card>
+        {/* Capped, not fluid. A settings row is label-and-description on the
+            left with its control on the right edge, so letting the panel grow
+            to a 2560px monitor strands the switch a foot from the sentence it
+            belongs to. Every settings surface of this class caps the column
+            for the same reason. */}
+        <div className="min-w-0 max-w-4xl">
+          {active === 'profile' && (
+            <QueryState query={meQuery} skeletonRows={4}>
+              {(data) => (
+                <>
+                  <Group
+                    title="Your account"
+                    description="Who this console knows you as. These come from the directory and are changed by an administrator, not here."
+                  >
+                    <Container>
+                      <KeyValueGrid
+                        columns={3}
+                        items={[
+                          { label: 'Username', value: data.username },
+                          { label: 'Email', value: data.email },
+                          {
+                            label: 'Roles',
+                            value:
+                              (data.roles || []).length > 0 ? (data.roles || []).join(', ') : 'None assigned',
+                          },
+                          {
+                            label: 'User ID',
+                            value: <span className="font-mono text-xs">{data.id || data.user_id || '-'}</span>,
+                          },
+                          {
+                            label: 'Organization',
+                            value: (
+                              <span className="font-mono text-xs">
+                                {data.org_id || data.organization_id || '-'}
+                              </span>
+                            ),
+                          },
+                          {
+                            label: 'Second factor',
+                            value: (
+                              <StatusDot
+                                tone={
+                                  posture.tone === 'emerald' ? 'ok' : posture.tone === 'amber' ? 'warn' : 'muted'
+                                }
+                                label={posture.label}
+                              />
+                            ),
+                          },
+                        ]}
+                      />
+                    </Container>
+                  </Group>
 
-                <Section label="Identity">
-                  <Card>
-                    <DetailList
-                      items={[
-                        { label: 'Username', value: data.username },
-                        { label: 'Email', value: data.email },
-                        { label: 'User ID', value: data.id || data.user_id || '-' },
-                        {
-                          label: 'Organization',
-                          value: data.org_id || data.organization_id || '-',
-                        },
-                        {
-                          label: 'Roles',
-                          value: (data.roles || []).join(', ') || '-',
-                        },
-                      ]}
-                    />
-                  </Card>
-                </Section>
-
-                <Section label="Current session">
-                  <Card>
-                    <DetailList
-                      items={[
-                        { label: 'Access token', value: formatExpiry(expiresAt) },
-                        {
-                          label: 'MFA',
-                          value: mfa.verifiedThisSession
-                            ? 'Verified this session - privileged actions allowed'
-                            : 'Not verified this session',
-                        },
-                        {
-                          label: 'Enrolment',
-                          value: mfa.unknown
-                            ? 'Not reported by this deployment'
-                            : mfa.enabled
-                              ? 'A second factor is registered on this account'
-                              : 'No second factor registered',
-                        },
-                      ]}
-                    />
-                    <CardFooter className="justify-between">
-                      <p className="text-xs text-ink-500">
-                        Sessions end when the access token expires or you sign out.
-                      </p>
+                  <Group
+                    title="This session"
+                    description="The token in this browser tab, and whether it has cleared a second factor. Signing out or letting it expire ends it."
+                    aside={
                       <Button
                         variant="ghost"
                         size="sm"
                         icon={RotateCcw}
                         onClick={() => {
                           queryClient.invalidateQueries({ queryKey: ['me'] })
-                          toast.success('Account refreshed')
+                          toast.success('Account refreshed', {
+                            description: 'Read again from the directory just now.',
+                          })
                         }}
                       >
                         Refresh
                       </Button>
-                    </CardFooter>
-                  </Card>
-                </Section>
-              </>
-            )}
-          </QueryState>
-        </div>
-      )}
+                    }
+                  >
+                    <Container>
+                      <KeyValueGrid
+                        columns={3}
+                        items={[
+                          {
+                            label: 'Access token',
+                            value: formatExpiry(expiresAt),
+                            hint: 'Sessions end when this expires or you sign out.',
+                          },
+                          {
+                            label: 'MFA this session',
+                            value: mfa.verifiedThisSession ? (
+                              <StatusDot tone="ok" label="Verified" />
+                            ) : (
+                              <StatusDot tone="muted" label="Not verified" />
+                            ),
+                            hint: mfa.verifiedThisSession
+                              ? 'Privileged actions are allowed.'
+                              : 'A reveal or a break-glass action will ask you to verify.',
+                          },
+                          {
+                            label: 'Enrolment',
+                            value: mfa.unknown
+                              ? 'Not reported by this deployment'
+                              : mfa.enabled
+                                ? 'A second factor is registered'
+                                : 'No second factor registered',
+                          },
+                        ]}
+                      />
+                    </Container>
+                  </Group>
+                </>
+              )}
+            </QueryState>
+          )}
 
-      {active === 'security' && (
-        <div className="space-y-7">
-          <Section label="Second factor">
-            <MfaEnrollment
-              status={mfa}
-              onEnrolled={() => {
-                queryClient.invalidateQueries({ queryKey: ['me'] })
-                toast.success('MFA enabled')
-              }}
-              // Disabling is a real, backend-performed removal on this
-              // deployment (see MfaEnrollment for exactly which call does it),
-              // so it gets the same re-read and the same confirmation weight
-              // as enabling.
-              onDisabled={() => {
-                queryClient.invalidateQueries({ queryKey: ['me'] })
-                toast.success('MFA disabled - this account is now password-only')
-              }}
-            />
-          </Section>
+          {active === 'security' && (
+            <>
+              <Group
+                title="Second factor"
+                description="A time-based code from an authenticator app. Required for revealing a credential and for break-glass access, whatever your account's other permissions are."
+              >
+                <MfaEnrollment
+                  status={mfa}
+                  onEnrolled={() => {
+                    queryClient.invalidateQueries({ queryKey: ['me'] })
+                    toast.success('Second factor enabled', {
+                      description: 'Your authenticator is registered and will be asked for at sign-in.',
+                    })
+                  }}
+                  // Disabling is a real, backend-performed removal on this
+                  // deployment (see MfaEnrollment for exactly which call does
+                  // it), so it gets the same re-read and the same
+                  // confirmation weight as enabling.
+                  onDisabled={() => {
+                    queryClient.invalidateQueries({ queryKey: ['me'] })
+                    toast.success('Second factor removed', {
+                      description: 'This account signs in with its password alone from now on.',
+                    })
+                  }}
+                />
+              </Group>
 
-          <Section label="Policy in force">
-            <Card>
-              <CardHeader>
-                <CardTitle icon={ShieldCheck}>Access policy</CardTitle>
-                <span className="ml-auto text-2xs font-medium uppercase tracking-[0.08em] text-ink-500">
-                  Server-configured
-                </span>
-              </CardHeader>
-              <DetailList
-                items={[
-                  { label: 'Vault reveal', value: 'Requires an MFA-verified session' },
-                  {
-                    label: 'JIT duration',
-                    value: `${JIT_DEFAULTS.DEFAULT_DURATION_MIN} min default · ${JIT_DEFAULTS.MAX_DURATION_MIN} min maximum`,
-                  },
-                  {
-                    label: 'Break-glass',
-                    value: `${JIT_DEFAULTS.BREAKGLASS_WAIT_MIN} min waiting period · ${JIT_DEFAULTS.BREAKGLASS_MAX_DURATION_MIN} min maximum`,
-                  },
-                  {
-                    label: 'Justification',
-                    value: `At least ${JIT_DEFAULTS.MIN_REASON_LENGTH} characters on every request`,
-                  },
-                ]}
-              />
-              <CardFooter>
-                <p className="text-xs leading-relaxed text-ink-500">
-                  These are the deployment&apos;s configured defaults, shown for reference. Changing them is a
-                  server-side configuration change, not a console setting.
-                </p>
-              </CardFooter>
-            </Card>
-          </Section>
-        </div>
-      )}
+              <Group
+                title="Policy in force"
+                description="What this deployment enforces on every account, yours included. These are server-side configuration, shown here so you know the rules before you hit them."
+                aside="Set by your administrator"
+              >
+                <Container>
+                  <KeyValueGrid
+                    columns={2}
+                    items={[
+                      {
+                        label: 'Vault reveal',
+                        value: 'Requires an MFA-verified session',
+                        hint: 'Revealing a secret re-checks your second factor even mid-session.',
+                      },
+                      {
+                        label: 'JIT duration',
+                        value: `${JIT_DEFAULTS.DEFAULT_DURATION_MIN} min by default, ${JIT_DEFAULTS.MAX_DURATION_MIN} min maximum`,
+                        hint: 'Elevation ends on its own. Nothing keeps standing access.',
+                      },
+                      {
+                        label: 'Break-glass',
+                        value: `${JIT_DEFAULTS.BREAKGLASS_WAIT_MIN} min waiting period, ${JIT_DEFAULTS.BREAKGLASS_MAX_DURATION_MIN} min maximum`,
+                        hint: 'The wait is deliberate, and every break-glass grant is reviewed after the fact.',
+                      },
+                      {
+                        label: 'Justification',
+                        value: `At least ${JIT_DEFAULTS.MIN_REASON_LENGTH} characters on every request`,
+                        hint: 'Written into the audit record against your name.',
+                      },
+                    ]}
+                  />
+                </Container>
+              </Group>
+            </>
+          )}
 
-      {active === 'notifications' && (
-        <div className="space-y-7">
-          <Section label="In-console alerts">
-            <Card>
-              <CardHeader>
-                <CardTitle icon={Bell}>What you get told about</CardTitle>
-              </CardHeader>
-              <div className="divide-y divide-surface-800">
-                {isAdmin && (
+          {active === 'notifications' && (
+            <>
+              <Group
+                title="What this console tells you about"
+                description="In-console alerts, shown on the bell in the top bar. Nothing here sends email or webhooks yet."
+                aside="Saved in this browser"
+              >
+                <Rows>
+                  {isAdmin && (
+                    <SettingRow
+                      label="Approval queue"
+                      description="A JIT or break-glass request is waiting on you to approve or deny."
+                      control={
+                        <Switch
+                          checked={prefs.approvalsQueue}
+                          onChange={(v) => setPrefs((p) => ({ ...p, approvalsQueue: v }))}
+                          label="Approval queue alerts"
+                        />
+                      }
+                    />
+                  )}
                   <SettingRow
-                    label="Approval queue"
-                    description="A JIT or break-glass request is waiting on you to approve or deny."
+                    label="Decisions on your requests"
+                    description="One of your access requests is approved, denied, or cancelled."
                     control={
                       <Switch
-                        checked={prefs.approvalsQueue}
-                        onChange={(v) => setPrefs((p) => ({ ...p, approvalsQueue: v }))}
-                        label="Approval queue alerts"
+                        checked={prefs.requestDecided}
+                        onChange={(v) => setPrefs((p) => ({ ...p, requestDecided: v }))}
+                        label="Request decision alerts"
                       />
                     }
                   />
-                )}
-                <SettingRow
-                  label="Decisions on your requests"
-                  description="One of your access requests is approved, denied, or cancelled."
-                  control={
-                    <Switch
-                      checked={prefs.requestDecided}
-                      onChange={(v) => setPrefs((p) => ({ ...p, requestDecided: v }))}
-                      label="Request decision alerts"
-                    />
-                  }
-                />
-                <SettingRow
-                  label="Access expiring"
-                  description="An active grant of yours is within 30 minutes of expiry."
-                  control={
-                    <Switch
-                      checked={prefs.accessExpiring}
-                      onChange={(v) => setPrefs((p) => ({ ...p, accessExpiring: v }))}
-                      label="Expiring access alerts"
-                    />
-                  }
-                />
-                <SettingRow
-                  label="Session terminated"
-                  description="An administrator kills one of your active sessions."
-                  control={
-                    <Switch
-                      checked={prefs.sessionKilled}
-                      onChange={(v) => setPrefs((p) => ({ ...p, sessionKilled: v }))}
-                      label="Session termination alerts"
-                    />
-                  }
-                />
-                <SettingRow
-                  label="Weekly access digest"
-                  description="A Monday summary of what you accessed and what expired."
-                  control={
-                    <Switch
-                      checked={prefs.weeklyDigest}
-                      onChange={(v) => setPrefs((p) => ({ ...p, weeklyDigest: v }))}
-                      label="Weekly digest"
-                    />
-                  }
-                />
-              </div>
-            </Card>
-          </Section>
+                  <SettingRow
+                    label="Access expiring"
+                    description="An active grant of yours is within 30 minutes of expiry."
+                    control={
+                      <Switch
+                        checked={prefs.accessExpiring}
+                        onChange={(v) => setPrefs((p) => ({ ...p, accessExpiring: v }))}
+                        label="Expiring access alerts"
+                      />
+                    }
+                  />
+                  <SettingRow
+                    label="Session terminated"
+                    description="An administrator ends one of your active sessions."
+                    control={
+                      <Switch
+                        checked={prefs.sessionKilled}
+                        onChange={(v) => setPrefs((p) => ({ ...p, sessionKilled: v }))}
+                        label="Session termination alerts"
+                      />
+                    }
+                  />
+                  <SettingRow
+                    label="Weekly access digest"
+                    description="A Monday summary of what you reached and what expired."
+                    control={
+                      <Switch
+                        checked={prefs.weeklyDigest}
+                        onChange={(v) => setPrefs((p) => ({ ...p, weeklyDigest: v }))}
+                        label="Weekly digest"
+                      />
+                    }
+                  />
+                </Rows>
+              </Group>
 
-          {/* <ApiPendingNotice>
-            Delivery is in-console only for now, the notifications bell in the top bar reads live
-            JIT data directly. These switches are stored in this browser and will be sent to the
- server the moment a preferences endpoint exists; no email or webhook is dispatched yet.
-          </ApiPendingNotice> */}
-
-          {/* The save affordance only exists when there is something to save , 
- a permanently-enabled Save button teaches people to ignore it. */}
-          {dirty && (
-            <div className="animate-panel-in sticky bottom-0 z-10 -mx-4 flex flex-wrap items-center justify-between gap-3 border-t border-surface-700/70 bg-surface-900/92 px-4 py-3 backdrop-blur-md sm:-mx-6 sm:px-6">
-              <p className="text-xs text-ink-400">Unsaved preference changes</p>
-              <div className="flex items-center gap-2">
-                <Button variant="ghost" size="sm" onClick={() => setPrefs(savedPrefs)}>
-                  Discard
-                </Button>
-                <Button variant="primary" size="sm" icon={Save} onClick={savePrefs}>
-                  Save preferences
-                </Button>
-              </div>
-            </div>
+              {/* The save affordance only exists when there is something to
+                  save. A permanently enabled Save button teaches people to
+                  ignore it, and an auto-saving toggle row gives you nothing to
+                  undo. */}
+              {dirty && (
+                <div className="animate-panel-in sticky bottom-0 z-10 -mx-4 mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-line bg-surface/95 px-4 py-3 backdrop-blur-md sm:-mx-6 sm:px-6">
+                  <p className="text-sm font-medium text-secondary">You have unsaved changes</p>
+                  <div className="flex items-center gap-2">
+                    <Button variant="ghost" size="sm" onClick={() => setPrefs(savedPrefs)}>
+                      Discard
+                    </Button>
+                    <Button variant="primary" size="sm" icon={Save} onClick={savePrefs}>
+                      Save preferences
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </>
           )}
-        </div>
-      )}
 
-      {active === 'integrations' && (
-        <div className="space-y-7">
-          {/* <Section label="Local agent">
-            <Card>
-              <CardHeader>
-                <CardTitle icon={Terminal}>pam-agent CLI</CardTitle>
-              </CardHeader>
-              <div className="space-y-4 p-4">
-                <p className="text-sm leading-relaxed text-ink-400">
-                  Pair a machine to launch connections through the CLI instead of the browser. The
- agent authenticates against this deployment:
-                </p>
-                <CopyField label="API endpoint" value={API_BASE_URL} />
-              </div>
-            </Card>
-          </Section> */}
+          {active === 'devices' && (
+            <Group
+              title="Paired devices"
+              description="Machines allowed to act as you through the pam-agent CLI, so a connection can be opened from a terminal instead of the browser. Unpair anything you no longer recognise."
+            >
+              <AgentDevicesPanel />
+            </Group>
+          )}
 
-          <Section label="Paired devices">
-            <AgentDevicesPanel />
-          </Section>
-
-          {/* <Section label="Programmatic access">
-            <Card>
-              <CardHeader>
-                <CardTitle icon={KeyRound}>API keys</CardTitle>
-                <span className="ml-auto text-2xs font-medium uppercase tracking-[0.08em] text-ink-500">
-                  Not available
-                </span>
-              </CardHeader>
-              <div className="space-y-4 p-4">
-                <p className="text-sm leading-relaxed text-ink-400">
-                  Service accounts and long-lived API keys are issued by an administrator through
-                  Identity, not self-service. Agent pairing above is the supported way to
- authenticate a machine as yourself.
-                </p>
-                <ApiPendingNotice>
-                  There is no self-service key-issuance endpoint on this backend. This section is
- designed and ready for one, it stays read-only until it ships.
-                </ApiPendingNotice>
-              </div>
-            </Card>
-          </Section> */}
-        </div>
-      )}
-
-      {active === 'appearance' && (
-        <div className="space-y-7">
-          <Section label="Theme">
-            <Card>
-              <CardHeader>
-                <CardTitle icon={Palette}>Appearance</CardTitle>
-              </CardHeader>
-              <div className="divide-y divide-surface-800">
+          {active === 'appearance' && (
+            <Group
+              title="Appearance"
+              description="How this console looks on this machine. Remembered in this browser, not on your account, so a shared workstation keeps its own setting."
+            >
+              <Rows>
                 <SettingRow
-                  label="Console theme"
-                  description="Applies immediately and is remembered in this browser. Light and dark are the only modes - the console follows your operating system only until you pick one."
+                  label="Theme"
+                  description="Light and dark are the only modes. The console follows your operating system until you pick one, and keeps your choice after that."
                   control={<ThemeSegmented />}
                 />
                 <SettingRow
                   label="Reduced motion"
-                  description="Transitions and overlay animations are already suppressed automatically when your operating system asks for reduced motion."
+                  description="Transitions and overlay animations are suppressed automatically when your operating system asks for reduced motion, so there is nothing to switch on here."
                   control={
-                    <span className="flex items-center gap-1.5 rounded-lg bg-surface-800 px-2.5 py-1.5 text-xs font-medium text-ink-400 ring-1 ring-inset ring-surface-700">
-                      <Clock className="h-3.5 w-3.5" strokeWidth={1.75} />
-                      Follows your OS
+                    <span className="inline-flex items-center gap-2 text-sm text-secondary">
+                      <Check className="h-4 w-4 flex-none text-ok" strokeWidth={2} />
+                      Follows your system
                     </span>
                   }
                 />
-              </div>
-            </Card>
-          </Section>
+              </Rows>
+            </Group>
+          )}
         </div>
-      )}
-
-      {/* {active === 'organization' && (
-        <div className="space-y-7">
-          <Section label="Tenant">
-            <Card>
-              <CardHeader>
-                <CardTitle icon={Building2}>Organization</CardTitle>
-                <span className="ml-auto text-2xs font-medium uppercase tracking-[0.08em] text-ink-500">
-                  Read-only
-                </span>
-              </CardHeader>
-              <div className="space-y-4 p-4">
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <Field label="Display name" hint="Shown in audit exports and reports.">
-                    <input
- className={inputClass(false)}
- disabled
- placeholder="Not exposed by the API"
-                    />
-                  </Field>
-                  <Field label="Security contact" hint="Where break-glass alerts would be sent.">
-                    <input
- className={inputClass(false)}
- disabled
- placeholder="Not exposed by the API"
-                    />
-                  </Field>
-                </div>
-                <DetailList
- items={[
-                    {
- label: 'Organization ID',
- value:
- meQuery.data?.org_id || meQuery.data?.organization_id || '-',
-                    },
-                    { label: 'Audit chain', value: 'Hash-chained · verifiable in Admin Center' },
-                    { label: 'Session recording', value: 'Enabled per resource policy' },
-                  ]}
-                />
-                <ApiPendingNotice>
-                  Tenant administration has no endpoints on this backend yet, nothing here can be
- edited from the console. Organization-level facts that <em>are</em> available live
- in Admin Center → Overview and Audit &amp; Compliance.
-                </ApiPendingNotice>
-              </div>
-            </Card>
-          </Section>
-        </div>
-      )} */}
-    </div>
+      </div>
+    </Stack>
   )
 }

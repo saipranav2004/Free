@@ -95,11 +95,26 @@ function NavSection({ label, items, collapsed, onNavigate }) {
 // placement every mature enterprise console uses. It belongs to the panel it
 // resizes, so the affordance points at the edge that actually moves; when
 // collapsed it centres in the icon rail.
-function SidebarCollapseControl({ collapsed, onToggle }) {
+function SidebarCollapseControl({ collapsed, onToggle, consoleTitle }) {
   return (
     <div
-      className={clsx('flex flex-none items-center px-3 pt-3', collapsed ? 'justify-center' : 'justify-end')}
+      className={clsx(
+        'flex flex-none items-center gap-2 border-b border-line px-3 py-2.5',
+        collapsed ? 'justify-center' : 'justify-between'
+      )}
     >
+      {/* THE CONSOLE NAME LIVES HERE, heading the navigation it names. This is
+          the AWS Console arrangement, where the service name sits at the top
+          of the left panel rather than in the global bar, and Okta's, where
+          the org heads the admin nav. It is role dependent: administrators
+          operate the identity control plane, everyone else the privileged
+          access console. Hidden when the rail is collapsed, where the icons
+          are the only thing that survives. */}
+      {!collapsed && (
+        <h2 className="min-w-0 truncate text-sm font-bold text-primary" title={consoleTitle}>
+          {consoleTitle}
+        </h2>
+      )}
       <button
         type="button"
         onClick={onToggle}
@@ -154,7 +169,7 @@ export function AppLayout() {
 
   // Console identity, role-dependent: administrators operate the identity
   // control plane ("IAM Console"), everyone else the privileged access
-  // console ("PAM Console"). Rendered once, in the topbar.
+  // console ("PAM Console"). Rendered once, heading the sidebar.
   const consoleTitle = isAdmin ? 'IAM Console' : 'PAM Console'
 
   const toggleCollapsed = useCallback(() => {
@@ -232,7 +247,6 @@ export function AppLayout() {
     // document would otherwise scroll the whole shell and drag them along.
     <div className="h-screen overflow-hidden bg-app pt-12">
       <TopNavbar
-        consoleTitle={consoleTitle}
         isAdmin={isAdmin}
         user={user}
         roles={user?.roles || []}
@@ -254,7 +268,11 @@ export function AppLayout() {
             collapsed ? 'w-[4.25rem]' : 'w-[15.5rem]'
           )}
         >
-          <SidebarCollapseControl collapsed={collapsed} onToggle={toggleCollapsed} />
+          <SidebarCollapseControl
+            collapsed={collapsed}
+            onToggle={toggleCollapsed}
+            consoleTitle={consoleTitle}
+          />
           <SidebarContent isAdmin={isAdmin} onNavigate={() => {}} collapsed={collapsed} />
         </aside>
 
@@ -268,7 +286,8 @@ export function AppLayout() {
               aria-hidden="true"
             />
             <aside className="relative flex w-[16rem] flex-col border-r border-line bg-subtle shadow-overlay">
-              <div className="flex flex-none items-center justify-end px-3 pt-3">
+              <div className="flex flex-none items-center justify-between gap-2 border-b border-line px-3 py-2.5">
+                <h2 className="min-w-0 truncate text-sm font-bold text-primary">{consoleTitle}</h2>
                 <button
                   onClick={() => setMobileNavOpen(false)}
                   className="flex h-8 w-8 items-center justify-center rounded-lg text-tertiary transition-colors hover:bg-hover hover:text-primary"
