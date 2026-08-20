@@ -682,7 +682,7 @@ export default function IdentityListPage() {
                 {table.pageRows.map((u) => {
                   const selected = table.isSelected(u)
                   return (
-                    <Tr key={u.user_id} selected={selected}>
+                    <Tr key={u.user_id} selected={selected} to={`/admin/identity/${u.user_id}`}>
                       <Td sticky left="left-0" selected={selected}>
                         <RowCheckbox
                           checked={selected}

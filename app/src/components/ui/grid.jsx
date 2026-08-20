@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import clsx from 'clsx'
 import { ArrowDown, ArrowUp, ChevronsUpDown } from 'lucide-react'
 
@@ -163,13 +164,45 @@ export function SortTh({ children, columnKey, sort, onSort, align = 'left', ...r
   )
 }
 
-export function Tr({ children, selected = false, onClick, className }) {
+/**
+ * A row. Pass `to` and the WHOLE row opens that record, which is how Okta's
+ * People list and Entra's user blade behave: a 44px band that looks entirely
+ * clickable should be entirely clickable, not a link occupying 15% of it.
+ *
+ * Three things it deliberately does not do:
+ *
+ *   - It never hijacks a click that landed on something which already does
+ *     something of its own: a checkbox, a row menu, a link, a button.
+ *   - It never swallows a modifier click. Cmd-click, middle-click and
+ *     shift-click belong to the identity link inside the row, which is a real
+ *     anchor and opens a real new tab.
+ *   - It never fires when the click ended a text selection, because dragging
+ *     across a cell to copy an ID is not a request to navigate.
+ *
+ * The row itself is NOT a tab stop. The identity cell already holds a real
+ * link, so keyboard users have a path; making the row focusable too would put
+ * two stops on every record and read the name twice.
+ */
+export function Tr({ children, selected = false, onClick, to, className }) {
+  const navigate = useNavigate()
+  const interactive = !!(to || onClick)
+
+  const handleClick = (event) => {
+    if (!interactive) return
+    if (event.button !== 0) return
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+    if (event.target.closest('a, button, input, select, textarea, label, [role="menuitem"]')) return
+    if (window.getSelection()?.toString()) return
+    if (to) navigate(to)
+    else onClick?.(event)
+  }
+
   return (
     <tr
-      onClick={onClick}
+      onClick={handleClick}
       className={clsx(
         'group',
-        onClick && 'cursor-pointer',
+        interactive && 'cursor-pointer',
         selected ? 'bg-subtle' : 'bg-surface hover:bg-hover',
         className
       )}

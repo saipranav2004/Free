@@ -146,7 +146,14 @@ export function ResourceTable({
 
       <tbody>
         {rows.map((r) => (
-          <Tr key={r.id} className={focusedId === r.id ? 'ring-1 ring-inset ring-accent/40' : undefined}>
+          // The whole row opens the same peek panel the name button does, so
+          // the click target matches the band that looks clickable. The name
+          // button keeps working on its own; Tr steps aside for it.
+          <Tr
+            key={r.id}
+            onClick={() => onPeek(r)}
+            className={focusedId === r.id ? 'ring-1 ring-inset ring-accent/40' : undefined}
+          >
             {show('name') && (
               <Td sticky edge>
                 <div className="flex min-w-0 items-center gap-2.5">

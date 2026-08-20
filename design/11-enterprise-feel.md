@@ -69,13 +69,22 @@ a settings redesign.
 
 ---
 
-## 3. Row affordance stops at the link
+## 3. Row affordance stopped at the link  ← fixed this pass
 
 **What they do.** In Okta's People list and Entra's user blade the whole row is
 the target, with the chevron as a hint rather than the only door.
 
-**What we have.** The username is a link; the rest of the row is inert. The
-click target is roughly 15% of a 44px row that looks entirely clickable.
+**What we had.** The username was a link; the rest of the row was inert. The
+click target was roughly 15% of a 44px band that looks entirely clickable.
+
+**Fixed.** `Tr` takes `to` (navigate) or `onClick` (open the peek panel) and the
+whole row responds. It steps aside for anything that already does something,
+never swallows a modifier click, and ignores a click that merely ended a text
+selection. The row is deliberately not a tab stop: the identity cell already
+holds a real link, so adding one would put two stops on every record.
+
+Verified: clicking a row checkbox selects without navigating; clicking dead
+space in the row opens the record.
 
 ---
 
@@ -104,12 +113,12 @@ appears at all. Worth holding as every new list is added.
 | Page | Strongest | Weakest |
 |---|---|---|
 | Dashboard | Fact rail beats the old KPI wall | Panels do not deep-link into their filtered list |
-| Resources | Dense grid, honest facets | Row click target; no optimistic connect |
+| Resources | Dense grid, honest facets, whole-row click | No optimistic connect |
 | Vault safes / safe | Folder rail filters rather than duplicating | Credential table still the least dense |
 | Sessions | Live dot earns its animation | Terminate waits on the round trip |
 | JIT (self) | Countdown is the right primary fact | No optimistic cancel |
 | JIT approvals | Four-eyes progress is genuinely good | Approve/deny not optimistic; two tables, so no URL sync |
-| Identity list | Best table in the product | Row click target |
+| Identity list | Best table in the product, whole-row click | Bulk actions still need a batch endpoint |
 | Identity detail | Fact rail + tabs is the right shape | Access tab still carries stat tiles |
 | Audit | Filters are real | Export does not carry the filter into the filename |
 | Settings | Rebuilt this pass, rail + rows | — |
@@ -119,7 +128,7 @@ appears at all. Worth holding as every new list is added.
 ## Order of work, by payoff per unit of risk
 
 1. ~~URL-synced view state~~ — **done this pass**, whole-product effect
-2. Whole-row click targets — small, mechanical, high polish
+2. ~~Whole-row click targets~~ — **done this pass** on Identity and Resources
 3. Optimistic updates on approve / deny / terminate — biggest perceived speed
    gain, needs its own verification pass
 4. Dashboard panels deep-link into the filtered list they summarise, now that
