@@ -210,6 +210,9 @@ export default function SessionsPage() {
   const table = useTableState({
     rows,
     storageKey: 'sessions',
+    // View state in the address bar, so a filtered list is something you can
+    // send to someone. See useTableState.
+    urlSync: true,
     rowId: (s) => s.id,
     initialSort: { key: 'started_at', dir: 'desc' },
     initialPageSize: 25,

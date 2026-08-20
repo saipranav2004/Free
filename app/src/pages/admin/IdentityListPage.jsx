@@ -199,14 +199,31 @@ export default function IdentityListPage() {
     setParams(next, { replace: true })
   }, [params, setParams])
 
-  const [searchInput, setSearchInput] = useState('')
-  const [search, setSearch] = useState('')
+  // Search on this page is SERVER-SIDE, so it is the page's own state rather
+  // than useTableState's `query`. It still belongs in the address bar for the
+  // same reason the facets do: a link to "every contractor account" is worth
+  // being able to send. Seeded from ?q= at mount, written back once the
+  // debounce settles so a keystroke does not touch the URL five times.
+  const [searchInput, setSearchInput] = useState(() => params.get('q') || '')
+  const [search, setSearch] = useState(() => (params.get('q') || '').trim())
   const [focusedId, setFocusedId] = useState(null)
 
   useEffect(() => {
     const t = setTimeout(() => setSearch(searchInput.trim()), SEARCH_DEBOUNCE_MS)
     return () => clearTimeout(t)
   }, [searchInput])
+
+  useEffect(() => {
+    setParams(
+      (prev) => {
+        const next = new URLSearchParams(prev)
+        if (search) next.set('q', search)
+        else next.delete('q')
+        return next
+      },
+      { replace: true }
+    )
+  }, [search, setParams])
 
   const usersQuery = useQuery({
     queryKey: ['admin', 'users', search],
@@ -309,6 +326,9 @@ export default function IdentityListPage() {
   const table = useTableState({
     rows: users,
     storageKey: 'identity',
+    // View state in the address bar, so a filtered list is something you can
+    // send to someone. See useTableState.
+    urlSync: true,
     rowId: (u) => u.user_id,
     initialSort: { key: 'username', dir: 'asc' },
     initialPageSize: 25,

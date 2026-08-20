@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 
 // ---------------------------------------------------------------------------
 // useTableState, search / filter / sort / paginate / select, in one hook.
@@ -44,6 +45,51 @@ function writeStored(storageKey, patch) {
     // Storage unavailable (private mode, locked-down profile): preferences
     // simply don't persist. Never a thrown error in a table.
   }
+}
+
+// ---------------------------------------------------------------------------
+// VIEW STATE LIVES IN THE URL. This is the difference between a dashboard and
+// a console.
+// ---------------------------------------------------------------------------
+// Search, filters, sort and page are not preferences, they are WHERE YOU ARE.
+// Keeping them in React state alone means "every locked account" is a place
+// you can reach but cannot send to anyone, cannot bookmark, and cannot get
+// back to after a reload. Every console of this class puts them in the query
+// string for exactly that reason: AWS puts its table filters there, Okta's
+// System Log encodes the whole search into the URL, Entra does the same on
+// its user list. It is what makes "here, look at this" possible in a chat
+// message to a colleague.
+//
+// The split matters, and it is not arbitrary:
+//
+//   URL          search, filters, sort, page   -> WHERE you are, shareable
+//   localStorage page size, density, columns   -> HOW you like tables, yours
+//
+// Sending density to a colleague in a link would impose your preferences on
+// them; sending a filter is the entire point. So the two stay separate.
+//
+// Writes are replace-mode: typing four characters into a search box must not
+// bury the previous page under four history entries. The address bar stays
+// correct and shareable, which is what people actually use it for.
+
+const RESERVED_PARAMS = new Set(['q', 'sort', 'dir', 'page'])
+
+function parseSortParam(params, fallback) {
+  const key = params.get('sort')
+  if (!key) return fallback
+  return { key, dir: params.get('dir') === 'desc' ? 'desc' : 'asc' }
+}
+
+function parseFiltersParam(params, initialFilters) {
+  const out = { ...initialFilters }
+  for (const key of Object.keys(initialFilters)) {
+    // A filter never claims a param name the table already owns, otherwise a
+    // filter called "page" would silently eat the pager.
+    if (RESERVED_PARAMS.has(key)) continue
+    const raw = params.get(key)
+    if (raw !== null) out[key] = raw
+  }
+  return out
 }
 
 // Comparator that behaves sensibly for the five value kinds these tables
@@ -106,13 +152,31 @@ export function useTableState({
   rowId = (row) => row.id,
   serverMode = false,
   total: serverTotal,
+  // Opt-in, because a page may run more than one table and only one of them
+  // can own the address bar. The main list on a page turns it on.
+  urlSync = false,
 } = {}) {
   const stored = useRef(readStored(storageKey)).current
+  const [searchParams, setSearchParams] = useSearchParams()
 
-  const [query, setQuery] = useState('')
-  const [filters, setFilters] = useState(initialFilters)
-  const [sort, setSort] = useState(stored?.sort ?? initialSort)
-  const [page, setPage] = useState(1)
+  // Read once, at mount. After that the URL is written FROM state rather than
+  // read back into it, so a keystroke does not race its own address-bar
+  // update. A fresh navigation remounts the page and re-reads.
+  const fromUrl = useRef(
+    urlSync
+      ? {
+          query: searchParams.get('q') || '',
+          filters: parseFiltersParam(searchParams, initialFilters),
+          sort: parseSortParam(searchParams, stored?.sort ?? initialSort),
+          page: Math.max(1, Number(searchParams.get('page')) || 1),
+        }
+      : null
+  ).current
+
+  const [query, setQuery] = useState(fromUrl?.query ?? '')
+  const [filters, setFilters] = useState(fromUrl?.filters ?? initialFilters)
+  const [sort, setSort] = useState(fromUrl?.sort ?? stored?.sort ?? initialSort)
+  const [page, setPage] = useState(fromUrl?.page ?? 1)
   const [pageSize, setPageSizeRaw] = useState(stored?.pageSize ?? initialPageSize)
   const [density, setDensityRaw] = useState(stored?.density ?? initialDensity)
   const [visibleColumns, setVisibleColumnsRaw] = useState(stored?.columns ?? initialColumns)
@@ -160,6 +224,45 @@ export function useTableState({
   useEffect(() => {
     if (sort) writeStored(storageKey, { sort })
   }, [sort, storageKey])
+
+  // State -> URL. Only the keys this table owns are touched, so a page that
+  // also uses the query string for something else (?tab=, ?new=1) keeps it.
+  // A default value writes NOTHING: a pristine list should have a clean
+  // address, not ?q=&status=all&page=1 trailing behind it.
+  useEffect(() => {
+    if (!urlSync) return
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev)
+
+        if (query) next.set('q', query)
+        else next.delete('q')
+
+        for (const [key, value] of Object.entries(filters)) {
+          if (RESERVED_PARAMS.has(key)) continue
+          if (value === undefined || value === null || value === initialFilters[key]) next.delete(key)
+          else next.set(key, String(value))
+        }
+
+        if (sort?.key) {
+          next.set('sort', sort.key)
+          next.set('dir', sort.dir === 'desc' ? 'desc' : 'asc')
+        } else {
+          next.delete('sort')
+          next.delete('dir')
+        }
+
+        if (page > 1) next.set('page', String(page))
+        else next.delete('page')
+
+        return next
+      },
+      { replace: true }
+    )
+    // initialFilters is a literal at every call site, so depending on it by
+    // identity would rewrite the URL on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlSync, query, filters, sort, page, setSearchParams])
 
   const setFilter = useCallback((key, value) => {
     setFilters((f) => ({ ...f, [key]: value }))

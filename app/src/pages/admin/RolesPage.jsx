@@ -323,6 +323,9 @@ export default function RolesPage() {
   const table = useTableState({
     rows: roles,
     storageKey: 'roles',
+    // View state in the address bar, so a filtered list is something you can
+    // send to someone. See useTableState.
+    urlSync: true,
     rowId: (r) => r.id,
     initialSort: { key: 'name', dir: 'asc' },
     initialPageSize: 25,

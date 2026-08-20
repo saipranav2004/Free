@@ -286,6 +286,9 @@ export default function PoliciesPage() {
   const table = useTableState({
     rows: policies,
     storageKey: 'policies',
+    // View state in the address bar, so a filtered list is something you can
+    // send to someone. See useTableState.
+    urlSync: true,
     rowId: (p) => p.id,
     initialSort: { key: 'name', dir: 'asc' },
     initialPageSize: 25,

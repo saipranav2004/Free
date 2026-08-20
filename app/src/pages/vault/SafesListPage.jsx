@@ -60,6 +60,9 @@ export default function SafesListPage() {
   const table = useTableState({
     rows: safes,
     storageKey: 'safes',
+    // View state in the address bar, so a filtered list is something you can
+    // send to someone. See useTableState.
+    urlSync: true,
     rowId: (s) => s.id,
     initialSort: { key: 'name', dir: 'asc' },
     initialPageSize: 25,

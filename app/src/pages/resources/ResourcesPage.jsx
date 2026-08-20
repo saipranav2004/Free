@@ -124,6 +124,9 @@ export default function ResourcesPage() {
   const table = useTableState({
     rows: resources,
     storageKey: 'resources',
+    // View state in the address bar, so a filtered list is something you can
+    // send to someone. See useTableState.
+    urlSync: true,
     initialSort: { key: 'name', dir: 'asc' },
     initialPageSize: 25,
     initialFilters: INITIAL_FILTERS,
