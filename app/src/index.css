@@ -1,0 +1,454 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ===========================================================================
+ * Theme tokens
+ * ===========================================================================
+ * Values are "R G B" triplets (no commas, no rgb() wrapper) because that is
+ * what Tailwind's rgb(var(--x) / <alpha-value>) pattern needs for opacity
+ * modifiers such as bg-surface/50 to keep working.
+ *
+ * WHERE THESE COME FROM. AWS publishes the Console's design tokens
+ * (@cloudscape-design/design-tokens), so the structure below is measured
+ * rather than guessed. The three decisions that matter, and what each fixes:
+ *
+ * 1. THE PAGE IS WHITE, AND SO ARE THE PANELS. Cloudscape sets
+ *    background-layout-main, container-content and layout-panel all to
+ *    #ffffff. Separation is carried entirely by a visible border. Our build
+ *    had white cards floating on a grey page with a soft shadow, which is the
+ *    single most recognisable admin-template signature. Remove the shadow and
+ *    a grey page just looks unfinished; remove the grey too and let a real
+ *    border do the work, and it reads as a console.
+ *
+ * 2. THERE ARE TWO DIVIDER STRENGTHS, NOT ONE. divider-default (#c6c6cd) is
+ *    the edge of a container. divider-secondary (#ebebf0) is a line INSIDE
+ *    one, such as between table rows. Using a single mid grey for both is why
+ *    tables read as either boxed-in or as floating text.
+ *
+ * 3. FORM CONTROLS HAVE A DARK BORDER. Cloudscape's input border is #8c8c94,
+ *    a real grey, not a hairline. It is why an AWS input reads as a control
+ *    you can type into rather than as a rectangle drawn on the page.
+ *
+ * Accent, status and heading colours are taken from the same set. Note that
+ * the accent goes DARKER on hover in light mode (#006ce0 to #002b66), not
+ * lighter, which is the opposite of what most themes do and reads as firmer.
+ * ======================================================================== */
+:root {
+  /* -- ground ------------------------------------------------------------ */
+  --bg-app: 255 255 255;
+  --bg-surface: 255 255 255;
+  --bg-subtle: 246 246 249;
+  --bg-hover: 240 240 245;
+
+  /* -- lines -------------------------------------------------------------- */
+  --border: 198 198 205;        /* container edge */
+  --border-soft: 235 235 240;   /* divider inside a container, table rows */
+  --border-strong: 140 140 148; /* form control at rest */
+
+  /* -- text --------------------------------------------------------------- */
+  --text-primary: 15 20 26;
+  --text-secondary: 66 70 80;
+  --text-tertiary: 101 104 113;
+  --text-disabled: 180 180 187;
+
+  /* -- accent ------------------------------------------------------------- */
+  --accent: 0 108 224;
+  --accent-hover: 0 43 102;
+  --accent-soft: 240 251 255;
+  --accent-active: 209 241 255;
+
+  /* -- status ------------------------------------------------------------- */
+  --danger: 219 0 0;
+  --danger-soft: 255 244 244;
+  --danger-fill: 205 10 10;
+
+  --warn: 133 89 0;
+  --warn-soft: 255 249 232;
+
+  --ok: 0 128 47;
+  --ok-soft: 238 250 241;
+
+  /* -- shipped ramp, re-pointed ------------------------------------------- */
+  --surface-1000: 246 246 249;
+  --surface-950: 255 255 255;
+  --surface-900: 255 255 255;
+  --surface-850: 246 246 249;
+  --surface-800: 240 240 245;
+  --surface-750: 232 232 238;
+  --surface-700: 198 198 205;
+  --surface-600: 140 140 148;
+
+  --ink-50: 15 20 26;
+  --ink-100: 15 20 26;
+  --ink-200: 51 56 66;
+  --ink-300: 66 70 80;
+  --ink-400: 101 104 113;
+  --ink-500: 101 104 113;
+  --ink-600: 140 140 148;
+
+  /* -- elevation ---------------------------------------------------------- */
+  /* Cloudscape sets shadow-card to none. A static surface gets a border. Only
+     something that overlaps other content is allowed to cast a shadow. */
+  --shadow-card: none;
+  --shadow-raised: none;
+  --shadow-pop: 0 4px 12px -4px rgb(0 7 22 / 0.14), 0 1px 3px 0 rgb(0 7 22 / 0.08);
+  --shadow-overlay: 0 8px 28px -8px rgb(0 7 22 / 0.22), 0 2px 6px -2px rgb(0 7 22 / 0.10);
+  --shadow-frozen: 8px 0 10px -8px rgb(0 7 22 / 0.14);
+
+  /* -- product chrome ------------------------------------------------------ */
+  /* The top bar is dark in BOTH themes, and it is deliberate. AWS Console,
+     the Azure Portal and Salesforce all anchor the page with a dark or
+     saturated product bar, and now that the page and its containers are both
+     white, an all-white bar would have nothing to separate it from the
+     content underneath. It also draws the line the product needs anyway:
+     everything above it is the product, everything below it is your data. */
+  --chrome-bg: 15 20 26;
+  --chrome-fg: 235 235 240;
+  --chrome-muted: 164 164 173;
+  --chrome-line: 45 51 61;
+  --chrome-hover: 33 40 50;
+
+  color-scheme: light;
+}
+
+.dark {
+  --bg-app: 22 29 38;
+  --bg-surface: 22 29 38;
+  --bg-subtle: 27 35 45;
+  --bg-hover: 33 42 54;
+
+  --border: 66 70 80;
+  --border-soft: 35 43 55;
+  --border-strong: 101 104 113;
+
+  --text-primary: 235 235 240;
+  --text-secondary: 198 198 205;
+  --text-tertiary: 164 164 173;
+  --text-disabled: 116 120 130;
+
+  --accent: 66 180 255;
+  --accent-hover: 117 207 255;
+  --accent-soft: 0 17 41;
+  --accent-active: 0 32 74;
+
+  --danger: 255 122 122;
+  --danger-soft: 44 21 21;
+  --danger-fill: 176 32 32;
+
+  --warn: 251 211 50;
+  --warn-soft: 41 34 12;
+
+  --ok: 43 181 52;
+  --ok-soft: 12 36 18;
+
+  --surface-1000: 16 21 28;
+  --surface-950: 22 29 38;
+  --surface-900: 22 29 38;
+  --surface-850: 27 35 45;
+  --surface-800: 27 35 45;
+  --surface-750: 33 42 54;
+  --surface-700: 66 70 80;
+  --surface-600: 101 104 113;
+
+  --ink-50: 235 235 240;
+  --ink-100: 224 224 231;
+  --ink-200: 198 198 205;
+  --ink-300: 180 180 189;
+  --ink-400: 164 164 173;
+  --ink-500: 148 151 160;
+  --ink-600: 116 120 130;
+
+  --shadow-card: none;
+  --shadow-raised: none;
+  --shadow-pop: 0 4px 12px -4px rgb(0 0 0 / 0.55), 0 1px 3px 0 rgb(0 0 0 / 0.40);
+  --shadow-overlay: 0 8px 28px -8px rgb(0 0 0 / 0.70), 0 2px 6px -2px rgb(0 0 0 / 0.50);
+  --shadow-frozen: 8px 0 10px -8px rgb(0 0 0 / 0.55);
+
+  --chrome-bg: 12 16 21;
+  --chrome-fg: 235 235 240;
+  --chrome-muted: 164 164 173;
+  --chrome-line: 38 45 55;
+  --chrome-hover: 28 35 45;
+
+  color-scheme: dark;
+}
+
+/* ===========================================================================
+ * Base
+ * =========================================================================== */
+
+/* The root stays at the browser default. Density comes from the type scale
+   and the spacing grid, so 4px is 4px at every viewport and in every browser.
+   The previous build shrank the root to 14.5px and stepped it twice at 1800px
+   and 2400px, which made every rem value depend on viewport width and on the
+   reader's own browser font setting, and made the type smaller than an
+   operations console read for hours should be. */
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  @apply bg-app font-sans text-base font-normal text-ink-200 antialiased;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: 'cv11', 'ss01';
+  text-rendering: optimizeLegibility;
+}
+
+/* Numbers never reflow as digits change. */
+table,
+.tabular,
+.tabular-nums,
+.font-mono {
+  font-variant-numeric: tabular-nums;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  @apply font-bold text-ink-50;
+  letter-spacing: -0.012em;
+}
+
+/* Reserve the scrollbar gutter so a page that grows past the fold does not
+   shift sideways, and so Chrome with overlay scrollbars lays out identically
+   to Edge without them. */
+html {
+  scrollbar-gutter: stable;
+}
+
+/* Focus is visible for keyboard users and absent for mouse users. The ring is
+   the one other sanctioned use of the accent. */
+:focus:not(:focus-visible) {
+  outline: none;
+}
+:focus-visible {
+  outline: 2px solid rgb(var(--accent));
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+::selection {
+  background-color: rgb(var(--accent) / 0.2);
+}
+
+/* Theme aware scrollbars, so the light theme does not inherit a dark OS track
+   and both Chromium browsers render the same width. */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background-color: rgb(var(--border-strong) / 0.9);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: rgb(var(--border-strong));
+}
+.scrollbar-none {
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+/* Theme flips should feel instant. Deliberately narrow: colour only, never
+   layout, so nothing animates on first paint. */
+.theme-transition * {
+  transition:
+    background-color 120ms linear,
+    border-color 120ms linear,
+    color 120ms linear,
+    fill 120ms linear;
+}
+
+/* ===========================================================================
+ * Motion
+ * =========================================================================== */
+
+/* Skeletons match the shape of what is loading, so they are plain blocks the
+   caller sizes. No shimmer sweep, which reads as decoration. */
+@keyframes pulse-soft {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+.skeleton {
+  background-color: rgb(var(--bg-subtle));
+  border-radius: 4px;
+  animation: pulse-soft 1.6s ease-in-out infinite;
+}
+
+/* The one ambient animation in the product: a live session's presence dot. */
+@keyframes ping-soft {
+  0% {
+    transform: scale(1);
+    opacity: 0.5;
+  }
+  70%,
+  100% {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+}
+.dot-live::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background-color: currentColor;
+  animation: ping-soft 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+/* Overlay and popover entrances. Short (120 to 170ms), opacity and position
+   only, so the console never feels like it is animating instead of
+   responding. Written as plain classes rather than Tailwind animation
+   utilities because the overlay components apply them conditionally. */
+@keyframes overlay-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes sheet-in {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: none;
+  }
+}
+@keyframes drawer-in {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.animate-overlay-in {
+  animation: overlay-in 140ms ease-out;
+}
+.animate-panel-in {
+  animation: panel-in 160ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.animate-menu-in {
+  animation: menu-in 120ms cubic-bezier(0.16, 1, 0.3, 1);
+  transform-origin: top right;
+}
+.animate-sheet-in {
+  animation: sheet-in 220ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.animate-drawer-in {
+  animation: drawer-in 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* A hairline top highlight. One pixel, barely visible, and it is what stops a
+   bordered panel from reading as a flat rectangle. */
+.edge-lit {
+  box-shadow:
+    var(--shadow-card),
+    inset 0 1px 0 0 rgb(255 255 255 / 0.55);
+}
+.dark .edge-lit {
+  box-shadow:
+    var(--shadow-card),
+    inset 0 1px 0 0 rgb(255 255 255 / 0.04);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  .animate-overlay-in,
+  .animate-panel-in,
+  .animate-menu-in,
+  .animate-sheet-in,
+  .animate-drawer-in,
+  .skeleton,
+  .dot-live::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ===========================================================================
+ * Third party surfaces
+ * =========================================================================== */
+
+/* Toasts. The app already calls sonner from 141 places and every one of them
+   works, so it is kept and themed here rather than replaced. */
+[data-sonner-toaster] {
+  --normal-bg: rgb(var(--bg-surface));
+  --normal-border: rgb(var(--border));
+  --normal-text: rgb(var(--text-primary));
+  font-family: theme('fontFamily.sans');
+}
+[data-sonner-toast] {
+  border-radius: 10px !important;
+  font-size: 0.875rem !important;
+  box-shadow: var(--shadow-pop) !important;
+}
+[data-sonner-toast] [data-title] {
+  font-weight: 600 !important;
+}
+[data-sonner-toast] [data-description] {
+  font-size: 0.8125rem !important;
+  color: rgb(var(--text-secondary)) !important;
+  line-height: 1.25rem !important;
+}
+
+/* Native date and time inputs render a dark picker glyph on a dark field in
+   Chromium unless the icon is inverted. */
+.dark input[type='date']::-webkit-calendar-picker-indicator,
+.dark input[type='datetime-local']::-webkit-calendar-picker-indicator,
+.dark input[type='time']::-webkit-calendar-picker-indicator {
+  filter: invert(0.8);
+}
+
+/* Autofill paints its own yellow field in Chromium. Repaint it with the
+   theme's own well colour so a filled login or search input does not flash a
+   colour that exists nowhere else in the product. */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-text-fill-color: rgb(var(--text-primary));
+  -webkit-box-shadow: 0 0 0 1000px rgb(var(--bg-subtle)) inset;
+  caret-color: rgb(var(--text-primary));
+}
