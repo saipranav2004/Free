@@ -31,7 +31,12 @@ export const CONSOLE_NAV = [
   { to: '/vault', label: 'Vault', icon: Vault },
   { to: '/sessions', label: 'Sessions', icon: Radio },
   { to: '/jit', label: 'JIT Access', icon: KeyRound },
-  // { to: '/audit', label: 'Audit', icon: ScrollText },
+  // MY ACTIVITY IS BACK IN THE NAV. The route existed but was commented out
+  // here, so /audit was reachable only by typing the URL: a whole screen the
+  // product built and then hid. It is named "My activity" rather than "Audit"
+  // because that is what it is for a non-administrator, their own trail.
+  // Admin Center, Audit and Compliance is the org-wide one.
+  { to: '/activity', label: 'My activity', icon: ScrollText },
 ]
 
 // JIT ACCESS IS NOT RENDERED FOR AN ADMINISTRATOR. /jit is the self-service
@@ -76,7 +81,8 @@ export const CRUMB_LABELS = {
   sessions: 'Sessions',
   jit: 'JIT Access',
   requests: 'Request',
-  audit: 'Audit',
+  audit: 'My activity',
+  activity: 'My activity',
   settings: 'Settings',
   admin: 'Admin Center',
   identity: 'Identity',

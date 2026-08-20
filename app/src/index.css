@@ -97,17 +97,18 @@
   --shadow-frozen: 8px 0 10px -8px rgb(0 7 22 / 0.14);
 
   /* -- product chrome ------------------------------------------------------ */
-  /* The top bar is dark in BOTH themes, and it is deliberate. AWS Console,
-     the Azure Portal and Salesforce all anchor the page with a dark or
-     saturated product bar, and now that the page and its containers are both
-     white, an all-white bar would have nothing to separate it from the
-     content underneath. It also draws the line the product needs anyway:
-     everything above it is the product, everything below it is your data. */
-  --chrome-bg: 15 20 26;
-  --chrome-fg: 235 235 240;
-  --chrome-muted: 164 164 173;
-  --chrome-line: 45 51 61;
-  --chrome-hover: 33 40 50;
+  /* The top bar and the sidebar share one tint, one step off the white
+     content area, with a real border underneath. That is the separation the
+     page needs: the chrome is quiet, the data is on white, and the line
+     between them is a line rather than a change of brightness.
+     (A dark bar was tried and pulled: it anchored the page but made the
+     product feel like it belonged to a different application than the
+     content, and it fought the light sidebar next to it.) */
+  --chrome-bg: 246 246 249;
+  --chrome-fg: 15 20 26;
+  --chrome-muted: 101 104 113;
+  --chrome-line: 198 198 205;
+  --chrome-hover: 235 235 240;
 
   color-scheme: light;
 }
@@ -165,11 +166,11 @@
   --shadow-overlay: 0 8px 28px -8px rgb(0 0 0 / 0.70), 0 2px 6px -2px rgb(0 0 0 / 0.50);
   --shadow-frozen: 8px 0 10px -8px rgb(0 0 0 / 0.55);
 
-  --chrome-bg: 12 16 21;
+  --chrome-bg: 27 35 45;
   --chrome-fg: 235 235 240;
   --chrome-muted: 164 164 173;
-  --chrome-line: 38 45 55;
-  --chrome-hover: 28 35 45;
+  --chrome-line: 66 70 80;
+  --chrome-hover: 33 42 54;
 
   color-scheme: dark;
 }

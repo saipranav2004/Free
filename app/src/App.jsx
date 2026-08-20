@@ -150,14 +150,17 @@ export default function App() {
                 </SelfServiceOnly>
               }
             />
+            {/* "My activity" is the self-scoped trail. /audit was the original
+                path and stays as a redirect so old links and bookmarks land. */}
             <Route
-              path="audit"
+              path="activity"
               element={
                 <SuspenseRoute>
                   <AuditPage />
                 </SuspenseRoute>
               }
             />
+            <Route path="audit" element={<Navigate to="/activity" replace />} />
             <Route
               path="settings"
               element={

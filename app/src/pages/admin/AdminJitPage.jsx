@@ -7,9 +7,6 @@ import {
   Lock,
   ShieldAlert,
   CheckCircle2,
-  XCircle,
-  Clock3,
-  Hourglass,
   SearchX,
   FileText,
   ChevronRight,
@@ -27,7 +24,11 @@ import {
   getBreakglassReport,
   getStats,
 } from '../../api/admin'
-import { PageHeader, Card, EmptyState, DetailList, ListPanel } from '../../components/common/Layout'
+import { PageHeader, Card, DetailList, ListPanel } from '../../components/common/Layout'
+import { DataTable, RowActions, Td, Th, Tr, Trunc } from '../../components/ui/grid'
+import { MenuItem, MenuNote, RowMenu } from '../../components/ui/menu'
+import { AlarmTag, StatusDot } from '../../components/ui/bits'
+import { EmptyState } from '../../components/ui/states'
 import { QueryState } from '../../components/common/QueryState'
 import { Pagination } from '../../components/common/Pagination'
 import { Badge, StatusIndicator, MetaTag } from '../../components/common/Badge'
@@ -56,7 +57,7 @@ import {
   isStaleStateError,
   viewerIdOf,
 } from '../../lib/fourEyes'
-import { ApprovalProgress, ApprovalTrail, ApproverStack } from '../../components/jit/ApprovalTrail'
+import { ApprovalProgress, ApprovalTrail } from '../../components/jit/ApprovalTrail'
 import {
   JIT_STATUS,
   JIT_STATUS_LABELS,
@@ -169,7 +170,7 @@ function waitedSeconds(iso) {
 function durationLabel(r) {
   const mins = r?.duration_minutes ?? r?.requested_duration_min ?? r?.duration_min
   if (!mins) return null
-  return mins >= 60 ? `${(mins / 60).toFixed(mins % 60 === 0 ? 0 : 1)}h access` : `${mins}m access`
+  return mins >= 60 ? `${(mins / 60).toFixed(mins % 60 === 0 ? 0 : 1)}h` : `${mins}m`
 }
 
 // ---------------------------------------------------------------------------
@@ -317,162 +318,215 @@ function RequestDetailDrawer({ id, onClose, viewerId }) {
 // which is most of them, and always the case for a PENDING one (nothing to
 // fetch). Null means "not told", so the duplicate-approver guard simply does
 // not fire and the server stays the authority.
-function DecisionCard({ request, approvals, viewer, onApprove, onDeny, onOpen, busy }) {
+// ---------------------------------------------------------------------------
+// The approval queue is a GRID, not a stack of cards
+// ---------------------------------------------------------------------------
+// This replaces a 120px card per request. A card carried an avatar, a
+// sentence, a quoted justification block, a metadata row and three buttons,
+// which meant an approver with thirty requests scrolled through 3,600px to
+// see the queue. The information an approver actually compares across
+// requests is: who, what, how long they want it for, how long it has been
+// waiting, and how far through dual control it is. Those are columns.
+//
+// The justification stays on the row, as its second line, because an approver
+// cannot decide without it and making them open thirty drawers is worse than
+// a 56px row. The full text is one click away in the detail drawer, and on
+// the title attribute.
+//
+// ServiceNow's approval queue and Okta's Access Requests both land here for
+// the same reason: a queue you work through is a worklist, and a worklist is
+// a table with actions on the row.
+function ApprovalMeter({ progress }) {
+  // Two segments, not a percentage bar. Dual control is discrete: one of two
+  // is a state, not fifty percent of anything.
+  //
+  // Root is the exception the meter has to be honest about: a root approval
+  // reaches quorum on its own, so the second segment fills even though only
+  // one approval exists.
+  const { given = 0, required = 2, quorum, finalisedByRoot } = progress || {}
+  const filled = quorum ? required : Math.min(given, required)
+  const label = finalisedByRoot ? 'root, final' : `${Math.min(given, required)} of ${required}`
+  return (
+    <span className="inline-flex items-center gap-2" title={`${given} of ${required} approvals given`}>
+      <span className="flex gap-0.5" aria-hidden="true">
+        {Array.from({ length: required }).map((_, i) => (
+          <span key={i} className={clsx('h-1.5 w-4 rounded-full', i < filled ? 'bg-accent' : 'bg-line')} />
+        ))}
+      </span>
+      <span className="whitespace-nowrap tabular text-xs text-secondary">{label}</span>
+    </span>
+  )
+}
+
+function DecisionRow({ request, approvals, viewer, onApprove, onDeny, onOpen, busy }) {
   const bg = isBreakglass(request)
   const waited = waitedSeconds(raisedAt(request))
   const stale = waited >= 24 * 3600
   const duration = durationLabel(request)
-  const partial = request.status === JIT_STATUS.PARTIALLY_APPROVED
   const progress = approvalProgress(request, approvals)
 
-  // Break-glass has no approvers, it is granted by waiting it out, not by
-  // deciding it, so none of the four-eyes chrome applies to it.
+  // Break glass has no approvers. It is granted by waiting out the cooling
+  // off period, not by deciding it, so none of the dual control chrome
+  // applies and pretending otherwise would misrepresent the mechanism.
   const fourEyes = !bg
   const blockedReason = fourEyes ? approveBlockedReason(request, approvals, viewer) : null
 
-  return (
-    <li
-      className={clsx(
-        'relative flex flex-col gap-4 border-b border-surface-800 px-4 py-4 pl-5 transition-colors last:border-b-0 hover:bg-surface-850/60 lg:flex-row lg:items-start',
-        bg && 'bg-red-50/40 dark:bg-red-950/10'
-      )}
-    >
-      <span
-        aria-hidden="true"
-        className={clsx(
-          'absolute inset-y-0 left-0 w-[3px]',
-          bg ? 'bg-red-500' : partial ? 'bg-blue-500' : stale ? 'bg-amber-500' : 'bg-blue-500/50'
-        )}
-      />
+  const viewerId = viewer?.id || viewer?.user_id
+  const approverNames = (approvals || [])
+    .filter((a) => a && a.decision === 'APPROVE')
+    .map((a) =>
+      viewerId && (a.approver_user_id === viewerId || a.approver_id === viewerId)
+        ? 'you'
+        : a.approver_username || a.approver_user_id || 'unknown'
+    )
 
-      <div className="flex min-w-0 flex-1 gap-3.5">
-        <Avatar name={requesterLabel(request)} size="sm" />
-        <div className="min-w-0 flex-1">
-          <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
-            <span className="font-semibold text-ink-50">{requesterLabel(request)}</span>
-            <span className="text-ink-500">requests access to</span>
+  return (
+    <Tr className={bg ? 'bg-danger-soft/50' : undefined}>
+      <Td sticky edge className={bg ? 'shadow-[inset_3px_0_0_0_rgb(var(--danger))]' : undefined}>
+        <div className="min-w-0">
+          <p className="flex min-w-0 items-center gap-1.5 text-sm">
+            <span className="flex-none font-medium text-primary">{requesterLabel(request)}</span>
+            <span className="flex-none text-tertiary">to</span>
             <button
               type="button"
               onClick={onOpen}
-              className="max-w-full truncate font-semibold text-ink-50 underline decoration-surface-600 underline-offset-4 transition-colors hover:text-blue-600 dark:hover:text-blue-300"
+              title={request.resource_name || request.resource_id}
+              className="min-w-0 truncate font-medium text-primary transition-colors hover:text-accent hover:underline"
             >
               {request.resource_name || request.resource_id || 'a resource'}
             </button>
-            {bg && (
-              <Badge
-                className="bg-red-100 text-red-700 ring-red-600/20 dark:bg-red-500/15 dark:text-red-300 dark:ring-red-500/30"
-                dot
-              >
-                Break-glass
-              </Badge>
-            )}
-            {partial && (
-              <Badge className={JIT_STATUS_BADGE.PARTIALLY_APPROVED} dot>
-                Needs 2nd approval
-              </Badge>
-            )}
+            {bg && <AlarmTag />}
           </p>
-
-          {request.reason ? (
-            <blockquote className="mt-2.5 border-l-2 border-surface-700 pl-3 text-sm leading-relaxed text-ink-300">
-              {request.reason}
-            </blockquote>
-          ) : (
-            <p className="mt-2.5 text-sm italic text-ink-500">No justification given.</p>
-          )}
-
-          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-ink-500">
-            <span className="inline-flex items-center gap-1.5" title={formatDateTime(raisedAt(request))}>
-              <Clock3 className="h-3.5 w-3.5 flex-none" strokeWidth={1.75} />
-              Requested {formatRelativeToNow(raisedAt(request))}
-            </span>
-            <span
-              className={clsx(
-                'inline-flex items-center gap-1.5 font-medium tabular-nums',
-                stale ? 'text-amber-600 dark:text-amber-400' : 'text-ink-400'
-              )}
-            >
-              <Hourglass className="h-3.5 w-3.5 flex-none" strokeWidth={1.75} />
-              Waiting {formatDuration(waited)}
-            </span>
-            {duration && <MetaTag>{duration}</MetaTag>}
-            {request.status === JIT_STATUS.WAITING && (
-              <StatusIndicator tone="amber">Cooling-off period</StatusIndicator>
-            )}
-            {fourEyes && <ApprovalProgress request={request} approvals={approvals} />}
-            <ApproverStack approvals={approvals} viewerId={viewer?.id} />
-          </div>
-
-          {/* Said in words, not only in a disabled button: an approver who
- cannot see WHY the button is dead will click it, get a 409, and
- conclude the console is broken. */}
-          {blockedReason && (
-            <p className="mt-2.5 inline-flex items-center gap-1.5 rounded-md bg-surface-850 px-2.5 py-1.5 text-xs text-ink-400 ring-1 ring-inset ring-surface-700">
-              <UsersRound className="h-3.5 w-3.5 flex-none" strokeWidth={1.9} />
-              {blockedReason}
-            </p>
-          )}
+          <p
+            className="mt-0.5 truncate text-xs text-tertiary"
+            title={request.reason || request.justification || undefined}
+          >
+            {request.reason || request.justification || 'No justification given'}
+          </p>
         </div>
-      </div>
+      </Td>
 
-      <div className="flex flex-none items-center gap-2 lg:pt-1">
-        <Button
-          variant="primary"
-          size="sm"
-          icon={CheckCircle2}
-          onClick={onApprove}
-          disabled={busy || !!blockedReason}
-          title={blockedReason || undefined}
+      <Td>
+        <Trunc value={duration} muted />
+      </Td>
+
+      <Td>
+        <span
+          className={clsx('text-sm tabular', stale ? 'font-medium text-warn' : 'text-secondary')}
+          title={formatDateTime(raisedAt(request))}
         >
-          {fourEyes ? approveButtonLabel(request, progress, viewer) : 'Approve'}
-        </Button>
-        <Button variant="dangerGhost" size="sm" icon={XCircle} onClick={onDeny} disabled={busy}>
-          Deny
-        </Button>
-        <button
-          type="button"
-          onClick={onOpen}
-          aria-label="Open request details"
-          className="flex h-8 w-8 flex-none items-center justify-center rounded-md text-ink-600 transition-colors hover:bg-surface-800 hover:text-ink-100"
-        >
-          <ChevronRight className="h-4 w-4" strokeWidth={2} />
-        </button>
-      </div>
-    </li>
+          {formatDuration(waited)}
+        </span>
+      </Td>
+
+      <Td>
+        {request.status === JIT_STATUS.WAITING ? (
+          <StatusDot tone="warn" label="Cooling off" />
+        ) : fourEyes ? (
+          <div className="min-w-0">
+            <ApprovalMeter progress={progress} />
+            {/* Who has already approved, by name, because "have I decided
+                this one?" is the first thing an approver asks of a partially
+                approved request. Names only: three stacked avatar tiles in a
+                table cell is decoration that pushes the row taller. */}
+            {approverNames.length > 0 && (
+              <p className="mt-0.5 truncate text-xs text-tertiary" title={approverNames.join(', ')}>
+                {approverNames.join(', ')}
+              </p>
+            )}
+          </div>
+        ) : (
+          <StatusDot tone="danger" label="No approval needed" />
+        )}
+      </Td>
+
+      <Td align="right">
+        <RowActions>
+          {/* An approver who cannot see WHY a button is dead will click it,
+              get a 409 and conclude the console is broken. The reason is on
+              the button's title AND spelled out in the row menu. */}
+          <button
+            type="button"
+            onClick={onApprove}
+            disabled={busy || !!blockedReason}
+            title={blockedReason || undefined}
+            className="whitespace-nowrap rounded px-1 py-0.5 text-sm font-semibold text-accent transition-colors hover:text-accent-hover hover:underline disabled:pointer-events-none disabled:text-disabled"
+          >
+            {fourEyes ? approveButtonLabel(request, progress, viewer) : 'Approve'}
+          </button>
+          <button
+            type="button"
+            onClick={onDeny}
+            disabled={busy}
+            className="whitespace-nowrap rounded px-1 py-0.5 text-sm font-semibold text-danger transition-colors hover:underline disabled:pointer-events-none disabled:text-disabled"
+          >
+            Deny
+          </button>
+          <RowMenu label={`Actions for ${requesterLabel(request)}`}>
+            <MenuItem icon={ChevronRight} onClick={onOpen}>
+              Open request
+            </MenuItem>
+            {blockedReason && <MenuNote>{blockedReason}</MenuNote>}
+          </RowMenu>
+        </RowActions>
+      </Td>
+    </Tr>
   )
 }
 
-// A decided request needs no decision, so it gets none of that weight.
+// A decided request needs no decision, so it carries none of that weight: the
+// same columns, with the outcome where the actions were.
 function DecidedRow({ request, onOpen }) {
+  const tone =
+    request.status === JIT_STATUS.APPROVED ? 'ok' : request.status === JIT_STATUS.DENIED ? 'danger' : 'muted'
   return (
-    <li className="flex items-center justify-between gap-4 border-b border-surface-800 px-4 py-3 last:border-b-0 hover:bg-surface-850/60">
-      <div className="flex min-w-0 items-center gap-3">
-        <Avatar name={requesterLabel(request)} size="sm" />
+    <Tr>
+      <Td sticky edge>
         <div className="min-w-0">
-          <p className="truncate text-sm text-ink-200">
-            <span className="font-medium text-ink-100">{requesterLabel(request)}</span> ·{' '}
-            {request.resource_name || request.resource_id || '-'}
+          <p className="flex min-w-0 items-center gap-1.5 text-sm">
+            <span className="flex-none font-medium text-primary">{requesterLabel(request)}</span>
+            <span className="flex-none text-tertiary">to</span>
+            <button
+              type="button"
+              onClick={onOpen}
+              title={request.resource_name || request.resource_id}
+              className="min-w-0 truncate font-medium text-primary transition-colors hover:text-accent hover:underline"
+            >
+              {request.resource_name || request.resource_id || 'a resource'}
+            </button>
+            {isBreakglass(request) && <AlarmTag />}
           </p>
-          <p className="mt-0.5 truncate text-xs text-ink-500" title={request.reason || undefined}>
-            {formatRelativeToNow(raisedAt(request))}
-            {request.reason ? ` · ${request.reason}` : ''}
+          <p
+            className="mt-0.5 truncate text-xs text-tertiary"
+            title={request.reason || request.justification || undefined}
+          >
+            {request.reason || request.justification || 'No justification given'}
           </p>
         </div>
-      </div>
-      <div className="flex flex-none items-center gap-2">
-        <Badge className={JIT_STATUS_BADGE[request.status] || 'bg-ink-500/10 text-ink-400 ring-ink-500/25'}>
-          {JIT_STATUS_LABELS[request.status] || request.status}
-        </Badge>
-        <button
-          type="button"
-          onClick={onOpen}
-          aria-label="Open request details"
-          className="flex h-7 w-7 flex-none items-center justify-center rounded-md text-ink-600 transition-colors hover:bg-surface-800 hover:text-ink-100"
-        >
-          <ChevronRight className="h-4 w-4" strokeWidth={2} />
-        </button>
-      </div>
-    </li>
+      </Td>
+      <Td>
+        <Trunc value={durationLabel(request)} muted />
+      </Td>
+      <Td>
+        <span className="text-sm text-secondary" title={formatDateTime(raisedAt(request))}>
+          {formatRelativeToNow(raisedAt(request))}
+        </span>
+      </Td>
+      <Td>
+        <StatusDot tone={tone} label={JIT_STATUS_LABELS[request.status] || request.status} />
+      </Td>
+      <Td align="right">
+        <RowActions>
+          <button
+            type="button"
+            onClick={onOpen}
+            className="whitespace-nowrap rounded px-1 py-0.5 text-sm font-semibold text-accent transition-colors hover:text-accent-hover hover:underline"
+          >
+            Open
+          </button>
+        </RowActions>
+      </Td>
+    </Tr>
   )
 }
 
@@ -781,7 +835,7 @@ function RequestsTab() {
         >
           {() =>
             table.total === 0 ? (
-              <Card>
+              <div>
                 <EmptyState
                   icon={queueView ? CheckCircle2 : SearchX}
                   title={
@@ -806,27 +860,49 @@ function RequestsTab() {
                     )
                   }
                 />
-              </Card>
+              </div>
             ) : (
               <>
-                <ul>
-                  {table.pageRows.map((r) =>
-                    PENDING_LIKE.includes(r.status) ? (
-                      <DecisionCard
-                        key={r.id}
-                        request={r}
-                        approvals={trailsById[r.id] ?? null}
-                        viewer={viewer}
-                        busy={busy}
-                        onApprove={() => setApproveTarget(r)}
-                        onDeny={() => setDenyTarget(r)}
-                        onOpen={() => setDetailId(r.id)}
-                      />
-                    ) : (
-                      <DecidedRow key={r.id} request={r} onOpen={() => setDetailId(r.id)} />
-                    )
-                  )}
-                </ul>
+                <DataTable minWidth="58rem">
+                  <colgroup>
+                    <col className="w-[24rem] min-w-[16rem]" />
+                    <col className="w-[8rem]" />
+                    <col className="w-[8rem]" />
+                    <col className="w-[11rem]" />
+                    <col className="w-[15rem]" />
+                  </colgroup>
+                  <thead>
+                    <tr>
+                      <Th sticky edge>
+                        Request
+                      </Th>
+                      <Th>Window</Th>
+                      <Th>Age</Th>
+                      <Th>State</Th>
+                      <Th align="right">
+                        <span className="sr-only">Actions</span>
+                      </Th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {table.pageRows.map((r) =>
+                      PENDING_LIKE.includes(r.status) ? (
+                        <DecisionRow
+                          key={r.id}
+                          request={r}
+                          approvals={trailsById[r.id] ?? null}
+                          viewer={viewer}
+                          busy={busy}
+                          onApprove={() => setApproveTarget(r)}
+                          onDeny={() => setDenyTarget(r)}
+                          onOpen={() => setDetailId(r.id)}
+                        />
+                      ) : (
+                        <DecidedRow key={r.id} request={r} onOpen={() => setDetailId(r.id)} />
+                      )
+                    )}
+                  </tbody>
+                </DataTable>
                 <Pagination
                   page={table.page}
                   pageSize={table.pageSize}

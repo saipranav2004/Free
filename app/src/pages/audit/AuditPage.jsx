@@ -5,17 +5,13 @@ import {
   ChevronLeft,
   ChevronRight,
   ShieldCheck,
-  ShieldAlert,
   FileSearch,
-  Link2,
-  ScrollText,
-  XCircle,
 } from 'lucide-react'
 import { searchAudit } from '../../api/audit'
 import { verifyAudit } from '../../api/admin'
 import { useAuthStore } from '../../store/authStore'
-import { PageHeader, Card, CardHeader, CardTitle } from '../../components/common/Layout'
-import { KpiStrip } from '../../components/common/KpiStrip'
+import { Container, PageTitle, Stack } from '../../components/ui/layout'
+import { StatusDot } from '../../components/ui/bits'
 import { Button } from '../../components/common/Button'
 import { AuditFilterBar, EMPTY_AUDIT_FILTERS } from '../../components/audit/AuditFilterBar'
 import { AuditTable } from '../../components/audit/AuditTable'
@@ -43,6 +39,21 @@ const PAGE_SIZES = [20, 50, 100]
 // field under More.
 export default function AuditPage() {
   const isAdmin = useAuthStore((s) => s.isAdmin())
+  const user = useAuthStore((s) => s.user)
+  // THIS PAGE IS SCOPED TO YOU, and until now it was not.
+  //
+  // GET /pam/audit accepts a user_id parameter and the console never sent it,
+  // while the seeded `user` role holds pam:audit:Read on `*`. The result was
+  // a page titled "your activity" that rendered the whole organisation's
+  // trail. Sending the caller's own id is the client half of the fix; the
+  // server not scoping by caller is the other half and is item 1 on the
+  // backend list in design/05-redesigns.md.
+  //
+  // An administrator keeps the unscoped view here, because for them this
+  // screen and Admin Center, Audit and Compliance are the same data and the
+  // scoped one would be the surprising default.
+  const viewerId = user?.user_id || user?.id || null
+  const scopeToViewer = !isAdmin && !!viewerId
   const [filters, setFilters] = useState(EMPTY_AUDIT_FILTERS)
   const [offset, setOffset] = useState(0)
   const [limit, setLimit] = useState(20)
@@ -67,10 +78,11 @@ export default function AuditPage() {
   )
 
   const query = useQuery({
-    queryKey: ['audit', 'search', filters, offset, limit],
+    queryKey: ['audit', 'search', filters, offset, limit, scopeToViewer ? viewerId : 'org'],
     queryFn: ({ signal }) =>
       searchAudit(
         {
+          user_id: scopeToViewer ? viewerId : undefined,
           q: filters.q || undefined,
           category: filters.category || undefined,
           outcome: filters.outcome || undefined,
@@ -129,11 +141,15 @@ export default function AuditPage() {
   const vIsValid = vField ? Boolean(vr[vField]) : null
 
   return (
-    <div>
-      <PageHeader
-        eyebrow="Compliance"
-        title="Audit"
-        description="Actions performed by, or affecting, your account. Every entry is written to a tamper-evident hash chain and can never be edited or deleted."
+    <Stack gap="lg">
+      <PageTitle
+        title={scopeToViewer ? 'My activity' : 'Activity'}
+        counter={query.isSuccess ? total : undefined}
+        description={
+          scopeToViewer
+            ? 'Everything recorded against your account: sign-ins, connections, reveals and requests. Entries are written to a tamper evident hash chain and can never be edited or deleted.'
+            : 'Every action recorded in this organisation, written to a tamper evident hash chain.'
+        }
         actions={
           <Button
             variant={reportOpen ? 'subtle' : 'secondary'}
@@ -146,114 +162,52 @@ export default function AuditPage() {
         }
       />
 
-      <KpiStrip
-        className="mb-5"
-        columns={3}
-        loading={query.isLoading}
-        items={[
-          {
-            key: 'total',
-            label: 'Events matched',
-            value: total.toLocaleString(),
-            icon: ScrollText,
-            description: 'Server count across the current filters',
-          },
-          {
-            key: 'failed',
-            label: 'Denied or failed',
-            value: failedOnPage,
-            icon: XCircle,
-            tone: failedOnPage > 0 ? 'red' : 'default',
-            description: 'On this page',
-          },
-          {
-            key: 'chain',
-            label: 'Chain integrity',
-            value: verifyMutation.isSuccess
-              ? vIsValid === true
-                ? 'Intact'
-                : vIsValid === false
-                  ? 'Broken'
-                  : 'Unclear'
-              : 'Not checked',
-            icon: vIsValid === false ? ShieldAlert : ShieldCheck,
-            tone: vIsValid === false ? 'red' : vIsValid === true ? 'emerald' : 'default',
-            description: isAdmin ? 'Verify below' : 'Administrator-run check',
-          },
-        ]}
-      />
-
-      {/* Chain integrity is admin-only: the check walks the whole org-wide
- chain, and the backend exposes it only under the admin route. A
- verification result is a security finding, so it gets a plate, not
- a toast that disappears. */}
-      {isAdmin && (
-        <Card className="mb-4 overflow-hidden">
-          <CardHeader>
-            <CardTitle icon={Link2}>Chain integrity, organization-wide</CardTitle>
+      {/* THE KPI STRIP IS GONE. It carried three plates: events matched,
+          denied on this page, and chain integrity. The first restates the
+          count already beside the title, the second is a filter away, and the
+          third read "Not checked" for every non-administrator because the
+          verification route is admin only, so a third of the page was spent
+          telling most readers about a control they cannot run.
+          What survives is one line: the two numbers worth glancing at, and
+          the verify control, only for the account that can use it. */}
+      <div className="flex flex-wrap items-center gap-x-8 gap-y-2 border-y border-line-soft py-3">
+        <span className="flex items-baseline gap-2">
+          <span className="text-2xl font-bold tabular text-primary">{total.toLocaleString()}</span>
+          <span className="text-sm text-secondary">events match</span>
+        </span>
+        {failedOnPage > 0 && (
+          <span className="flex items-baseline gap-2">
+            <span className="text-2xl font-bold tabular text-danger">{failedOnPage}</span>
+            <span className="text-sm text-secondary">denied or failed on this page</span>
+          </span>
+        )}
+        {isAdmin && (
+          <span className="ml-auto flex items-center gap-3">
+            {verifyMutation.isSuccess && (
+              <StatusDot
+                tone={vIsValid === true ? 'ok' : vIsValid === false ? 'danger' : 'warn'}
+                label={
+                  vIsValid === true
+                    ? 'Chain intact, no tampering detected'
+                    : vIsValid === false
+                      ? 'Chain broken, notify a security administrator'
+                      : 'Verification returned an unexpected shape'
+                }
+              />
+            )}
             <Button
               size="sm"
-              variant="secondary"
+              variant="subtle"
               icon={ShieldCheck}
-              className="ml-auto"
               loading={verifyMutation.isPending}
               onClick={() => verifyMutation.mutate()}
+              title="Walks the whole organisation chain and confirms every entry links to the one before it"
             >
               Verify chain
             </Button>
-          </CardHeader>
-          {verifyMutation.isSuccess ? (
-            <div
-              className={
-                'flex items-start gap-3 px-4 py-3.5 ' +
-                (vIsValid === false
-                  ? 'bg-red-50 dark:bg-red-950/25'
-                  : vIsValid === true
-                    ? 'bg-emerald-50 dark:bg-emerald-950/20'
-                    : '')
-              }
-            >
-              {vIsValid === false && (
-                <ShieldAlert
-                  className="mt-0.5 h-5 w-5 flex-none text-red-600 dark:text-red-400"
-                  strokeWidth={1.75}
-                />
-              )}
-              {vIsValid === true && (
-                <ShieldCheck
-                  className="mt-0.5 h-5 w-5 flex-none text-emerald-600 dark:text-emerald-400"
-                  strokeWidth={1.75}
-                />
-              )}
-              <div className="min-w-0">
-                {vIsValid === true && (
-                  <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">
-                    Audit chain intact, no tampering detected.
-                  </p>
-                )}
-                {vIsValid === false && (
-                  <p className="text-sm font-semibold text-red-800 dark:text-red-300">
-                    Audit chain broken, possible tampering. Notify a security administrator.
-                  </p>
-                )}
-                {vIsValid === null && (
-                  <>
-                    <p className="mb-1 text-sm font-semibold text-ink-100">Verification result</p>
-                    <pre className="max-w-full overflow-x-auto rounded-lg border border-surface-700 bg-surface-850 p-2.5 font-mono text-xs text-ink-400">
-                      {JSON.stringify(vr, null, 2)}
-                    </pre>
-                  </>
-                )}
-              </div>
-            </div>
-          ) : (
-            <p className="px-4 py-3 text-xs leading-relaxed text-ink-500">
-              Confirms every recorded entry forms an unbroken, tamper-evident chain. Not run automatically,
-              trigger it explicitly.
-            </p>
-          )}
-        </Card>
-      )}
+          </span>
+        )}
+      </div>
 
       {reportOpen && <ReportBuilder filters={filters} onClose={() => setReportOpen(false)} />}
 
@@ -273,7 +227,7 @@ export default function AuditPage() {
       {/* The filter bar is the top of THIS container, not a card of its own , 
  two stacked bordered panels made the filters look heavier than the
  data they filter. */}
-      <Card className="overflow-hidden rounded-t-none">
+      <Container padded={false} className="rounded-t-none border-t-0">
         {query.isError ? (
           <div className="px-4 py-10 text-center">
             <p className="text-sm font-semibold text-red-700 dark:text-red-300">
@@ -357,7 +311,7 @@ export default function AuditPage() {
             </div>
           </>
         )}
-      </Card>
+      </Container>
 
       <AuditEventDrawer
         event={selected}
@@ -371,6 +325,6 @@ export default function AuditPage() {
           setSelected(null)
         }}
       />
-    </div>
+    </Stack>
   )
 }
