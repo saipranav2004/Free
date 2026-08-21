@@ -40,6 +40,7 @@ const NotFoundPage = lazy(() => import('./pages/NotFoundPage'))
 const IdentityListPage = lazy(() => import('./pages/admin/IdentityListPage'))
 const IdentityDetailPage = lazy(() => import('./pages/admin/IdentityDetailPage'))
 const RolesPage = lazy(() => import('./pages/admin/RolesPage'))
+const RoleDetailPage = lazy(() => import('./pages/admin/RoleDetailPage'))
 const MfaPolicyPage = lazy(() => import('./pages/admin/MfaPolicyPage'))
 const PoliciesPage = lazy(() => import('./pages/admin/PoliciesPage'))
 const AdminJitPage = lazy(() => import('./pages/admin/AdminJitPage'))
@@ -215,6 +216,18 @@ export default function App() {
                 element={
                   <SuspenseRoute>
                     <RolesPage />
+                  </SuspenseRoute>
+                }
+              />
+              {/* Full role detail, including the criticality breakdown, lives
+                  on its own page rather than in a panel over the list: a
+                  details page is where full resource detail belongs, and it
+                  gives the classification a URL that can go in a ticket. */}
+              <Route
+                path="roles/:id"
+                element={
+                  <SuspenseRoute>
+                    <RoleDetailPage />
                   </SuspenseRoute>
                 }
               />

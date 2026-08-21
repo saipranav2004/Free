@@ -994,10 +994,18 @@ on('DELETE', '/api/v1/pam/admin/rbac/policies/:id', (ctx) => {
 // console behaves identically against the mock and against the real backend.
 // If you retune the weights there, retune them here, the contract check will
 // not catch a numeric drift for you.
+const MODEL_VERSION = '2.0'
+const DORMANT_AFTER_DAYS = 90
 const CRIT = {
-  maxPrivilege: 40, maxBlast: 30, maxEscalation: 15, maxExposure: 15,
-  mitJIT: 6, mitRecorded: 4, mitDeny: 2,
+  // Criticality, intrinsic: these three sum to 100.
+  maxPrivilege: 45, maxBlast: 35, maxEscalation: 20,
+  mitJIT: 8, mitRecorded: 5, mitDeny: 3,
+  // Exposure, contextual: these two sum to 100 and are reported separately.
+  maxHolders: 60, maxUsage: 40,
 }
+// Rounded, not truncated. Integer division here is what swallowed the breadth
+// term in model 1.0 until a role held three actions.
+const scaleN = (part, whole, max) => (whole <= 0 ? 0 : clampN(Math.round((part / whole) * max), 0, max))
 const ACTION_RISK = {
   'pam:breakglass:Use': 10,
   'pam:vault:Reveal': 10, 'pam:vault:Rotate': 8, 'pam:vault:Store': 7,
@@ -1050,7 +1058,6 @@ function bandForScore(s) {
   return 'LOW'
 }
 const TIER = { CRITICAL: 0, HIGH: 1, MODERATE: 2, LOW: 3 }
-const REPRESENTATIVE = { CRITICAL: 88, HIGH: 62, MODERATE: 37, LOW: 12 }
 
 function scorePrivilege(allow) {
   const f = { key: 'privilege', label: 'Privilege level', score: 0, max: CRIT.maxPrivilege, summary: '', evidence: [] }
@@ -1070,8 +1077,8 @@ function scorePrivilege(allow) {
   }
   let peak = 0, peakAction = ''
   for (const a of actions) { const r = riskOfAction(a); if (r > peak) { peak = r; peakAction = a } }
-  const peakPart = Math.floor((peak * 30) / 10)
-  const breadthPart = Math.min(10, Math.floor((actions.size * 10) / Object.keys(ACTION_RISK).length))
+  const peakPart = scaleN(peak, 10, 35)
+  const breadthPart = scaleN(actions.size, Object.keys(ACTION_RISK).length, 10)
   f.score = clampN(peakPart + breadthPart, 0, CRIT.maxPrivilege)
   f.summary = `${actions.size} distinct ${plural(actions.size, 'action', 'actions')}. The most dangerous is ${peakAction}.`
   const ranked = [...actions].map((a) => ({ a, r: riskOfAction(a) }))
@@ -1106,8 +1113,8 @@ function scoreBlast(allow, resources) {
     return { f, reach: 0, allJIT: false, allRecorded: false }
   }
   const sensitive = sensitiveOf(matched)
-  const breadth = total > 0 ? Math.floor((reach * 20) / total) : 0
-  const sensitivePart = Math.floor((sensitive * 10) / reach)
+  const breadth = scaleN(reach, total, 25)
+  const sensitivePart = scaleN(sensitive, reach, 10)
   f.score = clampN(breadth + sensitivePart, 0, CRIT.maxBlast)
   f.summary = `${reach} of ${total} active ${plural(total, 'resource', 'resources')}, ${sensitive} of which ${plural(sensitive, 'is', 'are')} marked sensitive.`
   matched.forEach((m, i) => {
@@ -1135,20 +1142,96 @@ function scoreEscalation(allow) {
     return f
   }
   if (!hits.size) { f.summary = 'No escalation path. Nothing this role can call hands out credentials or authority.'; return f }
-  f.score = clampN(6 + 3 * (hits.size - 1), 0, CRIT.maxEscalation)
+  f.score = clampN(9 + 4 * (hits.size - 1), 0, CRIT.maxEscalation)
   f.summary = `Holds ${hits.size} ${plural(hits.size, 'call', 'calls')} that can hand out or expose credentials.`
   f.evidence = [...hits].sort()
   return f
 }
 
-function scoreExposure(members) {
-  const f = { key: 'exposure', label: 'Standing exposure', score: 0, max: CRIT.maxExposure, summary: '', evidence: [] }
-  if (members === 0) { f.score = 0; f.summary = 'Held by nobody. The grant is latent: it carries no live exposure until somebody is assigned it.' }
-  else if (members <= 2) { f.score = 5; f.summary = `Held by ${members} ${plural(members, 'account', 'accounts')}.` }
-  else if (members <= 5) { f.score = 9; f.summary = `Held by ${members} accounts.` }
-  else if (members <= 10) { f.score = 12; f.summary = `Held by ${members} accounts, which is wide for a privileged grant.` }
-  else { f.score = CRIT.maxExposure; f.summary = `Held by ${members} accounts. At this width the role is effectively standing access for a whole team.` }
-  return f
+// humanDays mirrors the Go helper so both surfaces phrase usage identically.
+function humanDays(days) {
+  if (days <= 0) return 'today'
+  if (days === 1) return 'yesterday'
+  if (days < 30) return `${days} days ago`
+  if (days < 365) { const m = Math.floor(days / 30); return `${m} ${plural(m, 'month', 'months')} ago` }
+  const y = Math.floor(days / 365)
+  return `${y} ${plural(y, 'year', 'years')} ago`
+}
+
+// Most recent SUCCESS by a holder of an action this role grants. Same
+// approximation as the Go service, and labelled the same way in the UI.
+function lastUsedForRole(role, allow) {
+  const holders = db.users.filter((u) => (u.roles || []).includes(role.name)).map((u) => u.user_id)
+  if (!holders.length) return null
+  const granted = new Set()
+  let wildcard = false
+  for (const p of allow) for (const a of p.actions || []) {
+    const t = String(a).trim(); if (!t) continue
+    if (t === '*') wildcard = true
+    granted.add(t)
+  }
+  if (!granted.size) return null
+  let best = null
+  for (const row of db.audit) {
+    if (row.outcome !== 'SUCCESS') continue
+    if (!holders.includes(row.user_id)) continue
+    if (!wildcard && !granted.has(row.action)) continue
+    const at = new Date(row.occurred_at || row.created_at)
+    if (Number.isNaN(at.getTime())) continue
+    if (!best || at > best) best = at
+  }
+  return best
+}
+
+// EXPOSURE is contextual and reported separately from criticality: a role is
+// exactly as dangerous whether nobody holds it or forty people do.
+function scoreExposure(role, allow, members) {
+  const e = { holders: members, usage_known: true, usage_attributable: false, last_used_at: null, days_since_use: null, dormant: false }
+
+  const holderF = { key: 'holders', label: 'Accounts holding it', score: 0, max: CRIT.maxHolders, summary: '', evidence: [] }
+  if (members === 0) { holderF.score = 0; holderF.summary = 'Held by nobody. The grant is latent: it carries no live exposure until somebody is assigned it.' }
+  else if (members <= 2) { holderF.score = 20; holderF.summary = `Held by ${members} ${plural(members, 'account', 'accounts')}.` }
+  else if (members <= 5) { holderF.score = 35; holderF.summary = `Held by ${members} accounts.` }
+  else if (members <= 10) { holderF.score = 48; holderF.summary = `Held by ${members} accounts, which is wide for a privileged grant.` }
+  else { holderF.score = CRIT.maxHolders; holderF.summary = `Held by ${members} accounts. At this width the role is effectively standing access for a whole team.` }
+
+  const useF = { key: 'recent_use', label: 'Recent use', score: 0, max: CRIT.maxUsage, summary: '', evidence: [] }
+  const last = members > 0 ? lastUsedForRole(role, allow) : null
+  if (members === 0) {
+    useF.score = 0
+    useF.summary = 'Nobody holds this role, so there is nothing to exercise.'
+  } else if (!last) {
+    useF.score = 0
+    e.dormant = true
+    useF.summary = `No holder has successfully used a permission this role grants in the retained trail, so it is past the ${DORMANT_AFTER_DAYS} day review window.`
+    useF.evidence = ['Unused access is the usual candidate for removal.']
+  } else {
+    const days = Math.max(0, Math.floor((Date.now() - last.getTime()) / 86400000))
+    e.last_used_at = last.toISOString()
+    e.days_since_use = days
+    e.dormant = days > DORMANT_AFTER_DAYS
+    if (days <= 7) { useF.score = CRIT.maxUsage; useF.summary = `Exercised ${humanDays(days)}. This role is in active use.` }
+    else if (days <= 30) { useF.score = 30; useF.summary = `Last exercised ${humanDays(days)}.` }
+    else if (days <= DORMANT_AFTER_DAYS) { useF.score = 18; useF.summary = `Last exercised ${humanDays(days)}, inside the ${DORMANT_AFTER_DAYS} day review window.` }
+    else {
+      useF.score = 5
+      useF.summary = `Last exercised ${humanDays(days)}, past the ${DORMANT_AFTER_DAYS} day review window.`
+      useF.evidence = ['Dormant privileged access is the usual candidate for removal.']
+    }
+  }
+
+  e.factors = [holderF, useF]
+  e.score = clampN(holderF.score + useF.score, 0, 100)
+  if (members === 0) { e.level = 'none'; e.summary = 'Nobody holds this role, so it has no live exposure today.' }
+  else if (e.score >= 70) { e.level = 'wide'; e.summary = `Held by ${members} ${plural(members, 'account', 'accounts')} and actively used.` }
+  else if (e.score >= 40) { e.level = 'broad'; e.summary = `Held by ${members} ${plural(members, 'account', 'accounts')}.` }
+  else {
+    e.level = 'limited'
+    e.summary = e.dormant
+      ? `Held by ${members} ${plural(members, 'account', 'accounts')}, but nothing has exercised it recently.`
+      : `Held by ${members} ${plural(members, 'account', 'accounts')}.`
+  }
+  return e
 }
 
 function classifyRole(role) {
@@ -1161,9 +1244,10 @@ function classifyRole(role) {
   const priv = scorePrivilege(allow)
   const { f: blast, reach, allJIT, allRecorded } = scoreBlast(allow, resources)
   const esc = scoreEscalation(allow)
-  const exp = scoreExposure(members)
 
-  let totalScore = priv.score + blast.score + esc.score + exp.score
+  // Criticality is intrinsic: privilege + blast + escalation only. Exposure is
+  // scored separately and never folded in.
+  let totalScore = priv.score + blast.score + esc.score
   const mitigations = []
   if (reach > 0 && allJIT) {
     mitigations.push({ key: 'jit_gated', label: 'Every reachable resource is JIT gated', points: CRIT.mitJIT, detail: 'No standing access. A holder still has to request and be granted time-boxed elevation before any of these resources will accept a connection.' })
@@ -1185,15 +1269,18 @@ function classifyRole(role) {
     band: computedBand, score: totalScore, tier: TIER[computedBand],
     computed_band: computedBand, computed_score: totalScore,
     is_overridden: false, override: null,
-    factors: [priv, blast, esc, exp], mitigations,
+    factors: [priv, blast, esc], mitigations,
+    exposure: scoreExposure(role, allow, members),
     policy_count: policies.length, member_count: members, resource_reach: reach,
+    model_version: MODEL_VERSION,
     evaluated_at: new Date().toISOString(),
   }
   const o = db.criticalityOverrides[role.id]
   if (o && TIER[o.band] !== undefined) {
+    // An override asserts a BAND, not a number. The published score stays the
+    // computed one rather than a fabricated stand-in.
     out.band = o.band
     out.tier = TIER[o.band]
-    out.score = REPRESENTATIVE[o.band]
     out.is_overridden = true
     out.override = o
   }
@@ -1201,13 +1288,16 @@ function classifyRole(role) {
 }
 
 on('GET', '/api/v1/pam/admin/rbac/criticality', (ctx) => {
-  const roles = db.roles.map(classifyRole).sort((a, b) => (a.tier - b.tier) || (b.score - a.score) || a.role_name.localeCompare(b.role_name))
+  const roles = db.roles.map(classifyRole).sort(
+    (a, b) => (a.tier - b.tier) || (b.computed_score - a.computed_score) || a.role_name.localeCompare(b.role_name))
   const by_band = { CRITICAL: 0, HIGH: 0, MODERATE: 0, LOW: 0 }
   for (const r of roles) by_band[r.band]++
   return ok(ctx.res, {
     total: roles.length, by_band,
     overridden: roles.filter((r) => r.is_overridden).length,
-    roles, evaluated_at: new Date().toISOString(),
+    dormant: roles.filter((r) => r.exposure?.dormant).length,
+    unheld: roles.filter((r) => (r.exposure?.holders || 0) === 0).length,
+    roles, model_version: MODEL_VERSION, evaluated_at: new Date().toISOString(),
   })
 }, 'admin')
 

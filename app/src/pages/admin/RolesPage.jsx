@@ -1,30 +1,17 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  AlertTriangle,
-  FileKey2,
-  Link2,
   Lock,
   Plus,
-  ShieldAlert,
-  ShieldCheck,
   Trash2,
-  X,
 } from 'lucide-react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import clsx from 'clsx'
 import { toast } from 'sonner'
-import {
-  listRoles,
-  getRole,
-  attachPolicyToRole,
-  detachPolicyFromRole,
-  deleteRole,
-  listPolicies,
-} from '../../api/rbac'
+import { listRoles, deleteRole } from '../../api/rbac'
 import { normalizeApiError, apiErrorMessage } from '../../lib/apiError'
 import { Container, PageTitle, Stack } from '../../components/ui/layout'
-import { DataTable, RowActions, SkeletonGrid, SortTh, Td, Th, Tr, Trunc } from '../../components/ui/grid'
+import { DataTable, RowActions, SkeletonGrid, SortTh, Td, Th, Tr } from '../../components/ui/grid'
 import { MenuItem, MenuNote, RowMenu } from '../../components/ui/menu'
 import { FilterChip } from '../../components/ui/bits'
 import {
@@ -38,18 +25,16 @@ import {
 } from '../../components/ui/chrome'
 import { DeniedState, EmptyState, ErrorState, NoMatchState, OfflineState } from '../../components/ui/states'
 import { Button } from '../../components/common/Button'
-import { Drawer } from '../../components/common/Drawer'
 import { ConfirmDialog } from '../../components/common/ConfirmDialog'
 import { CreateRoleModal } from '../../components/admin/CreateRoleModal'
 import { useTableState } from '../../hooks/useTableState'
 import { exportRowsToCsv, exportRowsToJson } from '../../lib/exportRows'
 import { formatDateTime, formatRelativeToNow } from '../../lib/format'
-import { Badge } from '../../components/common/Badge'
-import { selectClass } from '../../components/common/FormFields'
-import { isSystemRole, ROLE_BADGE, POLICY_EFFECT_BADGE } from '../../config/constants'
+import { isSystemRole } from '../../config/constants'
 import { getCriticalitySummary } from '../../api/criticality'
-import { CRITICALITY_BANDS, bandMeta } from '../../lib/criticality'
-import { CriticalityCell, CriticalityPanel } from '../../components/rbac/Criticality'
+import { bandMeta, needsAttention } from '../../lib/criticality'
+import { CriticalityCell, ExposureCell } from '../../components/rbac/Criticality'
+import { CriticalityBar } from '../../components/rbac/CriticalityBar'
 
 // ---------------------------------------------------------------------------
 // Admin Center, Roles
@@ -83,221 +68,6 @@ const CSV_COLUMNS = [
 
 // --- detail drawer -----------------------------------------------------------
 
-function RoleDrawer({ role, onClose, onDelete }) {
-  const queryClient = useQueryClient()
-  const [newPolicyId, setNewPolicyId] = useState('')
-
-  const roleQuery = useQuery({
-    queryKey: ['admin', 'roles', role?.id],
-    queryFn: ({ signal }) => getRole(role.id, signal),
-    enabled: !!role,
-  })
-
-  const policiesQuery = useQuery({
-    queryKey: ['admin', 'policies'],
-    queryFn: ({ signal }) => listPolicies(signal),
-    enabled: !!role,
-  })
-
-  const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: ['admin', 'roles', role.id] })
-    queryClient.invalidateQueries({ queryKey: ['admin', 'roles'] })
-  }
-
-  const attach = useMutation({
-    mutationFn: (policyId) => attachPolicyToRole(role.id, policyId),
-    onSuccess: () => {
-      toast.success('Policy attached')
-      invalidate()
-      setNewPolicyId('')
-    },
-    onError: (err) => toast.error(apiErrorMessage(err)),
-  })
-
-  const detach = useMutation({
-    mutationFn: (policyId) => detachPolicyFromRole(role.id, policyId),
-    onSuccess: () => {
-      toast.success('Policy detached')
-      invalidate()
-    },
-    onError: (err) => toast.error(apiErrorMessage(err)),
-  })
-
-  if (!role) return null
-
-  const attached = roleQuery.data?.policies || []
-  const attachedIds = new Set(attached.map((p) => p.id))
-  const available = (policiesQuery.data || []).filter((p) => !attachedIds.has(p.id))
-  const system = isSystemRole(role)
-  const hasDeny = attached.some((p) => p.effect === 'deny')
-
-  return (
-    <Drawer
-      open={!!role}
-      onClose={onClose}
-      width="lg"
-      icon={<Lock className="h-4 w-4 text-ink-400" strokeWidth={1.75} />}
-      title={role.name}
-      subtitle={role.id}
-      footer={
-        <>
-          <Button
-            size="sm"
-            variant="dangerGhost"
-            icon={Trash2}
-            disabled={system}
-            title={system ? 'Built-in system roles cannot be deleted' : undefined}
-            onClick={() => onDelete(role)}
-          >
-            Delete role
-          </Button>
-          <span className="ml-auto text-2xs text-ink-500">
-            {attached.length} polic{attached.length === 1 ? 'y' : 'ies'} attached
-          </span>
-        </>
-      }
-    >
-      <div className="border-b border-surface-800 px-4 py-3.5">
-        <div className="mb-2 flex flex-wrap items-center gap-2">
-          <Badge className={ROLE_BADGE[role.name] || 'bg-surface-800 text-ink-300 ring-surface-700'}>
-            {role.name}
-          </Badge>
-          {system ? (
-            <span className="rounded border border-surface-700 bg-surface-850 px-1.5 py-0.5 text-xs font-semibold text-ink-400">
-              System role
-            </span>
-          ) : (
-            <span className="rounded border border-surface-700 bg-surface-850 px-1.5 py-0.5 text-xs font-semibold text-ink-500">
-              Custom
-            </span>
-          )}
-        </div>
-        <p className="text-sm leading-relaxed text-ink-400">
-          {role.description || 'No description recorded for this role.'}
-        </p>
-      </div>
-
-      {system && (
-        <div className="flex items-start gap-2.5 border-b border-surface-800 bg-surface-850/60 px-4 py-3">
-          <ShieldCheck className="mt-px h-3.5 w-3.5 flex-none text-ink-500" strokeWidth={1.75} />
-          <p className="text-xs leading-relaxed text-ink-400">
-            Built-in role, it ships with every install and the console&apos;s own route guards depend on it.
-            Its policies can be changed; the role itself cannot be deleted.
-          </p>
-        </div>
-      )}
-
-      <section className="px-4 py-4">
-        <h3 className="mb-1 flex items-center gap-2 text-sm font-semibold text-primary">
-          <ShieldAlert className="h-3.5 w-3.5 text-tertiary" strokeWidth={1.9} /> Criticality
-        </h3>
-        <CriticalityPanel roleId={role.id} roleName={role.name} />
-      </section>
-
-      <section>
-        <h3 className="flex items-center gap-2 border-b border-surface-800 bg-surface-850/60 px-4 py-2 text-xs font-semibold text-ink-500">
-          <FileKey2 className="h-3.5 w-3.5" strokeWidth={1.75} /> Attached policies
-        </h3>
-
-        {roleQuery.isLoading ? (
-          <div className="space-y-2 p-4">
-            {[0, 1].map((i) => (
-              <div key={i} className="h-12 animate-pulse rounded-lg bg-surface-850" />
-            ))}
-          </div>
-        ) : attached.length === 0 ? (
-          <EmptyState
-            icon={FileKey2}
-            title="No policies attached"
-            description="This role grants nothing on its own. Attach a policy below to give it meaning."
-            className="py-10"
-          />
-        ) : (
-          <ul className="divide-y divide-surface-800">
-            {attached.map((p) => (
-              <li key={p.id} className="flex items-start justify-between gap-4 px-4 py-3">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="truncate text-sm font-medium text-ink-100">{p.name}</span>
-                    <Badge className={POLICY_EFFECT_BADGE[p.effect]}>{p.effect || 'unknown'}</Badge>
-                  </div>
-                  <p className="mt-0.5 truncate text-xs text-ink-500">
-                    {p.description ||
-                      `${(p.actions || []).length} action${(p.actions || []).length === 1 ? '' : 's'} · ${(p.resources || []).length} resource pattern${(p.resources || []).length === 1 ? '' : 's'}`}
-                  </p>
-                </div>
-                <Button
-                  size="xs"
-                  variant="ghost"
-                  icon={X}
-                  loading={detach.isPending && detach.variables === p.id}
-                  onClick={() => detach.mutate(p.id)}
-                >
-                  Detach
-                </Button>
-              </li>
-            ))}
-          </ul>
-        )}
-
-        {hasDeny && (
-          <div className="flex items-start gap-2.5 border-t border-surface-800 bg-amber-50 px-4 py-3 dark:bg-amber-950/25">
-            <AlertTriangle
-              className="mt-px h-3.5 w-3.5 flex-none text-amber-600 dark:text-amber-400"
-              strokeWidth={1.75}
-            />
-            <p className="text-xs leading-relaxed text-amber-800 dark:text-amber-200">
-              This role carries a <span className="font-semibold">deny</span> policy. Deny wins over every
-              allow the account holds, from any role.
-            </p>
-          </div>
-        )}
-
-        {available.length > 0 && (
-          <div className="flex flex-wrap items-center gap-2 border-t border-surface-800 px-4 py-3">
-            <select
-              className={clsx(selectClass(false), 'h-9 w-auto min-w-[13rem] py-0 text-sm')}
-              value={newPolicyId}
-              onChange={(e) => setNewPolicyId(e.target.value)}
-              aria-label="Policy to attach"
-            >
-              <option value="">Attach a policy…</option>
-              {available.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name} ({p.effect})
-                </option>
-              ))}
-            </select>
-            <Button
-              size="sm"
-              variant="primary"
-              icon={Link2}
-              disabled={!newPolicyId}
-              loading={attach.isPending}
-              onClick={() => newPolicyId && attach.mutate(newPolicyId)}
-            >
-              Attach
-            </Button>
-          </div>
-        )}
-      </section>
-
-      <dl className="divide-y divide-surface-800 border-t border-surface-800">
-        <div className="grid grid-cols-[minmax(6.5rem,34%)_1fr] gap-3 px-4 py-2.5">
-          <dt className="text-2xs font-medium uppercase tracking-[0.07em] text-ink-500">Created</dt>
-          <dd className="text-sm text-ink-100">{role.created_at ? formatDateTime(role.created_at) : '-'}</dd>
-        </div>
-        <div className="grid grid-cols-[minmax(6.5rem,34%)_1fr] gap-3 px-4 py-2.5">
-          <dt className="text-2xs font-medium uppercase tracking-[0.07em] text-ink-500">Role ID</dt>
-          <dd className="break-all font-mono text-xs text-ink-300">{role.id}</dd>
-        </div>
-      </dl>
-    </Drawer>
-  )
-}
-
-// --- page --------------------------------------------------------------------
-
 export default function RolesPage() {
   const queryClient = useQueryClient()
   const [createOpen, setCreateOpen] = useState(false)
@@ -314,19 +84,11 @@ export default function RolesPage() {
     setParams(next, { replace: true })
   }, [params, setParams])
 
-  const [peeked, setPeeked] = useState(null)
   const [deleteTarget, setDeleteTarget] = useState(null)
 
   const rolesQuery = useQuery({
     queryKey: ['admin', 'roles'],
     queryFn: ({ signal }) => listRoles(signal),
-  })
-
-  // Same query key the drawer uses, so react-query serves both from one cache
-  // entry, this is a read of already-fetched data, not a second request.
-  const policiesQuery = useQuery({
-    queryKey: ['admin', 'policies'],
-    queryFn: ({ signal }) => listPolicies(signal),
   })
 
   // Criticality for the whole estate in ONE call, not one per row. The
@@ -345,7 +107,6 @@ export default function RolesPage() {
       })
       queryClient.invalidateQueries({ queryKey: ['admin', 'roles'] })
       setDeleteTarget(null)
-      setPeeked(null)
     },
     onError: (err) => {
       toast.error(apiErrorMessage(err))
@@ -399,6 +160,12 @@ export default function RolesPage() {
   })
 
   const systemCount = roles.filter(isSystemRole).length
+  // The rows worth acting on: enough privilege to matter, and no evidence
+  // anybody is using it.
+  const attentionCount = useMemo(
+    () => (criticalityQuery.data?.roles || []).filter(needsAttention).length,
+    [criticalityQuery.data]
+  )
 
   const chips = []
   if (table.query) {
@@ -412,6 +179,14 @@ export default function RolesPage() {
       onClear: () => table.setFilter('type', 'all'),
     })
   }
+  if (table.filters.band !== 'all') {
+    chips.push({
+      key: 'band',
+      label: 'Criticality',
+      value: bandMeta(table.filters.band).label,
+      onClear: () => table.setFilter('band', 'all'),
+    })
+  }
 
   const err = rolesQuery.isError ? normalizeApiError(rolesQuery.error) : null
 
@@ -422,6 +197,66 @@ export default function RolesPage() {
         counter={rolesQuery.isSuccess ? roles.length : undefined}
         description="A role bundles policies into one assignable unit. Accounts are given roles; roles carry the permissions the policy engine evaluates."
       />
+
+      {/* Estate posture, before the row-by-row view. The bar is the shape of
+          the estate and doubles as the band filter; the counts beside it name
+          the combination worth acting on, which is a dangerous role nobody is
+          exercising. */}
+      {criticalityQuery.isSuccess && criticalityQuery.data?.total > 0 && (
+        <Container className="!py-4">
+          <div className="flex flex-wrap items-start justify-between gap-x-10 gap-y-4">
+            <div className="min-w-[16rem] flex-1">
+              <h2 className="text-sm font-semibold text-primary">Criticality across the estate</h2>
+              <CriticalityBar
+                className="mt-3"
+                byBand={criticalityQuery.data.by_band}
+                total={criticalityQuery.data.total}
+                active={table.filters.band}
+                onSelect={(b) => table.setFilter('band', b)}
+              />
+            </div>
+
+            <dl className="flex flex-none flex-wrap gap-x-8 gap-y-3">
+              {[
+                {
+                  label: 'Needs attention',
+                  value: attentionCount,
+                  hint: 'Critical or High, and unused',
+                  strong: attentionCount > 0,
+                },
+                {
+                  label: 'Unused',
+                  value: criticalityQuery.data.dormant,
+                  hint: `No activity in ${90} days`,
+                },
+                {
+                  label: 'Held by nobody',
+                  value: criticalityQuery.data.unheld,
+                  hint: 'Latent grants',
+                },
+                {
+                  label: 'Reviewer set',
+                  value: criticalityQuery.data.overridden,
+                  hint: 'Band set by hand',
+                },
+              ].map((s) => (
+                <div key={s.label}>
+                  <dt className="text-xs text-tertiary">{s.label}</dt>
+                  <dd
+                    className={clsx(
+                      'mt-0.5 tabular text-2xl font-bold leading-none',
+                      s.strong ? 'text-warn' : 'text-primary'
+                    )}
+                  >
+                    {s.value}
+                  </dd>
+                  <p className="mt-1 text-2xs text-tertiary">{s.hint}</p>
+                </div>
+              ))}
+            </dl>
+          </div>
+        </Container>
+      )}
 
       <Stack gap="sm">
         <CommandBar
@@ -472,29 +307,6 @@ export default function RolesPage() {
             </FilterChip>
           ))}
 
-          {/* Band facets. Rendered only once the classifier has answered, so
-              the row of chips does not flash a set of zeroes on first paint.
-              A criticality column you cannot filter on is decoration, and
-              "show me the Critical ones" is the entire reason to have it. */}
-          {criticalityQuery.isSuccess && (
-            <>
-              <span className="mx-1 h-5 w-px flex-none bg-line-soft" aria-hidden="true" />
-              {CRITICALITY_BANDS.map((b) => {
-                const count = criticalityQuery.data?.by_band?.[b] || 0
-                if (count === 0) return null
-                return (
-                  <FilterChip
-                    key={b}
-                    active={table.filters.band === b}
-                    count={count}
-                    onClick={() => table.setFilter('band', table.filters.band === b ? 'all' : b)}
-                  >
-                    {bandMeta(b).label}
-                  </FilterChip>
-                )
-              })}
-            </>
-          )}
         </div>
 
         <ActiveFilters chips={chips} onClearAll={table.resetFilters} />
@@ -537,13 +349,13 @@ export default function RolesPage() {
           />
         ) : (
           <>
-            <DataTable minWidth="56rem">
+            <DataTable minWidth="58rem">
               <colgroup>
-                <col className="w-[15rem] min-w-[12rem]" />
-                <col className="w-auto" />
+                <col className="w-auto min-w-[16rem]" />
                 <col className="w-[10rem]" />
+                <col className="w-[11rem]" />
+                <col className="w-[7rem]" />
                 <col className="w-[8rem]" />
-                <col className="w-[9rem]" />
                 <col className="w-[9rem]" />
                 <col className="w-[4rem]" />
               </colgroup>
@@ -552,10 +364,10 @@ export default function RolesPage() {
                   <SortTh columnKey="name" sort={table.sort} onSort={table.toggleSort} sticky edge>
                     Role
                   </SortTh>
-                  <Th>Description</Th>
                   <SortTh columnKey="criticality_band" sort={table.sort} onSort={table.toggleSort}>
                     Criticality
                   </SortTh>
+                  <Th>Exposure</Th>
                   <SortTh columnKey="is_system" sort={table.sort} onSort={table.toggleSort}>
                     Type
                   </SortTh>
@@ -576,23 +388,36 @@ export default function RolesPage() {
                   return (
                     <Tr key={role.id}>
                       <Td sticky edge>
-                        <button
-                          type="button"
-                          onClick={() => setPeeked(role)}
-                          title={role.name}
-                          className="block max-w-full truncate text-left text-sm font-medium text-primary transition-colors hover:text-accent hover:underline"
-                        >
-                          {role.name}
-                        </button>
-                      </Td>
-                      <Td>
-                        <Trunc value={role.description} muted />
+                        <div className="min-w-0">
+                          <Link
+                            to={`/admin/roles/${role.id}`}
+                            title={role.name}
+                            className="block max-w-full truncate text-left text-sm font-medium text-primary transition-colors hover:text-accent hover:underline"
+                          >
+                            {role.name}
+                          </Link>
+                          {role.description && (
+                            <span
+                              className="mt-0.5 block truncate text-xs text-tertiary"
+                              title={role.description}
+                            >
+                              {role.description}
+                            </span>
+                          )}
+                        </div>
                       </Td>
                       <Td>
                         {criticalityQuery.isLoading ? (
                           <span className="skeleton block h-4 w-20 rounded" />
                         ) : (
                           <CriticalityCell classification={role.criticality} />
+                        )}
+                      </Td>
+                      <Td>
+                        {criticalityQuery.isLoading ? (
+                          <span className="skeleton block h-4 w-16 rounded" />
+                        ) : (
+                          <ExposureCell classification={role.criticality} />
                         )}
                       </Td>
                       <Td>
@@ -613,8 +438,10 @@ export default function RolesPage() {
                       <Td align="right">
                         <RowActions>
                           <RowMenu label={`Actions for ${role.name}`}>
-                            <MenuItem icon={Lock} onClick={() => setPeeked(role)}>
-                              Open role
+                            <MenuItem icon={Lock}>
+                              <Link to={`/admin/roles/${role.id}`} className="block">
+                                Open role
+                              </Link>
                             </MenuItem>
                             {!system && (
                               <MenuItem icon={Trash2} danger onClick={() => setDeleteTarget(role)}>
@@ -643,7 +470,6 @@ export default function RolesPage() {
         )}
       </Container>
 
-      <RoleDrawer role={peeked} onClose={() => setPeeked(null)} onDelete={setDeleteTarget} />
 
       <CreateRoleModal open={createOpen} onClose={() => setCreateOpen(false)} />
 

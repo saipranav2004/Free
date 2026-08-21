@@ -165,21 +165,31 @@ const RECORDINGS = [
   { id: 'rec-04', session_id: 'sess-04', org_id: ORG, status: 'FAILED', format: 'asciicast', started_at: iso(-4980), ended_at: iso(-4979), size_bytes: 0, retention_days: 365, storage_bucket: 'pam-recordings', storage_key: '' },
 ]
 
+// The action vocabulary the REAL backend writes. middleware/audit.go classifies
+// every request into a pam:<domain>:<Verb> action (see its classify()), and the
+// criticality engine matches a role's granted actions against exactly these
+// strings to work out whether anybody is still exercising the role. The mock
+// used a friendlier dotted event name here, which meant usage never resolved
+// in dev and every role looked dormant. Mirroring the real vocabulary is the
+// whole point of this file.
 const AUDIT_ACTIONS = [
-  ['JIT', 'jit.request.created', 'SUCCESS', 'INFO'],
-  ['JIT', 'jit.request.approved', 'SUCCESS', 'INFO'],
-  ['JIT', 'jit.request.denied', 'DENIED', 'WARN'],
-  ['VAULT', 'vault.credential.revealed', 'SUCCESS', 'WARN'],
-  ['VAULT', 'vault.credential.rotated', 'SUCCESS', 'INFO'],
-  ['SESSION', 'session.started', 'SUCCESS', 'INFO'],
-  ['SESSION', 'session.killed', 'SUCCESS', 'WARN'],
-  ['AUTH', 'auth.login.success', 'SUCCESS', 'INFO'],
-  ['AUTH', 'auth.login.failed', 'FAILURE', 'WARN'],
-  ['AUTHZ', 'authz.decision.deny', 'DENIED', 'WARN'],
-  ['BREAK_GLASS', 'breakglass.requested', 'SUCCESS', 'CRITICAL'],
-  ['ADMIN', 'admin.user.status.changed', 'SUCCESS', 'INFO'],
-  ['RESOURCE', 'resource.created', 'SUCCESS', 'INFO'],
-  ['REPORT', 'report.generated', 'SUCCESS', 'INFO'],
+  ['JIT', 'pam:jit:Request', 'SUCCESS', 'INFO'],
+  ['JIT', 'pam:jit:Request', 'SUCCESS', 'INFO'],
+  ['JIT', 'pam:jit:Cancel', 'DENIED', 'WARN'],
+  ['VAULT', 'pam:vault:Reveal', 'SUCCESS', 'WARN'],
+  ['VAULT', 'pam:vault:Rotate', 'SUCCESS', 'INFO'],
+  ['SESSION', 'pam:session:Start', 'SUCCESS', 'INFO'],
+  ['SESSION', 'pam:session:Kill', 'SUCCESS', 'WARN'],
+  ['AUTH', 'pam:auth:Login', 'SUCCESS', 'INFO'],
+  ['AUTH', 'pam:auth:Login', 'FAILURE', 'WARN'],
+  ['AUTHZ', 'pam:resource:Connect', 'DENIED', 'WARN'],
+  ['BREAK_GLASS', 'pam:breakglass:Use', 'SUCCESS', 'CRITICAL'],
+  ['ADMIN', 'pam:auth:Me', 'SUCCESS', 'INFO'],
+  ['RESOURCE', 'pam:resource:Read', 'SUCCESS', 'INFO'],
+  ['RESOURCE', 'pam:resource:List', 'SUCCESS', 'INFO'],
+  ['VAULT', 'pam:vault:List', 'SUCCESS', 'INFO'],
+  ['SESSION', 'pam:session:End', 'SUCCESS', 'INFO'],
+  ['AUDIT', 'pam:audit:Read', 'SUCCESS', 'INFO'],
 ]
 
 const AUDIT = Array.from({ length: 137 }, (_, i) => {
@@ -190,9 +200,14 @@ const AUDIT = Array.from({ length: 137 }, (_, i) => {
     id: `aud-${String(i + 1).padStart(4, '0')}`,
     org_id: ORG,
     sequence_number: 4820 - i,
-    occurred_at: iso(-(i * 17 + 2)),
+    // Spread across roughly three months. The old 17 minute step packed 137
+    // events into 39 hours, which made every window look identically busy and
+    // meant nothing could ever fall outside the 90 day dormancy review.
+    occurred_at: iso(-(i * 900 + 2)),
     actor_type: 'USER',
-    user_id: actor.id,
+    // USERS rows key on user_id, not id. This read undefined, so every audit
+    // row was unattributable and no usage lookup could ever match a holder.
+    user_id: actor.user_id,
     username: actor.username,
     category,
     action,
