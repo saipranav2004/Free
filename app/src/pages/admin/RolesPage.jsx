@@ -1,6 +1,16 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, FileKey2, Link2, Lock, Plus, ShieldCheck, Trash2, X } from 'lucide-react'
+import {
+  AlertTriangle,
+  FileKey2,
+  Link2,
+  Lock,
+  Plus,
+  ShieldAlert,
+  ShieldCheck,
+  Trash2,
+  X,
+} from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
 import clsx from 'clsx'
 import { toast } from 'sonner'
@@ -37,6 +47,9 @@ import { formatDateTime, formatRelativeToNow } from '../../lib/format'
 import { Badge } from '../../components/common/Badge'
 import { selectClass } from '../../components/common/FormFields'
 import { isSystemRole, ROLE_BADGE, POLICY_EFFECT_BADGE } from '../../config/constants'
+import { getCriticalitySummary } from '../../api/criticality'
+import { CRITICALITY_BANDS, bandMeta } from '../../lib/criticality'
+import { CriticalityCell, CriticalityPanel } from '../../components/rbac/Criticality'
 
 // ---------------------------------------------------------------------------
 // Admin Center, Roles
@@ -57,6 +70,13 @@ const CSV_COLUMNS = [
   { key: 'name', label: 'Role' },
   { key: 'description', label: 'Description' },
   { key: 'type', label: 'Type', value: (r) => (isSystemRole(r) ? 'System' : 'Custom') },
+  { key: 'criticality', label: 'Criticality', value: (r) => r.criticality?.band || 'UNCLASSIFIED' },
+  { key: 'criticality_score', label: 'Criticality score', value: (r) => r.criticality?.score ?? '' },
+  {
+    key: 'criticality_source',
+    label: 'Criticality source',
+    value: (r) => (r.criticality ? (r.criticality.is_overridden ? 'Reviewer' : 'Computed') : ''),
+  },
   { key: 'created_at', label: 'Created' },
   { key: 'id', label: 'Role ID' },
 ]
@@ -166,6 +186,13 @@ function RoleDrawer({ role, onClose, onDelete }) {
           </p>
         </div>
       )}
+
+      <section className="px-4 py-4">
+        <h3 className="mb-1 flex items-center gap-2 text-sm font-semibold text-primary">
+          <ShieldAlert className="h-3.5 w-3.5 text-tertiary" strokeWidth={1.9} /> Criticality
+        </h3>
+        <CriticalityPanel roleId={role.id} roleName={role.name} />
+      </section>
 
       <section>
         <h3 className="flex items-center gap-2 border-b border-surface-800 bg-surface-850/60 px-4 py-2 text-xs font-semibold text-ink-500">
@@ -302,6 +329,14 @@ export default function RolesPage() {
     queryFn: ({ signal }) => listPolicies(signal),
   })
 
+  // Criticality for the whole estate in ONE call, not one per row. The
+  // endpoint returns every role already classified and sorted, so the column
+  // below costs a single request no matter how many roles exist.
+  const criticalityQuery = useQuery({
+    queryKey: ['admin', 'rbac', 'criticality'],
+    queryFn: ({ signal }) => getCriticalitySummary(signal),
+  })
+
   const deleteMutation = useMutation({
     mutationFn: (roleId) => deleteRole(roleId),
     onSuccess: () => {
@@ -318,7 +353,19 @@ export default function RolesPage() {
     },
   })
 
-  const roles = useMemo(() => rolesQuery.data || [], [rolesQuery.data])
+  // Classification is joined onto the role rows so the column, the band
+  // facet, the sort and the export all read one field. Roles the classifier
+  // has not returned yet keep `criticality: null`, and the cell says
+  // "Not classified" rather than inventing a band.
+  const roles = useMemo(() => {
+    const rows = rolesQuery.data || []
+    const byId = new Map((criticalityQuery.data?.roles || []).map((c) => [c.role_id, c]))
+    if (byId.size === 0) return rows.map((r) => ({ ...r, criticality: null, criticality_band: null }))
+    return rows.map((r) => {
+      const c = byId.get(r.id) || null
+      return { ...r, criticality: c, criticality_band: c?.band || null }
+    })
+  }, [rolesQuery.data, criticalityQuery.data])
 
   const table = useTableState({
     rows: roles,
@@ -329,14 +376,24 @@ export default function RolesPage() {
     rowId: (r) => r.id,
     initialSort: { key: 'name', dir: 'asc' },
     initialPageSize: 25,
-    initialFilters: { type: 'all' },
+    initialFilters: { type: 'all', band: 'all' },
     // Free text is owned BY the hook (table.query), not by a local useState:
     // the hook already clears selection and resets paging when the query
     // changes, and duplicating it here would let the two drift.
     searchFields: ['name', 'description'],
+    // Criticality sorts by TIER, never by the band string: alphabetical order
+    // would read CRITICAL, HIGH, LOW, MODERATE, putting Low above Moderate
+    // and making the column actively misleading. Unclassified rows sort last.
+    sortAccessor: (r, key) =>
+      key === 'criticality_band'
+        ? r.criticality
+          ? bandMeta(r.criticality.band).tier
+          : 99
+        : r[key],
     filterFn: (r, f) => {
       if (f.type === 'system' && !isSystemRole(r)) return false
       if (f.type === 'custom' && isSystemRole(r)) return false
+      if (f.band !== 'all' && r.criticality_band !== f.band) return false
       return true
     },
   })
@@ -414,6 +471,30 @@ export default function RolesPage() {
               {f.label}
             </FilterChip>
           ))}
+
+          {/* Band facets. Rendered only once the classifier has answered, so
+              the row of chips does not flash a set of zeroes on first paint.
+              A criticality column you cannot filter on is decoration, and
+              "show me the Critical ones" is the entire reason to have it. */}
+          {criticalityQuery.isSuccess && (
+            <>
+              <span className="mx-1 h-5 w-px flex-none bg-line-soft" aria-hidden="true" />
+              {CRITICALITY_BANDS.map((b) => {
+                const count = criticalityQuery.data?.by_band?.[b] || 0
+                if (count === 0) return null
+                return (
+                  <FilterChip
+                    key={b}
+                    active={table.filters.band === b}
+                    count={count}
+                    onClick={() => table.setFilter('band', table.filters.band === b ? 'all' : b)}
+                  >
+                    {bandMeta(b).label}
+                  </FilterChip>
+                )
+              })}
+            </>
+          )}
         </div>
 
         <ActiveFilters chips={chips} onClearAll={table.resetFilters} />
@@ -456,10 +537,11 @@ export default function RolesPage() {
           />
         ) : (
           <>
-            <DataTable minWidth="48rem">
+            <DataTable minWidth="56rem">
               <colgroup>
                 <col className="w-[15rem] min-w-[12rem]" />
                 <col className="w-auto" />
+                <col className="w-[10rem]" />
                 <col className="w-[8rem]" />
                 <col className="w-[9rem]" />
                 <col className="w-[9rem]" />
@@ -471,6 +553,9 @@ export default function RolesPage() {
                     Role
                   </SortTh>
                   <Th>Description</Th>
+                  <SortTh columnKey="criticality_band" sort={table.sort} onSort={table.toggleSort}>
+                    Criticality
+                  </SortTh>
                   <SortTh columnKey="is_system" sort={table.sort} onSort={table.toggleSort}>
                     Type
                   </SortTh>
@@ -502,6 +587,13 @@ export default function RolesPage() {
                       </Td>
                       <Td>
                         <Trunc value={role.description} muted />
+                      </Td>
+                      <Td>
+                        {criticalityQuery.isLoading ? (
+                          <span className="skeleton block h-4 w-20 rounded" />
+                        ) : (
+                          <CriticalityCell classification={role.criticality} />
+                        )}
                       </Td>
                       <Td>
                         {/* Built in versus custom is the one thing here that

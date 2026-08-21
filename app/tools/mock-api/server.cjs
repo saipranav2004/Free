@@ -46,7 +46,8 @@ const db = {
   audit: F.AUDIT.map((a) => ({ ...a })),
   devices: F.AGENT_DEVICES.map((d) => ({ ...d })),
   mfaRules: F.MFA_RULES.map((r) => ({ ...r })),
-  rolePolicies: { 'r-4': ['p-4'], 'r-5': ['p-2'], 'r-2': ['p-1'] },
+  rolePolicies: { 'r-1': ['p-5'], 'r-2': ['p-5', 'p-1'], 'r-3': ['p-6'], 'r-4': ['p-4'], 'r-5': ['p-2'], 'r-6': ['p-1'], 'r-7': ['p-3'] },
+  criticalityOverrides: {},
   userPolicies: { 'u-user-0004': ['p-2'] },
   delegations: {},
   tokens: {},
@@ -987,6 +988,265 @@ on('DELETE', '/api/v1/pam/admin/rbac/policies/:id', (ctx) => {
   db.policies = db.policies.filter((x) => x.id !== p.id)
   return ok(ctx.res, { deleted: true, id: p.id })
 }, 'admin')
+
+// ── role criticality classification ──────────────────────────────────────
+// A faithful JS port of internal/services/role_criticality_service.go, so the
+// console behaves identically against the mock and against the real backend.
+// If you retune the weights there, retune them here, the contract check will
+// not catch a numeric drift for you.
+const CRIT = {
+  maxPrivilege: 40, maxBlast: 30, maxEscalation: 15, maxExposure: 15,
+  mitJIT: 6, mitRecorded: 4, mitDeny: 2,
+}
+const ACTION_RISK = {
+  'pam:breakglass:Use': 10,
+  'pam:vault:Reveal': 10, 'pam:vault:Rotate': 8, 'pam:vault:Store': 7,
+  'pam:vault:Create': 6, 'pam:vault:Read': 3, 'pam:vault:List': 2,
+  'pam:session:Kill': 7, 'pam:session:Connect': 6, 'pam:session:Start': 5,
+  'pam:session:End': 3, 'pam:session:List': 1,
+  'pam:resource:Connect': 6, 'pam:resource:Read': 1, 'pam:resource:List': 1,
+  'pam:jit:Request': 3, 'pam:jit:Cancel': 2,
+  'pam:audit:Verify': 3, 'pam:audit:Read': 2, 'pam:report:Generate': 2,
+  'pam:auth:Login': 1, 'pam:auth:Logout': 1, 'pam:auth:Me': 1,
+  'pam:auth:MFAVerify': 1, 'pam:auth:MFASetupInitiate': 1, 'pam:auth:MFASetupVerify': 1,
+}
+const VERB_RISK = {
+  reveal: 9, decrypt: 9, export: 7, rotate: 8, delete: 7, kill: 7, revoke: 6,
+  approve: 6, assign: 6, attach: 6, delegate: 8, create: 5, update: 5, write: 5,
+  store: 5, connect: 6, start: 4, end: 3, request: 3, cancel: 2, generate: 2,
+  verify: 3, list: 1, read: 1, get: 1, describe: 1,
+}
+const ESCALATING_ACTIONS = new Set(['pam:breakglass:Use', 'pam:vault:Reveal', 'pam:vault:Rotate'])
+const ESCALATING_VERBS = new Set(['delegate', 'assign', 'attach', 'grant', 'impersonate', 'reveal', 'reset'])
+const clampN = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v)
+const plural = (n, one, many) => (n === 1 ? one : many)
+const verbOf = (a) => { const i = a.lastIndexOf(':'); return i >= 0 && i + 1 < a.length ? a.slice(i + 1) : a }
+const riskOfAction = (a) => ACTION_RISK[a] ?? VERB_RISK[verbOf(a).toLowerCase()] ?? 5
+
+function matchesResource(pattern, r) {
+  pattern = String(pattern || '').trim()
+  if (!pattern) return false
+  if (pattern === '*') return true
+  if (pattern.toLowerCase().startsWith('type:'))
+    return pattern.slice(5).trim().toLowerCase() === String(r.resource_type || '').toLowerCase()
+  let body = pattern
+  if (body.startsWith('pam:resource/')) body = body.slice('pam:resource/'.length)
+  else if (body.startsWith('resource:')) body = body.slice('resource:'.length)
+  else if (body.startsWith('resource/')) body = body.slice('resource/'.length)
+  else if (body.includes(':') || body.includes('/')) return false
+  if (!body) return false
+  if (body === '*') return true
+  if (body.endsWith('*')) {
+    const pre = body.slice(0, -1)
+    return String(r.id).startsWith(pre) || String(r.name).toLowerCase().startsWith(pre.toLowerCase())
+  }
+  return body === r.id || body.toLowerCase() === String(r.name).toLowerCase()
+}
+
+function bandForScore(s) {
+  if (s >= 75) return 'CRITICAL'
+  if (s >= 50) return 'HIGH'
+  if (s >= 25) return 'MODERATE'
+  return 'LOW'
+}
+const TIER = { CRITICAL: 0, HIGH: 1, MODERATE: 2, LOW: 3 }
+const REPRESENTATIVE = { CRITICAL: 88, HIGH: 62, MODERATE: 37, LOW: 12 }
+
+function scorePrivilege(allow) {
+  const f = { key: 'privilege', label: 'Privilege level', score: 0, max: CRIT.maxPrivilege, summary: '', evidence: [] }
+  if (!allow.length) { f.summary = 'Grants nothing. No allow policy is attached to this role.'; return f }
+  const actions = new Set()
+  let wildcard = false
+  for (const p of allow) for (const a of p.actions || []) {
+    const t = String(a).trim(); if (!t) continue
+    if (t === '*') wildcard = true
+    actions.add(t)
+  }
+  if (wildcard) {
+    f.score = CRIT.maxPrivilege
+    f.summary = 'Unrestricted. A wildcard action grant lets this role call every operation the API exposes, including credential reveal and break glass.'
+    f.evidence = ['Allows action "*" (every action)']
+    return f
+  }
+  let peak = 0, peakAction = ''
+  for (const a of actions) { const r = riskOfAction(a); if (r > peak) { peak = r; peakAction = a } }
+  const peakPart = Math.floor((peak * 30) / 10)
+  const breadthPart = Math.min(10, Math.floor((actions.size * 10) / Object.keys(ACTION_RISK).length))
+  f.score = clampN(peakPart + breadthPart, 0, CRIT.maxPrivilege)
+  f.summary = `${actions.size} distinct ${plural(actions.size, 'action', 'actions')}. The most dangerous is ${peakAction}.`
+  const ranked = [...actions].map((a) => ({ a, r: riskOfAction(a) }))
+    .sort((x, y) => (y.r - x.r) || x.a.localeCompare(y.a))
+  for (const x of ranked) { if (f.evidence.length >= 4 || x.r < 5) break; f.evidence.push(`${x.a} (risk ${x.r} of 10)`) }
+  if (!f.evidence.length) f.evidence.push('Read-mostly. No action on this role scores above 4 of 10.')
+  return f
+}
+
+function scoreBlast(allow, resources) {
+  const f = { key: 'blast_radius', label: 'Blast radius', score: 0, max: CRIT.maxBlast, summary: '', evidence: [] }
+  const total = resources.length
+  const patterns = new Set()
+  let wildcard = false
+  for (const p of allow) for (const r of p.resources || []) {
+    const t = String(r).trim(); if (!t) continue
+    if (t === '*') wildcard = true
+    patterns.add(t)
+  }
+  if (!patterns.size) { f.summary = 'Reaches nothing. No allow policy on this role names a resource.'; return { f, reach: 0, allJIT: false, allRecorded: false } }
+  const sensitiveOf = (rs) => rs.filter((r) => r.requires_jit || r.always_record).length
+  if (wildcard) {
+    f.score = CRIT.maxBlast
+    f.summary = `Every resource in the estate, all ${total} of them, plus anything added later.`
+    f.evidence = ['Allows resource "*" (every resource, present and future)']
+    return { f, reach: total, allJIT: false, allRecorded: false }
+  }
+  const matched = resources.filter((res) => [...patterns].some((p) => matchesResource(p, res)))
+  const reach = matched.length
+  if (!reach) {
+    f.summary = `Names ${patterns.size} resource ${plural(patterns.size, 'pattern', 'patterns')}, none of which match an active resource today.`
+    return { f, reach: 0, allJIT: false, allRecorded: false }
+  }
+  const sensitive = sensitiveOf(matched)
+  const breadth = total > 0 ? Math.floor((reach * 20) / total) : 0
+  const sensitivePart = Math.floor((sensitive * 10) / reach)
+  f.score = clampN(breadth + sensitivePart, 0, CRIT.maxBlast)
+  f.summary = `${reach} of ${total} active ${plural(total, 'resource', 'resources')}, ${sensitive} of which ${plural(sensitive, 'is', 'are')} marked sensitive.`
+  matched.forEach((m, i) => {
+    if (i >= 4) { if (i === 4) f.evidence.push(`and ${reach - 4} more`); return }
+    const tag = m.requires_jit && m.always_record ? ' (JIT gated, always recorded)'
+      : m.requires_jit ? ' (JIT gated)' : m.always_record ? ' (always recorded)' : ''
+    f.evidence.push(m.name + tag)
+  })
+  return { f, reach, allJIT: matched.every((m) => m.requires_jit), allRecorded: matched.every((m) => m.always_record) }
+}
+
+function scoreEscalation(allow) {
+  const f = { key: 'escalation', label: 'Escalation path', score: 0, max: CRIT.maxEscalation, summary: '', evidence: [] }
+  const hits = new Set()
+  let wildcard = false
+  for (const p of allow) for (const a of p.actions || []) {
+    const t = String(a).trim()
+    if (t === '*') { wildcard = true; continue }
+    if (ESCALATING_ACTIONS.has(t) || ESCALATING_VERBS.has(verbOf(t).toLowerCase())) hits.add(t)
+  }
+  if (wildcard) {
+    f.score = CRIT.maxEscalation
+    f.summary = 'Can grant itself anything. A wildcard action grant includes every permission-changing call in the product.'
+    f.evidence = ['Allows action "*"']
+    return f
+  }
+  if (!hits.size) { f.summary = 'No escalation path. Nothing this role can call hands out credentials or authority.'; return f }
+  f.score = clampN(6 + 3 * (hits.size - 1), 0, CRIT.maxEscalation)
+  f.summary = `Holds ${hits.size} ${plural(hits.size, 'call', 'calls')} that can hand out or expose credentials.`
+  f.evidence = [...hits].sort()
+  return f
+}
+
+function scoreExposure(members) {
+  const f = { key: 'exposure', label: 'Standing exposure', score: 0, max: CRIT.maxExposure, summary: '', evidence: [] }
+  if (members === 0) { f.score = 0; f.summary = 'Held by nobody. The grant is latent: it carries no live exposure until somebody is assigned it.' }
+  else if (members <= 2) { f.score = 5; f.summary = `Held by ${members} ${plural(members, 'account', 'accounts')}.` }
+  else if (members <= 5) { f.score = 9; f.summary = `Held by ${members} accounts.` }
+  else if (members <= 10) { f.score = 12; f.summary = `Held by ${members} accounts, which is wide for a privileged grant.` }
+  else { f.score = CRIT.maxExposure; f.summary = `Held by ${members} accounts. At this width the role is effectively standing access for a whole team.` }
+  return f
+}
+
+function classifyRole(role) {
+  const policies = (db.rolePolicies[role.id] || []).map((id) => db.policies.find((p) => p.id === id)).filter(Boolean)
+  const members = db.users.filter((u) => (u.roles || []).includes(role.name)).length
+  const allow = policies.filter((p) => String(p.effect).toLowerCase() !== 'deny')
+  const deny = policies.filter((p) => String(p.effect).toLowerCase() === 'deny')
+  const resources = db.resources.filter((r) => r.is_active !== false)
+
+  const priv = scorePrivilege(allow)
+  const { f: blast, reach, allJIT, allRecorded } = scoreBlast(allow, resources)
+  const esc = scoreEscalation(allow)
+  const exp = scoreExposure(members)
+
+  let totalScore = priv.score + blast.score + esc.score + exp.score
+  const mitigations = []
+  if (reach > 0 && allJIT) {
+    mitigations.push({ key: 'jit_gated', label: 'Every reachable resource is JIT gated', points: CRIT.mitJIT, detail: 'No standing access. A holder still has to request and be granted time-boxed elevation before any of these resources will accept a connection.' })
+    totalScore -= CRIT.mitJIT
+  }
+  if (reach > 0 && allRecorded) {
+    mitigations.push({ key: 'always_recorded', label: 'Every reachable resource forces session recording', points: CRIT.mitRecorded, detail: 'Any session opened through this role is recorded, so misuse is reconstructable after the fact.' })
+    totalScore -= CRIT.mitRecorded
+  }
+  if (deny.length) {
+    mitigations.push({ key: 'deny_policy', label: `${deny.length} deny ${plural(deny.length, 'policy', 'policies')} attached`, points: CRIT.mitDeny, detail: 'Deny beats allow at evaluation time, so these carve holes out of the reach scored above.' })
+    totalScore -= CRIT.mitDeny
+  }
+  totalScore = clampN(totalScore, 0, 100)
+  const computedBand = bandForScore(totalScore)
+
+  const out = {
+    role_id: role.id, role_name: role.name, is_system: !!role.is_system,
+    band: computedBand, score: totalScore, tier: TIER[computedBand],
+    computed_band: computedBand, computed_score: totalScore,
+    is_overridden: false, override: null,
+    factors: [priv, blast, esc, exp], mitigations,
+    policy_count: policies.length, member_count: members, resource_reach: reach,
+    evaluated_at: new Date().toISOString(),
+  }
+  const o = db.criticalityOverrides[role.id]
+  if (o && TIER[o.band] !== undefined) {
+    out.band = o.band
+    out.tier = TIER[o.band]
+    out.score = REPRESENTATIVE[o.band]
+    out.is_overridden = true
+    out.override = o
+  }
+  return out
+}
+
+on('GET', '/api/v1/pam/admin/rbac/criticality', (ctx) => {
+  const roles = db.roles.map(classifyRole).sort((a, b) => (a.tier - b.tier) || (b.score - a.score) || a.role_name.localeCompare(b.role_name))
+  const by_band = { CRITICAL: 0, HIGH: 0, MODERATE: 0, LOW: 0 }
+  for (const r of roles) by_band[r.band]++
+  return ok(ctx.res, {
+    total: roles.length, by_band,
+    overridden: roles.filter((r) => r.is_overridden).length,
+    roles, evaluated_at: new Date().toISOString(),
+  })
+}, 'admin')
+
+on('GET', '/api/v1/pam/admin/rbac/roles/:id/criticality', (ctx) => {
+  const r = db.roles.find((x) => x.id === ctx.params.id)
+  if (!r) return fail(ctx.res, 404, 'NOT_FOUND', 'That role does not exist.')
+  return ok(ctx.res, classifyRole(r))
+}, 'admin')
+
+on('PUT', '/api/v1/pam/admin/rbac/roles/:id/criticality', (ctx) => {
+  const r = db.roles.find((x) => x.id === ctx.params.id)
+  if (!r) return fail(ctx.res, 404, 'NOT_FOUND', 'That role does not exist.')
+  const band = String(ctx.body?.band || '').toUpperCase()
+  const reason = String(ctx.body?.reason || '').trim()
+  const fields = {}
+  if (TIER[band] === undefined) fields.band = 'Choose one of the four bands.'
+  if (!reason) fields.reason = 'Say why the computed band is wrong.'
+  if (Object.keys(fields).length) return fail(ctx.res, 422, 'VALIDATION_FAILED', 'Check the highlighted fields.', fields)
+  const computed = classifyRole(r)
+  db.criticalityOverrides[r.id] = {
+    role_id: r.id, band, reason,
+    set_by: ctx.user.user_id, set_by_username: ctx.user.username,
+    created_at: db.criticalityOverrides[r.id]?.created_at || new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  }
+  auditRow(ctx.user, 'ADMIN', 'pam.rbac.criticality.override.set', 'SUCCESS', `role:${r.name}`)
+  void computed
+  return ok(ctx.res, classifyRole(r))
+}, 'admin')
+
+on('DELETE', '/api/v1/pam/admin/rbac/roles/:id/criticality', (ctx) => {
+  const r = db.roles.find((x) => x.id === ctx.params.id)
+  if (!r) return fail(ctx.res, 404, 'NOT_FOUND', 'That role does not exist.')
+  if (!db.criticalityOverrides[r.id]) return fail(ctx.res, 404, 'NOT_FOUND', 'This role has no criticality override to clear.')
+  delete db.criticalityOverrides[r.id]
+  auditRow(ctx.user, 'ADMIN', 'pam.rbac.criticality.override.cleared', 'SUCCESS', `role:${r.name}`)
+  return ok(ctx.res, classifyRole(r))
+}, 'admin')
+
 
 // mfa policy
 on('GET', '/api/v1/pam/admin/mfa-policy', (ctx) =>

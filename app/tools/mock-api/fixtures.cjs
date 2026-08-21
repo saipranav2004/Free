@@ -70,6 +70,12 @@ const POLICIES = [
   { id: 'p-2', org_id: ORG, name: 'vault-reveal-prod', description: 'Reveal production credentials, requires JIT', effect: 'allow', actions: ['pam:vault:Reveal'], resources: ['safe:prod/*'], is_system: false, created_at: iso(-120000) },
   { id: 'p-3', org_id: ORG, name: 'deny-oracle-direct', description: 'Blocks direct Oracle connections outside a grant', effect: 'deny', actions: ['pam:resource:Connect'], resources: ['resource:oracle-*'], is_system: false, created_at: iso(-60000) },
   { id: 'p-4', org_id: ORG, name: 'breakglass-analytics', description: '', effect: 'allow', actions: ['pam:breakglass:Use'], resources: ['resource:clickhouse-analytics-prod-01'], is_system: false, created_at: iso(-20000) },
+  // The two policies the real backend seeds at first startup (see
+  // opa/policies/default_bundle.json). They are here so the mock classifies
+  // root and admin the same way a real install does, rather than reporting
+  // the most privileged roles in the product as Low.
+  { id: 'p-5', org_id: ORG, name: 'full-access', description: 'Unrestricted access to every PAM action and resource.', effect: 'allow', actions: ['*'], resources: ['*'], is_system: true, created_at: iso(-525600) },
+  { id: 'p-6', org_id: ORG, name: 'standard-user-access', description: 'Baseline actions available to every standard user.', effect: 'allow', actions: ['pam:resource:List', 'pam:resource:Read', 'pam:resource:Connect', 'pam:session:Start', 'pam:session:End', 'pam:vault:List', 'pam:vault:Read', 'pam:vault:Create', 'pam:vault:Store', 'pam:vault:Reveal', 'pam:vault:Rotate', 'pam:jit:Request', 'pam:jit:Cancel', 'pam:audit:Read', 'pam:report:Generate'], resources: ['*'], is_system: true, created_at: iso(-525600) },
 ]
 
 const RESOURCES = [
