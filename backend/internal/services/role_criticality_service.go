@@ -4,7 +4,7 @@
 // ═══════════════════════════════
 //
 // What this answers: "if this role were compromised tomorrow, how bad is it?"
-// Sorted, banded, and explained, so an administrator reviewing 40 roles knows
+// Ranked, banded, and explained, so an administrator reviewing 40 roles knows
 // which 3 to protect first instead of reading 40 policy documents.
 //
 // WHY IT IS SHAPED LIKE THIS
@@ -13,54 +13,88 @@
 // and this implementation follows it rather than inventing a private one:
 //
 //   - CyberArk ranks privileged accounts with an "Account Criticality Matrix"
-//     built from three axes: the LEVEL OF PRIVILEGE granted (read-only through
-//     to full administrative control, including the ability to modify other
-//     identities' permissions), the BLAST RADIUS or scope of influence (one
-//     service, several services, or every resource), and the EASE OF
-//     COMPROMISE (what compensating controls stand in the way). The four
-//     factors below are those axes, with escalation split out of privilege
-//     because it behaves differently, see the next point.
+//     built from the LEVEL OF PRIVILEGE granted, the BLAST RADIUS or scope of
+//     influence, and the EASE OF COMPROMISE (what compensating controls stand
+//     in the way). Those are the scored axes here, with escalation split out
+//     of privilege because it behaves differently, see the next point.
 //
 //   - Microsoft Entra ID's privileged role guidance makes the point that a
 //     role which can reset another identity's credentials or mint new ones is
 //     functionally equivalent to Global Administrator, and therefore Tier 0,
 //     no matter how narrow it looks on paper. That is why "can this role
-//     escalate itself" is its own scored factor here rather than one more
-//     verb in the privilege bucket.
+//     escalate itself" is its own scored factor rather than one more verb.
 //
-//   - SailPoint classifies entitlements into privilege bands, and lets a
+//   - SailPoint classifies entitlements into privilege bands and lets a
 //     reviewer override the automatic result, with the override taking
 //     precedence and suppressing further automatic reclassification. Classify
 //     plus override plus audit is the contract implemented here.
 //
-//   - Saviynt's risk model is a weighted sum of factors against configurable
-//     thresholds. The weights below are fixed rather than configurable,
-//     because a scoring model nobody can explain is worse than a blunt one
-//     everybody can, but they are named constants in one block so tuning them
-//     is a one-line change with an obvious blast radius of its own.
+//   - Saviynt's risk model is a weighted sum of factors against thresholds.
+//     The weights here are fixed rather than configurable, but they sit in one
+//     named block so retuning is a single visible edit, and ModelVersion
+//     records which tuning produced a given classification.
 //
-// THE SCORE
-// ─────────
-// Four factors sum to 100 before mitigation:
+// CRITICALITY IS INTRINSIC. EXPOSURE IS CONTEXTUAL. THEY ARE SCORED APART.
+// ────────────────────────────────────────────────────────────────────────
+// This is the correction that matters most, and it follows SailPoint, which
+// keeps entitlement PRIVILEGE CLASSIFICATION (an intrinsic property of the
+// entitlement) separate from an IDENTITY RISK SCORE (contextual, per user).
+// FIPS 199 categorises the same way: by the POTENTIAL IMPACT of a compromise,
+// which is a property of the thing, not of how many people currently touch it.
 //
-//	Privilege        0..40   how dangerous the verbs it can call are
-//	Blast radius     0..30   how much of the estate those verbs reach
-//	Escalation       0..15   can it grant itself or others more power
-//	Exposure         0..15   how many people hold it right now
-//	                ------
-//	                  100
+// A role granting wildcard access is exactly as dangerous whether nobody holds
+// it or forty people do. Folding holder count into the criticality number made
+// the classification move for reasons that have nothing to do with how
+// dangerous the role is. So:
 //
-// Compensating controls then SUBTRACT, floored at zero. This is CyberArk's
-// ease-of-compromise axis: the same permissions behind a JIT gate and a forced
-// recording are genuinely less dangerous than the same permissions standing
-// open, and a model that ignores that punishes the installs that did the right
-// thing.
+//	CRITICALITY (0..100)   what this role could do if compromised
+//	  Privilege      0..45   how dangerous the verbs it can call are
+//	  Blast radius   0..35   how much of the estate those verbs reach
+//	  Escalation     0..20   can it grant itself or others more power
+//	  minus compensating controls (JIT, forced recording, deny policies)
 //
-// Bands are cut at 75 / 50 / 25. A role holding wildcard actions on wildcard
-// resources scores 100 and lands Critical; a read-only role over a handful of
-// resources lands Low.
+//	EXPOSURE (0..100)      how much live surface that danger currently has
+//	  Holders        0..60   how many accounts hold it right now
+//	  Recent use     0..40   whether the permissions are actually exercised
 //
-// IMPORTANT, ON HONESTY: nothing here is stored or cached. The classification
+// Only CRITICALITY is banded. Exposure is reported beside it, because the two
+// answer different questions and averaging them would hide both.
+//
+// USAGE, AND WHY IT IS HERE
+// ─────────────────────────
+// The dominant signal in modern access governance is whether a grant is
+// actually used. AWS built IAM Access Analyzer's unused-access findings around
+// exactly this, and the common governance rule is that a permission untouched
+// for 90 days should be reviewed. A role that can reveal every credential in
+// the estate but has not been exercised in six months is a different problem
+// from one used daily, and the previous model could not tell them apart.
+//
+// Usage is derived from the audit trail: the most recent SUCCESS by any holder
+// of an action this role grants. It is an approximation and says so, because
+// when a user holds the same permission through two roles the trail cannot
+// attribute the call to one of them. AWS's own last-accessed data carries the
+// same caveat. An approximation that is labelled is useful; one presented as
+// exact is not.
+//
+// ON THE ARITHMETIC, HONESTLY
+// ───────────────────────────
+// Adding weighted ordinal scores is not a measurement. Hubbard and Evans
+// ("Problems with Scoring Methods and Ordinal Scales in Risk Assessment", IBM
+// Journal of Research and Development) and Krisper's follow-up show that
+// ordinal scoring suffers range compression, rank reversal and centering bias,
+// and that summing or multiplying such scales is not mathematically valid.
+//
+// So this is deliberately NOT presented as a risk quantification. It is a
+// PRIORITISATION RANKING: a repeatable, explainable way to sort roles so the
+// ones needing attention first come to the top. Every factor carries the
+// evidence that produced it, so a reviewer checks the reasoning rather than
+// trusting the number. The UI makes the same claim in the same words.
+//
+// ModelVersion is stamped on every classification. Retuning the weights below
+// changes what a band means, and without a version marker the old and new
+// classifications would be silently incomparable.
+//
+// IMPORTANT, ON STALENESS: nothing here is stored or cached. The classification
 // is recomputed from live rows on every call, so it cannot go stale behind a
 // policy edit. Only the human override is persisted.
 package services
@@ -69,6 +103,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 	"time"
@@ -91,29 +126,41 @@ var (
 
 // ── Weights ────────────────────────────────────────────────────────────────
 // One block, so retuning the model is one visible edit rather than a hunt
-// through the file. The four maxima must sum to 100.
+// through the file. Bump ModelVersion with any change here.
 
 const (
-	maxPrivilege   = 40
-	maxBlastRadius = 30
-	maxEscalation  = 15
-	maxExposure    = 15
+	// ModelVersion identifies the tuning that produced a classification. A band
+	// computed under one version must never be compared against another.
+	ModelVersion = "2.0"
+
+	// CRITICALITY, intrinsic. These three sum to 100.
+	maxPrivilege   = 45
+	maxBlastRadius = 35
+	maxEscalation  = 20
 
 	// Band thresholds, inclusive lower bounds.
 	thresholdCritical = 75
 	thresholdHigh     = 50
 	thresholdModerate = 25
 
-	// Compensating controls, subtracted from the raw total.
-	mitigationAllJIT      = 6
-	mitigationAllRecorded = 4
-	mitigationDenyPolicy  = 2
+	// Compensating controls, subtracted from the criticality subtotal.
+	mitigationAllJIT      = 8
+	mitigationAllRecorded = 5
+	mitigationDenyPolicy  = 3
+
+	// EXPOSURE, contextual. These two sum to 100 and are reported separately.
+	maxHolderExposure = 60
+	maxUsageExposure  = 40
+
+	// The dormancy window governance teams conventionally review against. A
+	// grant untouched for longer than this is treated as unexercised.
+	dormantAfterDays = 90
 )
 
 // actionRisk scores a single action on 0..10 by how much damage one successful
 // call can do. The vocabulary is PAM's own (pam:<domain>:<Verb>), and every
 // action the running system actually guards is listed explicitly rather than
-// pattern-matched, because "Reveal" and "Read" differ by eight points and a
+// pattern-matched, because "Reveal" and "Read" differ by seven points and a
 // regex that got that wrong would be invisible.
 //
 // Unknown actions, which is to say custom ones an operator wrote, fall back to
@@ -210,14 +257,42 @@ type CriticalityMitigation struct {
 	Detail string `json:"detail"`
 }
 
+// RoleExposure is the CONTEXTUAL half, kept apart from criticality on purpose.
+// It answers "how much live surface does this danger currently have", which is
+// a property of the deployment rather than of the role.
+type RoleExposure struct {
+	Score int `json:"score"` // 0..100
+	// Level is a plain word for the score, deliberately NOT a criticality band:
+	// mixing the two vocabularies is what made the previous model confusing.
+	Level   string `json:"level"` // none | limited | broad | wide
+	Summary string `json:"summary"`
+
+	Holders int `json:"holders"`
+
+	// LastUsedAt is the most recent SUCCESS by a holder of an action this role
+	// grants. Nil means nothing in the retained trail matched.
+	LastUsedAt   *time.Time `json:"last_used_at"`
+	DaysSinceUse *int       `json:"days_since_use"`
+	Dormant      bool       `json:"dormant"`
+	// UsageKnown is false when the audit trail could not be read. The UI must
+	// render that as "unknown", never as "never used".
+	UsageKnown bool `json:"usage_known"`
+	// UsageAttributable is always false today, and the UI says so. The trail
+	// records the ACTION, not which of the caller's roles authorised it, so
+	// when a holder has the same permission twice this cannot attribute the
+	// call. AWS last-accessed data carries the same caveat.
+	UsageAttributable bool                `json:"usage_attributable"`
+	Factors           []CriticalityFactor `json:"factors"`
+}
+
 // RoleCriticality is the full classification for one role.
 type RoleCriticality struct {
 	RoleID   string `json:"role_id"`
 	RoleName string `json:"role_name"`
 	IsSystem bool   `json:"is_system"`
 
-	// Band and Score are the published answer: the override when one is set,
-	// the computed values otherwise.
+	// Band and Score are the published criticality: the override's band when
+	// one is set, the computed values otherwise.
 	Band  models.CriticalityBand `json:"band"`
 	Score int                    `json:"score"`
 	Tier  int                    `json:"tier"`
@@ -233,21 +308,31 @@ type RoleCriticality struct {
 	Factors     []CriticalityFactor     `json:"factors"`
 	Mitigations []CriticalityMitigation `json:"mitigations"`
 
+	// Exposure is reported alongside, never folded into Score.
+	Exposure RoleExposure `json:"exposure"`
+
 	// Counts an administrator wants without a second round trip.
 	PolicyCount   int `json:"policy_count"`
 	MemberCount   int `json:"member_count"`
 	ResourceReach int `json:"resource_reach"`
 
-	EvaluatedAt time.Time `json:"evaluated_at"`
+	ModelVersion string    `json:"model_version"`
+	EvaluatedAt  time.Time `json:"evaluated_at"`
 }
 
-// CriticalitySummary is the estate-wide roll-up behind the Roles page header.
+// CriticalitySummary is the estate-wide roll-up behind the Roles page.
 type CriticalitySummary struct {
-	Total       int               `json:"total"`
-	ByBand      map[string]int    `json:"by_band"`
-	Overridden  int               `json:"overridden"`
-	Roles       []RoleCriticality `json:"roles"`
-	EvaluatedAt time.Time         `json:"evaluated_at"`
+	Total      int            `json:"total"`
+	ByBand     map[string]int `json:"by_band"`
+	Overridden int            `json:"overridden"`
+	// Dormant counts roles nothing has exercised inside the review window, and
+	// Unheld counts roles nobody holds. Both are on the summary because
+	// "critical AND unused" is the most actionable combination this reports.
+	Dormant      int               `json:"dormant"`
+	Unheld       int               `json:"unheld"`
+	Roles        []RoleCriticality `json:"roles"`
+	ModelVersion string            `json:"model_version"`
+	EvaluatedAt  time.Time         `json:"evaluated_at"`
 }
 
 // ── Service ────────────────────────────────────────────────────────────────
@@ -278,17 +363,40 @@ type evaluationInput struct {
 	resources      []models.PAMResource
 	policyByRole   map[string][]models.Policy
 	membersByRole  map[string]int
+	holdersByRole  map[string][]string
 	overrideByRole map[string]models.RoleCriticalityOverride
 	actionVocab    int
+
+	// lastUseByUserAction is the most recent successful call per
+	// (user_id, action), loaded once for every holder of every role being
+	// scored, so usage costs one query rather than one per role.
+	lastUseByUserAction map[string]time.Time
+	// usageKnown is false when the audit table could not be read at all, which
+	// must be reported as "unknown", never as "never used".
+	usageKnown bool
+
+	// now is injectable so tests are not clock-dependent.
+	now time.Time
+}
+
+func usageKey(userID, action string) string { return userID + "\x00" + action }
+
+func (in *evaluationInput) clock() time.Time {
+	if in.now.IsZero() {
+		return time.Now().UTC()
+	}
+	return in.now
 }
 
 // load reads every row the scorer needs in one pass.
 func (s *RoleCriticalityService) load(roleIDs []string) (*evaluationInput, error) {
 	in := &evaluationInput{
-		policyByRole:   map[string][]models.Policy{},
-		membersByRole:  map[string]int{},
-		overrideByRole: map[string]models.RoleCriticalityOverride{},
-		actionVocab:    len(actionRisk),
+		policyByRole:        map[string][]models.Policy{},
+		membersByRole:       map[string]int{},
+		holdersByRole:       map[string][]string{},
+		overrideByRole:      map[string]models.RoleCriticalityOverride{},
+		actionVocab:         len(actionRisk),
+		lastUseByUserAction: map[string]time.Time{},
 	}
 
 	// Active resources only. A soft-deleted or deactivated resource is not
@@ -298,6 +406,7 @@ func (s *RoleCriticalityService) load(roleIDs []string) (*evaluationInput, error
 	}
 
 	if len(roleIDs) == 0 {
+		in.usageKnown = true
 		return in, nil
 	}
 
@@ -330,13 +439,16 @@ func (s *RoleCriticalityService) load(roleIDs []string) (*evaluationInput, error
 		}
 	}
 
-	// Holder counts.
+	// Holders.
 	var holders []models.UserRole
 	if err := s.db.Where("role_id IN ?", roleIDs).Find(&holders).Error; err != nil {
 		return nil, fmt.Errorf("load role holders: %w", err)
 	}
+	holderIDs := map[string]bool{}
 	for _, h := range holders {
 		in.membersByRole[h.RoleID]++
+		in.holdersByRole[h.RoleID] = append(in.holdersByRole[h.RoleID], h.UserID)
+		holderIDs[h.UserID] = true
 	}
 
 	// Standing overrides.
@@ -348,6 +460,42 @@ func (s *RoleCriticalityService) load(roleIDs []string) (*evaluationInput, error
 		in.overrideByRole[o.RoleID] = o
 	}
 
+	// USAGE. One grouped query over the audit trail covering every holder of
+	// every role being scored, rather than a query per role. Only SUCCESS
+	// counts: a denied attempt proves the permission was NOT usable.
+	//
+	// A failure here is not fatal. Usage is an enrichment and criticality does
+	// not depend on it, so an unreadable audit table degrades to "usage
+	// unknown" rather than failing the whole classification.
+	if len(holderIDs) == 0 {
+		in.usageKnown = true
+		return in, nil
+	}
+	ids := make([]string, 0, len(holderIDs))
+	for id := range holderIDs {
+		ids = append(ids, id)
+	}
+	type usageRow struct {
+		UserID string
+		Action string
+		LastAt time.Time
+	}
+	var rows []usageRow
+	err := s.db.Model(&models.AuditLog{}).
+		Select("user_id, action, MAX(occurred_at) AS last_at").
+		Where("user_id IN ? AND outcome = ?", ids, models.OutcomeSuccess).
+		Group("user_id, action").
+		Scan(&rows).Error
+	if err != nil {
+		if s.logger != nil {
+			s.logger.Warn("rbac.criticality.usage.unavailable", zap.Error(err))
+		}
+		return in, nil
+	}
+	in.usageKnown = true
+	for _, r := range rows {
+		in.lastUseByUserAction[usageKey(r.UserID, r.Action)] = r.LastAt
+	}
 	return in, nil
 }
 
@@ -368,9 +516,9 @@ func (s *RoleCriticalityService) Get(roleID string) (*RoleCriticality, error) {
 	return &result, nil
 }
 
-// Summary classifies every role, sorted most critical first. This is what the
-// Roles list reads: one call, so the table can show a criticality column
-// without firing a request per row.
+// Summary classifies every role, most critical first. This is what the Roles
+// list reads: one call, so the table shows criticality without a request per
+// row.
 func (s *RoleCriticalityService) Summary() (*CriticalitySummary, error) {
 	var roles []models.Role
 	if err := s.db.Order("name asc").Find(&roles).Error; err != nil {
@@ -393,8 +541,9 @@ func (s *RoleCriticalityService) Summary() (*CriticalitySummary, error) {
 			string(models.BandModerate): 0,
 			string(models.BandLow):      0,
 		},
-		Roles:       make([]RoleCriticality, 0, len(roles)),
-		EvaluatedAt: time.Now().UTC(),
+		Roles:        make([]RoleCriticality, 0, len(roles)),
+		ModelVersion: ModelVersion,
+		EvaluatedAt:  in.clock(),
 	}
 	for _, r := range roles {
 		c := s.evaluate(r, in)
@@ -402,33 +551,45 @@ func (s *RoleCriticalityService) Summary() (*CriticalitySummary, error) {
 		if c.IsOverridden {
 			out.Overridden++
 		}
+		if c.Exposure.Dormant {
+			out.Dormant++
+		}
+		if c.Exposure.Holders == 0 {
+			out.Unheld++
+		}
 		out.Roles = append(out.Roles, c)
 	}
-	// Most critical first, then by score, then by name, so the ordering is
-	// total and stable rather than dependent on map iteration.
-	sort.SliceStable(out.Roles, func(i, j int) bool {
-		a, b := out.Roles[i], out.Roles[j]
+	sortByCriticality(out.Roles)
+	return out, nil
+}
+
+// sortByCriticality orders most critical first, then by the COMPUTED score,
+// then by name. Computed rather than published, because an overridden role has
+// no published number of its own: the previous model invented one purely so
+// this sort would work, which reported a calculation that never happened.
+func sortByCriticality(rs []RoleCriticality) {
+	sort.SliceStable(rs, func(i, j int) bool {
+		a, b := rs[i], rs[j]
 		if a.Tier != b.Tier {
 			return a.Tier < b.Tier
 		}
-		if a.Score != b.Score {
-			return a.Score > b.Score
+		if a.ComputedScore != b.ComputedScore {
+			return a.ComputedScore > b.ComputedScore
 		}
 		return a.RoleName < b.RoleName
 	})
-	return out, nil
 }
 
 // evaluate is the scorer. Pure with respect to the database: everything it
 // reads comes from the preloaded input, so it is cheap to call in a loop and
-// straightforward to reason about.
+// straightforward to test.
 func (s *RoleCriticalityService) evaluate(role models.Role, in *evaluationInput) RoleCriticality {
 	policies := in.policyByRole[role.ID]
 	members := in.membersByRole[role.ID]
 
-	// Only ALLOW policies grant anything. A deny policy cannot raise the
-	// blast radius, and treating it as if it could would score the safest
-	// roles in the install as the most dangerous ones.
+	// Only ALLOW policies grant anything. A deny policy cannot raise the blast
+	// radius, and treating it as if it could would score the safest roles in
+	// the install as the most dangerous ones.
 	var allow, deny []models.Policy
 	for _, p := range policies {
 		if strings.EqualFold(p.Effect, string(models.PolicyEffectDeny)) {
@@ -438,16 +599,15 @@ func (s *RoleCriticalityService) evaluate(role models.Role, in *evaluationInput)
 		allow = append(allow, p)
 	}
 
-	privilege, privFactor := scorePrivilege(allow)
-	blast, blastFactor, reach, sensitiveReach, allJIT, allRecorded := scoreBlastRadius(allow, in.resources)
-	escalation, escFactor := scoreEscalation(allow)
-	exposure, expFactor := scoreExposure(members)
+	privFactor := scorePrivilege(allow)
+	blastFactor, reach, allJIT, allRecorded := scoreBlastRadius(allow, in.resources)
+	escFactor := scoreEscalation(allow)
 
-	raw := privilege + blast + escalation + exposure
+	raw := privFactor.Score + blastFactor.Score + escFactor.Score
 
-	// Compensating controls. Only meaningful when the role actually reaches
-	// something: a role that reaches nothing gets no credit for the estate's
-	// JIT posture.
+	// Compensating controls, CyberArk's ease-of-compromise axis. Only
+	// meaningful when the role actually reaches something: a role that reaches
+	// nothing gets no credit for the estate's JIT posture.
 	mitigations := []CriticalityMitigation{}
 	total := raw
 	if reach > 0 && allJIT {
@@ -477,13 +637,7 @@ func (s *RoleCriticalityService) evaluate(role models.Role, in *evaluationInput)
 		})
 		total -= mitigationDenyPolicy
 	}
-	if total < 0 {
-		total = 0
-	}
-	if total > 100 {
-		total = 100
-	}
-
+	total = clamp(total, 0, 100)
 	computedBand := bandForScore(total)
 
 	result := RoleCriticality{
@@ -495,18 +649,21 @@ func (s *RoleCriticalityService) evaluate(role models.Role, in *evaluationInput)
 		Tier:          computedBand.Tier(),
 		ComputedBand:  computedBand,
 		ComputedScore: total,
-		Factors:       []CriticalityFactor{privFactor, blastFactor, escFactor, expFactor},
+		Factors:       []CriticalityFactor{privFactor, blastFactor, escFactor},
 		Mitigations:   mitigations,
+		Exposure:      scoreExposure(allow, in, role.ID, members),
 		PolicyCount:   len(policies),
 		MemberCount:   members,
 		ResourceReach: reach,
-		EvaluatedAt:   time.Now().UTC(),
+		ModelVersion:  ModelVersion,
+		EvaluatedAt:   in.clock(),
 	}
-	_ = sensitiveReach
 
 	// A standing override replaces the published band, and says so. The
-	// computed values stay on the record so a reviewer can see exactly what
-	// they are overriding.
+	// computed values stay on the record so a reviewer sees exactly what they
+	// are overriding. The published SCORE is deliberately left as the computed
+	// one: an override asserts a BAND, not a number, and inventing a number to
+	// match would report a calculation that never happened.
 	if o, ok := in.overrideByRole[role.ID]; ok {
 		band := models.CriticalityBand(o.Band)
 		if band.Valid() {
@@ -515,10 +672,6 @@ func (s *RoleCriticalityService) evaluate(role models.Role, in *evaluationInput)
 			result.Tier = band.Tier()
 			result.IsOverridden = true
 			result.Override = &override
-			// The published score follows the published band to the middle of
-			// its range, so sorting by score and sorting by band cannot
-			// disagree on an overridden row.
-			result.Score = representativeScore(band)
 		}
 	}
 
@@ -528,12 +681,12 @@ func (s *RoleCriticalityService) evaluate(role models.Role, in *evaluationInput)
 // scorePrivilege rates the most dangerous verb the role can call, and how many
 // distinct dangerous verbs it holds. Peak dominates breadth on purpose: one
 // pam:vault:Reveal is worse than twelve read-only actions.
-func scorePrivilege(allow []models.Policy) (int, CriticalityFactor) {
+func scorePrivilege(allow []models.Policy) CriticalityFactor {
 	f := CriticalityFactor{Key: "privilege", Label: "Privilege level", Max: maxPrivilege}
 
 	if len(allow) == 0 {
 		f.Summary = "Grants nothing. No allow policy is attached to this role."
-		return 0, f
+		return f
 	}
 
 	actions := map[string]bool{}
@@ -554,33 +707,24 @@ func scorePrivilege(allow []models.Policy) (int, CriticalityFactor) {
 	if wildcard {
 		f.Score = maxPrivilege
 		f.Summary = "Unrestricted. A wildcard action grant lets this role call every operation the API exposes, including credential reveal and break glass."
-		f.Evidence = append(f.Evidence, "Allows action \"*\" (every action)")
-		return maxPrivilege, f
+		f.Evidence = append(f.Evidence, `Allows action "*" (every action)`)
+		return f
 	}
 
-	peak := 0
-	peakAction := ""
-	weighted := 0
+	peak, peakAction := 0, ""
 	for a := range actions {
-		r := riskOfAction(a)
-		weighted += r
-		if r > peak {
+		if r := riskOfAction(a); r > peak {
 			peak, peakAction = r, a
 		}
 	}
 
-	// Peak carries 30 of the 40, breadth the remaining 10.
-	peakPart := peak * 30 / 10
-	breadthPart := 0
-	if len(actionRisk) > 0 {
-		breadthPart = len(actions) * 10 / len(actionRisk)
-	}
-	if breadthPart > 10 {
-		breadthPart = 10
-	}
-	score := clamp(peakPart+breadthPart, 0, maxPrivilege)
-
-	f.Score = score
+	// Peak carries 35 of the 45, breadth the remaining 10. Both are ROUNDED
+	// rather than truncated: integer division silently swallowed the whole
+	// breadth term until a role held three actions, which is range compression
+	// introduced by the implementation rather than by the model.
+	peakPart := scale(peak, 10, 35)
+	breadthPart := scale(len(actions), maxInt(len(actionRisk), 1), 10)
+	f.Score = clamp(peakPart+breadthPart, 0, maxPrivilege)
 	f.Summary = fmt.Sprintf("%d distinct %s. The most dangerous is %s.",
 		len(actions), plural(len(actions), "action", "actions"), peakAction)
 
@@ -607,16 +751,15 @@ func scorePrivilege(allow []models.Policy) (int, CriticalityFactor) {
 		f.Evidence = append(f.Evidence, fmt.Sprintf("%s (risk %d of 10)", x.a, x.r))
 	}
 	if len(f.Evidence) == 0 {
-		f.Evidence = append(f.Evidence, "Read-mostly. No action on this role scores above 4 of 10.")
+		f.Evidence = append(f.Evidence, "Read mostly. No action on this role scores above 4 of 10.")
 	}
-	return score, f
+	return f
 }
 
 // scoreBlastRadius rates how much of the estate the role's allow policies
-// match. Returns the score, the factor, the number of resources reached, how
-// many of those are marked sensitive, and whether every reached resource is
-// JIT gated / always recorded.
-func scoreBlastRadius(allow []models.Policy, resources []models.PAMResource) (int, CriticalityFactor, int, int, bool, bool) {
+// match. Returns the factor, the number of resources reached, and whether
+// every reached resource is JIT gated / always recorded.
+func scoreBlastRadius(allow []models.Policy, resources []models.PAMResource) (CriticalityFactor, int, bool, bool) {
 	f := CriticalityFactor{Key: "blast_radius", Label: "Blast radius", Max: maxBlastRadius}
 	total := len(resources)
 
@@ -637,16 +780,16 @@ func scoreBlastRadius(allow []models.Policy, resources []models.PAMResource) (in
 
 	if len(patterns) == 0 {
 		f.Summary = "Reaches nothing. No allow policy on this role names a resource."
-		return 0, f, 0, 0, false, false
+		return f, 0, false, false
 	}
 
 	if wildcard {
 		f.Score = maxBlastRadius
 		f.Summary = fmt.Sprintf("Every resource in the estate, all %d of them, plus anything added later.", total)
-		f.Evidence = append(f.Evidence, "Allows resource \"*\" (every resource, present and future)")
-		// A wildcard grant cannot be mitigated by the current estate's
-		// posture, because it also covers resources that do not exist yet.
-		return maxBlastRadius, f, total, countSensitive(resources), false, false
+		f.Evidence = append(f.Evidence, `Allows resource "*" (every resource, present and future)`)
+		// A wildcard grant cannot be mitigated by the current estate's posture,
+		// because it also covers resources that do not exist yet.
+		return f, total, false, false
 	}
 
 	matched := make([]models.PAMResource, 0, total)
@@ -662,23 +805,17 @@ func scoreBlastRadius(allow []models.Policy, resources []models.PAMResource) (in
 	if reach == 0 {
 		f.Summary = fmt.Sprintf("Names %d resource %s, none of which match an active resource today.",
 			len(patterns), plural(len(patterns), "pattern", "patterns"))
-		return 0, f, 0, 0, false, false
+		return f, 0, false, false
 	}
 
 	sensitive := countSensitive(matched)
 
-	// Breadth carries 20 of the 30, concentration of sensitive resources the
-	// other 10: reaching three production databases beats reaching thirty
-	// dev boxes.
-	breadth := 0
-	if total > 0 {
-		breadth = reach * 20 / total
-	}
-	sensitivePart := 0
-	if reach > 0 {
-		sensitivePart = sensitive * 10 / reach
-	}
-	score := clamp(breadth+sensitivePart, 0, maxBlastRadius)
+	// Breadth carries 25 of the 35, concentration of sensitive resources the
+	// other 10: reaching three production databases beats reaching thirty dev
+	// boxes.
+	breadth := scale(reach, maxInt(total, 1), 25)
+	sensitivePart := scale(sensitive, maxInt(reach, 1), 10)
+	f.Score = clamp(breadth+sensitivePart, 0, maxBlastRadius)
 
 	allJIT, allRecorded := true, true
 	for _, m := range matched {
@@ -690,7 +827,6 @@ func scoreBlastRadius(allow []models.Policy, resources []models.PAMResource) (in
 		}
 	}
 
-	f.Score = score
 	f.Summary = fmt.Sprintf("%d of %d active %s, %d of which %s marked sensitive.",
 		reach, total, plural(total, "resource", "resources"), sensitive, plural(sensitive, "is", "are"))
 	for i, m := range matched {
@@ -709,13 +845,13 @@ func scoreBlastRadius(allow []models.Policy, resources []models.PAMResource) (in
 		}
 		f.Evidence = append(f.Evidence, m.Name+tag)
 	}
-	return score, f, reach, sensitive, allJIT, allRecorded
+	return f, reach, allJIT, allRecorded
 }
 
-// scoreEscalation asks whether the role can increase privilege. A role that
-// can hand out or read the credentials behind other roles is, in practice, as
+// scoreEscalation asks whether the role can increase privilege. A role that can
+// hand out or read the credentials behind other roles is, in practice, as
 // privileged as the most privileged thing it can reach.
-func scoreEscalation(allow []models.Policy) (int, CriticalityFactor) {
+func scoreEscalation(allow []models.Policy) CriticalityFactor {
 	f := CriticalityFactor{Key: "escalation", Label: "Escalation path", Max: maxEscalation}
 
 	hits := map[string]bool{}
@@ -736,57 +872,189 @@ func scoreEscalation(allow []models.Policy) (int, CriticalityFactor) {
 	if wildcard {
 		f.Score = maxEscalation
 		f.Summary = "Can grant itself anything. A wildcard action grant includes every permission-changing call in the product."
-		f.Evidence = append(f.Evidence, "Allows action \"*\"")
-		return maxEscalation, f
+		f.Evidence = append(f.Evidence, `Allows action "*"`)
+		return f
 	}
 	if len(hits) == 0 {
 		f.Summary = "No escalation path. Nothing this role can call hands out credentials or authority."
-		return 0, f
+		return f
 	}
 
 	// One escalating call already changes the risk category; further ones add
 	// less. Ramp rather than multiply.
-	score := clamp(6+3*(len(hits)-1), 0, maxEscalation)
+	f.Score = clamp(9+4*(len(hits)-1), 0, maxEscalation)
 	names := make([]string, 0, len(hits))
 	for a := range hits {
 		names = append(names, a)
 	}
 	sort.Strings(names)
-	f.Score = score
 	f.Summary = fmt.Sprintf("Holds %d %s that can hand out or expose credentials.",
 		len(hits), plural(len(hits), "call", "calls"))
 	f.Evidence = names
-	return score, f
+	return f
 }
 
-// scoreExposure rates how many people hold the role right now. Same
-// permissions in more hands is a wider attack surface, and an unheld role is a
-// latent risk rather than a live one.
-func scoreExposure(members int) (int, CriticalityFactor) {
-	f := CriticalityFactor{Key: "exposure", Label: "Standing exposure", Max: maxExposure}
+// ── Exposure, the contextual half ──────────────────────────────────────────
 
-	var score int
-	var summary string
+// scoreExposure rates how much live surface the role's danger currently has:
+// how many accounts hold it, and whether anybody actually exercises it.
+//
+// This is reported BESIDE criticality, never folded into it. A role is exactly
+// as dangerous whether nobody holds it or forty people do; what changes is how
+// much of that danger is live right now.
+func scoreExposure(allow []models.Policy, in *evaluationInput, roleID string, members int) RoleExposure {
+	e := RoleExposure{
+		Holders:           members,
+		UsageKnown:        in.usageKnown,
+		UsageAttributable: false,
+	}
+
+	holderFactor := CriticalityFactor{Key: "holders", Label: "Accounts holding it", Max: maxHolderExposure}
 	switch {
 	case members == 0:
-		score = 0
-		summary = "Held by nobody. The grant is latent: it carries no live exposure until somebody is assigned it."
+		holderFactor.Score = 0
+		holderFactor.Summary = "Held by nobody. The grant is latent: it carries no live exposure until somebody is assigned it."
 	case members <= 2:
-		score = 5
-		summary = fmt.Sprintf("Held by %d %s.", members, plural(members, "account", "accounts"))
+		holderFactor.Score = 20
+		holderFactor.Summary = fmt.Sprintf("Held by %d %s.", members, plural(members, "account", "accounts"))
 	case members <= 5:
-		score = 9
-		summary = fmt.Sprintf("Held by %d accounts.", members)
+		holderFactor.Score = 35
+		holderFactor.Summary = fmt.Sprintf("Held by %d accounts.", members)
 	case members <= 10:
-		score = 12
-		summary = fmt.Sprintf("Held by %d accounts, which is wide for a privileged grant.", members)
+		holderFactor.Score = 48
+		holderFactor.Summary = fmt.Sprintf("Held by %d accounts, which is wide for a privileged grant.", members)
 	default:
-		score = maxExposure
-		summary = fmt.Sprintf("Held by %d accounts. At this width the role is effectively standing access for a whole team.", members)
+		holderFactor.Score = maxHolderExposure
+		holderFactor.Summary = fmt.Sprintf("Held by %d accounts. At this width the role is effectively standing access for a whole team.", members)
 	}
-	f.Score = score
-	f.Summary = summary
-	return score, f
+
+	usageFactor := CriticalityFactor{Key: "recent_use", Label: "Recent use", Max: maxUsageExposure}
+	last := lastUsed(allow, in, roleID)
+	now := in.clock()
+
+	switch {
+	case !in.usageKnown:
+		// Unknown is not zero. Scoring an unreadable trail as "never used"
+		// would quietly reward an install whose audit table is broken.
+		usageFactor.Score = maxUsageExposure / 2
+		usageFactor.Summary = "Usage is unknown. The audit trail could not be read, so this is neither confirmed active nor confirmed dormant."
+	case members == 0:
+		usageFactor.Score = 0
+		usageFactor.Summary = "Nobody holds this role, so there is nothing to exercise."
+	case last == nil:
+		usageFactor.Score = 0
+		e.Dormant = true
+		usageFactor.Summary = fmt.Sprintf("No holder has successfully used a permission this role grants in the retained trail, so it is past the %d day review window.", dormantAfterDays)
+		usageFactor.Evidence = append(usageFactor.Evidence,
+			"Unused access is the usual candidate for removal.")
+	default:
+		days := int(now.Sub(*last).Hours() / 24)
+		if days < 0 {
+			days = 0
+		}
+		e.LastUsedAt = last
+		e.DaysSinceUse = &days
+		e.Dormant = days > dormantAfterDays
+		switch {
+		case days <= 7:
+			usageFactor.Score = maxUsageExposure
+			usageFactor.Summary = fmt.Sprintf("Exercised %s. This role is in active use.", humanDays(days))
+		case days <= 30:
+			usageFactor.Score = 30
+			usageFactor.Summary = fmt.Sprintf("Last exercised %s.", humanDays(days))
+		case days <= dormantAfterDays:
+			usageFactor.Score = 18
+			usageFactor.Summary = fmt.Sprintf("Last exercised %s, inside the %d day review window.", humanDays(days), dormantAfterDays)
+		default:
+			usageFactor.Score = 5
+			usageFactor.Summary = fmt.Sprintf("Last exercised %s, past the %d day review window.", humanDays(days), dormantAfterDays)
+			usageFactor.Evidence = append(usageFactor.Evidence,
+				"Dormant privileged access is the usual candidate for removal.")
+		}
+	}
+
+	e.Factors = []CriticalityFactor{holderFactor, usageFactor}
+	e.Score = clamp(holderFactor.Score+usageFactor.Score, 0, 100)
+
+	switch {
+	case members == 0:
+		e.Level = "none"
+		e.Summary = "Nobody holds this role, so it has no live exposure today."
+	case e.Score >= 70:
+		e.Level = "wide"
+		e.Summary = fmt.Sprintf("Held by %d %s and actively used.", members, plural(members, "account", "accounts"))
+	case e.Score >= 40:
+		e.Level = "broad"
+		e.Summary = fmt.Sprintf("Held by %d %s.", members, plural(members, "account", "accounts"))
+	default:
+		e.Level = "limited"
+		if e.Dormant {
+			e.Summary = fmt.Sprintf("Held by %d %s, but nothing has exercised it recently.", members, plural(members, "account", "accounts"))
+		} else {
+			e.Summary = fmt.Sprintf("Held by %d %s.", members, plural(members, "account", "accounts"))
+		}
+	}
+	return e
+}
+
+// lastUsed finds the most recent successful call, by any holder of the role, of
+// an action the role grants.
+//
+// A wildcard action grant matches every action the holder performed, which is
+// correct: the role does authorise all of them. This cannot attribute the call
+// to THIS role when the holder also has the permission elsewhere, which is why
+// UsageAttributable is false and the UI labels the figure as indicative.
+func lastUsed(allow []models.Policy, in *evaluationInput, roleID string) *time.Time {
+	holders := in.holdersByRole[roleID]
+	if len(holders) == 0 || len(in.lastUseByUserAction) == 0 {
+		return nil
+	}
+
+	granted := map[string]bool{}
+	wildcard := false
+	for _, p := range allow {
+		for _, a := range p.Actions {
+			a = strings.TrimSpace(a)
+			if a == "" {
+				continue
+			}
+			if a == "*" {
+				wildcard = true
+			}
+			granted[a] = true
+		}
+	}
+	if len(granted) == 0 {
+		return nil
+	}
+
+	holderSet := make(map[string]bool, len(holders))
+	for _, h := range holders {
+		holderSet[h] = true
+	}
+
+	var best time.Time
+	for key, at := range in.lastUseByUserAction {
+		i := strings.IndexByte(key, 0)
+		if i < 0 {
+			continue
+		}
+		user, action := key[:i], key[i+1:]
+		if !holderSet[user] {
+			continue
+		}
+		if !wildcard && !granted[action] {
+			continue
+		}
+		if at.After(best) {
+			best = at
+		}
+	}
+	if best.IsZero() {
+		return nil
+	}
+	out := best.UTC()
+	return &out
 }
 
 // ── Override lifecycle ─────────────────────────────────────────────────────
@@ -861,6 +1129,7 @@ func (s *RoleCriticalityService) SetOverride(ctx context.Context, in SetOverride
 		"band":           string(band),
 		"computed_band":  string(before.ComputedBand),
 		"computed_score": before.ComputedScore,
+		"model_version":  ModelVersion,
 		"reason":         row.Reason,
 	})
 
@@ -929,8 +1198,8 @@ func riskOfAction(a string) int {
 	if r, ok := verbRisk[strings.ToLower(verbOf(a))]; ok {
 		return r
 	}
-	// An action nobody recognises is assumed to mutate something. Guessing
-	// low here is how a custom admin action scores as read-only.
+	// An action nobody recognises is assumed to mutate something. Guessing low
+	// here is how a custom admin action scores as read-only.
 	return 5
 }
 
@@ -1031,19 +1300,22 @@ func bandForScore(score int) models.CriticalityBand {
 	}
 }
 
-// representativeScore places an overridden role at the middle of its band, so
-// a table sorted by score and a table grouped by band agree with each other.
-func representativeScore(b models.CriticalityBand) int {
-	switch b {
-	case models.BandCritical:
-		return 88
-	case models.BandHigh:
-		return 62
-	case models.BandModerate:
-		return 37
-	default:
-		return 12
+// scale maps part/whole onto 0..max, ROUNDED rather than truncated. Integer
+// division here is what silently swallowed the breadth term in the previous
+// model until a role held three actions.
+func scale(part, whole, max int) int {
+	if whole <= 0 {
+		return 0
 	}
+	v := int(math.Round(float64(part) / float64(whole) * float64(max)))
+	return clamp(v, 0, max)
+}
+
+func maxInt(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 func clamp(v, lo, hi int) int {
@@ -1061,4 +1333,22 @@ func plural(n int, one, many string) string {
 		return one
 	}
 	return many
+}
+
+// humanDays renders a day count the way the console does elsewhere.
+func humanDays(days int) string {
+	switch {
+	case days <= 0:
+		return "today"
+	case days == 1:
+		return "yesterday"
+	case days < 30:
+		return fmt.Sprintf("%d days ago", days)
+	case days < 365:
+		m := days / 30
+		return fmt.Sprintf("%d %s ago", m, plural(m, "month", "months"))
+	default:
+		y := days / 365
+		return fmt.Sprintf("%d %s ago", y, plural(y, "year", "years"))
+	}
 }
