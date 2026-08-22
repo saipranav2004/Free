@@ -207,8 +207,39 @@ export function readApproveResult(data) {
     grant,
     status,
     expiresAt: data?.expires_at || grant?.expires_at || null,
-    next: data?.next || null,
+    next: userFacingNext(data?.next),
   }
+}
+
+/**
+ * The API's `next` field is written for API CONSUMERS, not for end users, and
+ * it is not consistent about which it is. Compare the two the JIT handler
+ * returns:
+ *
+ *   "A second, different admin (or root) must approve to issue the grant."
+ *   "Awaiting approver decision. Poll GET /api/v1/pam/jit/requests/<uuid>"
+ *
+ * The first is a sentence a person should read. The second is an instruction
+ * to a program, and putting it in a toast showed a normal user an HTTP verb, a
+ * route and a raw id after they clicked Request access.
+ *
+ * Rendering a machine-facing hint as human copy is the CLIENT's mistake, not
+ * the server's: `next` is a legitimate affordance for a programmatic caller,
+ * and it is this console that chose to treat it as prose. So the console
+ * checks before it trusts it. Anything carrying an HTTP method, an API path,
+ * or a bare identifier is dropped in favour of the caller's own wording.
+ *
+ * Returns null when the string is not fit for a person, so callers fall back
+ * to copy they control.
+ */
+export function userFacingNext(next) {
+  const text = typeof next === 'string' ? next.trim() : ''
+  if (!text) return null
+  // An HTTP verb, an API route, a curl-ish hint, or a UUID: all machine facing.
+  if (/\b(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\b/.test(text)) return null
+  if (/\/api\/|\/v\d+\/|https?:\/\//i.test(text)) return null
+  if (/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i.test(text)) return null
+  return text
 }
 
 /** The toast text for whichever of the two shapes came back. */

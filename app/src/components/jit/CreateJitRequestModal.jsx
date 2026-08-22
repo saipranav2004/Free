@@ -14,6 +14,7 @@ import { Modal } from '../common/Modal'
 import { Button } from '../common/Button'
 import { Field, inputClass, selectClass } from '../common/FormFields'
 import { apiErrorMessage } from '../../lib/apiError'
+import { userFacingNext } from '../../lib/fourEyes'
 
 // ---------------------------------------------------------------------------
 // Request access
@@ -165,13 +166,17 @@ export function CreateJitRequestModal({ open, onClose, defaultResourceId, defaul
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['jit'] })
-      // The API returns its own `next` sentence describing what happens now.
-      // Prefer it over anything hard-coded here, it is the server's account
-      // of its own workflow, and it stays right if that workflow changes.
+      // The API's `next` is preferred WHEN IT IS PROSE, because then it is the
+      // server's own account of its workflow and stays right if that workflow
+      // changes. It is not always prose: this endpoint returns
+      // "Poll GET /api/v1/pam/jit/requests/<uuid>", which is written for a
+      // program and showed an end user an HTTP verb and a route after they
+      // clicked Request access. userFacingNext drops those. See its note.
       toast.success(isBreakglass ? 'Emergency access raised' : 'Access request submitted', {
         description: isBreakglass
           ? undefined
-          : data?.next || 'Two different administrators must approve before access is granted.',
+          : userFacingNext(data?.next) ||
+            'Two different administrators must approve before access is granted.',
       })
       reset()
       onClose()

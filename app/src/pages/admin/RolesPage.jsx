@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
+  AlertTriangle,
   Lock,
   Plus,
+  RotateCcw,
   Trash2,
 } from 'lucide-react'
 import { Link, useSearchParams } from 'react-router-dom'
@@ -202,6 +204,28 @@ export default function RolesPage() {
           the estate and doubles as the band filter; the counts beside it name
           the combination worth acting on, which is a dangerous role nobody is
           exercising. */}
+      {criticalityQuery.isError && (
+        <Container className="!py-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <AlertTriangle className="h-4 w-4 flex-none text-warn" strokeWidth={1.9} />
+            <p className="min-w-0 flex-1 text-sm leading-relaxed text-secondary">
+              <span className="font-semibold text-primary">Criticality is unavailable.</span>{' '}
+              {apiErrorMessage(criticalityQuery.error)} The roles below are listed without their
+              classification.
+            </p>
+            <Button
+              size="sm"
+              variant="secondary"
+              icon={RotateCcw}
+              loading={criticalityQuery.isFetching}
+              onClick={() => criticalityQuery.refetch()}
+            >
+              Retry
+            </Button>
+          </div>
+        </Container>
+      )}
+
       {criticalityQuery.isSuccess && criticalityQuery.data?.total > 0 && (
         <Container className="!py-4">
           <div className="flex flex-wrap items-start justify-between gap-x-10 gap-y-4">
@@ -240,17 +264,24 @@ export default function RolesPage() {
                   hint: 'Band set by hand',
                 },
               ].map((s) => (
+                // The hint moved INSIDE the <dd>. A <div> in a <dl> may hold
+                // only dt/dd pairs, so a sibling <p> broke the list's
+                // structure and a screen reader lost the term/definition
+                // pairing for the whole group. It is a description of the
+                // value, so the definition is where it belonged anyway.
                 <div key={s.label}>
                   <dt className="text-xs text-tertiary">{s.label}</dt>
-                  <dd
-                    className={clsx(
-                      'mt-0.5 tabular text-2xl font-bold leading-none',
-                      s.strong ? 'text-warn' : 'text-primary'
-                    )}
-                  >
-                    {s.value}
+                  <dd className="mt-0.5">
+                    <span
+                      className={clsx(
+                        'block tabular text-2xl font-bold leading-none',
+                        s.strong ? 'text-warn' : 'text-primary'
+                      )}
+                    >
+                      {s.value}
+                    </span>
+                    <span className="mt-1 block text-2xs text-tertiary">{s.hint}</span>
                   </dd>
-                  <p className="mt-1 text-2xs text-tertiary">{s.hint}</p>
                 </div>
               ))}
             </dl>
@@ -409,6 +440,8 @@ export default function RolesPage() {
                       <Td>
                         {criticalityQuery.isLoading ? (
                           <span className="skeleton block h-4 w-20 rounded" />
+                        ) : criticalityQuery.isError ? (
+                          <span className="text-sm text-tertiary">Unavailable</span>
                         ) : (
                           <CriticalityCell classification={role.criticality} />
                         )}
@@ -416,6 +449,8 @@ export default function RolesPage() {
                       <Td>
                         {criticalityQuery.isLoading ? (
                           <span className="skeleton block h-4 w-16 rounded" />
+                        ) : criticalityQuery.isError ? (
+                          <span className="text-sm text-tertiary">-</span>
                         ) : (
                           <ExposureCell classification={role.criticality} />
                         )}

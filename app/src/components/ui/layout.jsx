@@ -99,14 +99,18 @@ export function KeyValueGrid({ items, columns = 3, className }) {
       {items.filter(Boolean).map(({ label, value, hint, span }) => (
         <div key={label} className={clsx('min-w-0', span === 'full' && 'sm:col-span-2 lg:col-span-full')}>
           <dt className="text-sm font-bold text-primary">{label}</dt>
+          {/* The hint lives INSIDE the <dd>. A <div> grouping inside a <dl>
+              may contain only dt/dd, so a sibling <p> broke the term and
+              definition pairing for the whole list. It describes the value, so
+              the definition is where it belonged anyway. */}
           <dd className="mt-1 min-w-0 break-words text-sm text-secondary">
             {value === null || value === undefined || value === '' ? (
               <span className="text-tertiary">-</span>
             ) : (
               value
             )}
+            {hint && <span className="mt-1 block text-xs text-tertiary">{hint}</span>}
           </dd>
-          {hint && <p className="mt-1 text-xs text-tertiary">{hint}</p>}
         </div>
       ))}
     </dl>

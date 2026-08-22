@@ -2,6 +2,7 @@ import { isValidElement, createElement, useEffect, useRef } from 'react'
 import clsx from 'clsx'
 import { X } from 'lucide-react'
 import { IconButton } from './Button'
+import { NAVBAR_BELOW_CLASS } from './TopNavbar'
 
 // ---------------------------------------------------------------------------
 // Side drawer.
@@ -51,14 +52,20 @@ export function Drawer({ open, onClose, title, subtitle, icon, footer, width = '
       : null
 
   return (
+    // THE PANEL STARTS BELOW THE NAVBAR, it does not cover it. Anchored at
+    // inset-0 the header slid under the fixed bar, which clipped the panel's
+    // own title and close control and left the product chrome half hidden
+    // behind a dimmed overlay. Keeping the bar visible also keeps it usable:
+    // search and the account menu stay reachable while a panel is open, which
+    // is how Cloudscape's split panel and Okta's side panels behave.
     <div
-      className="fixed inset-0 z-40 flex justify-end"
+      className={clsx('fixed inset-x-0 bottom-0 z-40 flex justify-end', NAVBAR_BELOW_CLASS)}
       role="dialog"
       aria-modal="true"
       aria-label={typeof title === 'string' ? title : 'Details'}
     >
       <div
-        className="animate-overlay-in absolute inset-0 bg-slate-950/45 backdrop-blur-[2px] dark:bg-black/65"
+        className="animate-overlay-in absolute inset-0 bg-slate-950/40 backdrop-blur-[2px] dark:bg-black/60"
         onClick={onClose}
         aria-hidden="true"
       />

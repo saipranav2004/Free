@@ -10,6 +10,7 @@ import { normalizeApiError, apiErrorMessage } from '../../lib/apiError'
 import { Spinner } from '../common/Spinner'
 import { CopyButton } from '../common/CopyButton'
 import { PairAgentPanel } from '../agent/PairAgentPanel'
+import { useAuthStore } from '../../store/authStore'
 
 // The backend has no live SSH/RDP/DB proxy (see IMPLEMENTED_FEATURES.md §3)
 //, connect-info returns metadata only, and starting a "session" here
@@ -28,6 +29,9 @@ const CLI_HINTS = {
 
 export function ConnectPanel({ resourceId }) {
   const queryClient = useQueryClient()
+  // Read once so the JIT explanation below can be addressed to the account
+  // that actually needs it. See the note beside that copy.
+  const isPrivileged = useAuthStore((s) => s.isAdmin())
   const [activeSession, setActiveSession] = useState(null)
   const [needsPairing, setNeedsPairing] = useState(false)
 
@@ -94,9 +98,26 @@ export function ConnectPanel({ resourceId }) {
         <div className="flex flex-col gap-3 rounded-md border border-amber-300 dark:border-amber-800/40 bg-amber-50 dark:bg-amber-950/20 p-4">
           <div className="flex items-start gap-2">
             <AlertCircle className="mt-0.5 h-4 w-4 flex-none text-amber-600 dark:text-amber-400" />
-            <p className="text-sm text-amber-700 dark:text-amber-200">
-              This resource requires time-boxed access. You don&apos;t currently hold an active grant.
-            </p>
+            <div className="min-w-0">
+              <p className="text-sm text-amber-700 dark:text-amber-200">
+                This resource requires time-boxed access. You don&apos;t currently hold an active grant.
+              </p>
+              {/* PRIVILEGED ACCOUNTS GET AN EXTRA LINE, because this is the
+                  one place the product looks like it is contradicting itself.
+                  An administrator reasonably expects to reach everything, and
+                  policy-level authorisation does grant them that. The JIT gate
+                  is a SECOND layer (middleware.RequireActiveGrant), and it
+                  exempts nobody, root included. Saying so here is better than
+                  hiding the request path, which would leave the account with
+                  no way to connect at all. */}
+              {isPrivileged && (
+                <p className="mt-2 text-xs leading-relaxed text-amber-700/90 dark:text-amber-200/80">
+                  Your role authorises this resource, but time-boxed access is a separate control
+                  and applies to every account, including root. Eliminating standing privilege is
+                  what this gate is for.
+                </p>
+              )}
+            </div>
           </div>
           <Link
             to={`/jit?resourceId=${resourceId}`}

@@ -95,7 +95,7 @@ export function MenuItem({
         <span
           className={clsx(
             'flex h-4 w-4 flex-none items-center justify-center rounded-sm border',
-            checked ? 'border-accent bg-accent text-white' : 'border-line-strong'
+            checked ? 'border-accent bg-accent text-accent-on' : 'border-line-strong'
           )}
         >
           {checked && <Check className="h-3 w-3" strokeWidth={3} />}

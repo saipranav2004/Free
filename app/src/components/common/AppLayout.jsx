@@ -1,5 +1,5 @@
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
-import { useCallback, useEffect, useState } from 'react'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import clsx from 'clsx'
 import { X, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
@@ -8,8 +8,9 @@ import { me, logout as logoutApi } from '../../api/auth'
 import { ADMIN_NAV, consoleNav } from '../../config/nav'
 import { useMfaStatus } from '../../hooks/useMfaStatus'
 import { MfaEnforcementGate } from '../auth/MfaEnforcementGate'
-import { TopNavbar } from './TopNavbar'
+import { TopNavbar, NAVBAR_PT_CLASS, NAVBAR_BELOW_CLASS } from './TopNavbar'
 import { Breadcrumbs } from './Breadcrumbs'
+import { SessionExpiryNotice } from './SessionExpiryNotice'
 import { toast } from 'sonner'
 
 const SIDEBAR_STORAGE_KEY = 'pam_sidebar_collapsed'
@@ -111,7 +112,10 @@ function SidebarCollapseControl({ collapsed, onToggle, consoleTitle }) {
           access console. Hidden when the rail is collapsed, where the icons
           are the only thing that survives. */}
       {!collapsed && (
-        <h2 className="min-w-0 truncate text-sm font-bold text-primary" title={consoleTitle}>
+        <h2
+          className="min-w-0 truncate text-[0.8125rem] font-medium tracking-[0.02em] text-secondary"
+          title={consoleTitle}
+        >
           {consoleTitle}
         </h2>
       )}
@@ -166,6 +170,7 @@ export function AppLayout() {
   const isAdmin = useAuthStore((s) => s.isAdmin())
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [collapsed, setCollapsed] = useState(readCollapsed)
+  const { pathname } = useLocation()
 
   // Console identity, role-dependent: administrators operate the identity
   // control plane ("IAM Console"), everyone else the privileged access
@@ -184,6 +189,48 @@ export function AppLayout() {
       return next
     })
   }, [])
+
+  // SETTINGS COLLAPSES THE RAIL, AND ONLY SETTINGS.
+  //
+  // Every other page in this console is a place you navigate BETWEEN: you read
+  // a table, open a row, come back, go somewhere else, and the rail is how you
+  // do it. Settings is the one page you arrive at to finish a task and then
+  // leave, and it is the widest form in the product. Giving it the extra
+  // 200px is the same call Slack, Notion and the AWS billing console make for
+  // their settings surfaces.
+  //
+  // It restores what it borrowed. The user's own choice is what is persisted
+  // in localStorage; this only overrides it while settings is on screen, so
+  // someone who keeps the rail open finds it open again the moment they
+  // leave, and someone who keeps it collapsed sees no change at all.
+  // Moving focus and scroll to the new page on every route change. Scroll is
+  // reset because <main> is the scroll container, not the document, so the
+  // browser's own restoration never applies to it.
+  const mainRef = useRef(null)
+  const firstRender = useRef(true)
+  useEffect(() => {
+    const el = mainRef.current
+    if (!el) return
+    // NOT ON THE FIRST RENDER. Moving focus into <main> the moment the app
+    // mounts puts the reader past the skip link, the navbar and the whole
+    // sidebar before they have pressed anything, so the first Tab of the
+    // session lands on a dashboard tile and the skip link can never be
+    // reached at all. On arrival the browser's own starting point is correct;
+    // it is only a route CHANGE that leaves focus stranded on a link that no
+    // longer exists, and that is the case this fixes.
+    if (firstRender.current) {
+      firstRender.current = false
+      return
+    }
+    el.scrollTop = 0
+    el.focus({ preventScroll: true })
+  }, [pathname])
+
+  const onSettings = pathname === '/settings' || pathname.startsWith('/settings/')
+  useEffect(() => {
+    if (onSettings) setCollapsed(true)
+    else setCollapsed(readCollapsed())
+  }, [onSettings])
 
   // /auth/me is the source of truth for "who am I", login only returns
   // access_token/expires_at, not the user's profile, so this fetch is what
@@ -245,7 +292,18 @@ export function AppLayout() {
     // own document scrollbar never engages: only <main> scrolls. That is what
     // keeps BOTH the navbar and the sidebar visually pinned, a taller
     // document would otherwise scroll the whole shell and drag them along.
-    <div className="h-screen overflow-hidden bg-app pt-12">
+    <div className={clsx('h-screen overflow-hidden bg-app', NAVBAR_PT_CLASS)}>
+      {/* Every console with a persistent nav owes keyboard users a way past
+          it. Twenty-odd tab stops sit between the top of this page and its
+          first real control, and without this they are paid on every single
+          navigation. Visually hidden until focused, which is the whole
+          convention. */}
+      <a
+        href="#main-content"
+        className="sr-only z-[100] focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:rounded-lg focus:border focus:border-accent focus:bg-surface focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-accent focus:shadow-overlay"
+      >
+        Skip to main content
+      </a>
       <TopNavbar
         isAdmin={isAdmin}
         user={user}
@@ -279,7 +337,7 @@ export function AppLayout() {
         {/* Mobile sidebar (overlay), also opens below the navbar, so the
  company mark and profile stay reachable while it's open. */}
         {mobileNavOpen && (
-          <div className="fixed inset-x-0 bottom-0 top-12 z-40 flex md:hidden">
+          <div className={clsx('fixed inset-x-0 bottom-0 z-40 flex md:hidden', NAVBAR_BELOW_CLASS)}>
             <div
               className="animate-overlay-in absolute inset-0 bg-black/45"
               onClick={() => setMobileNavOpen(false)}
@@ -287,7 +345,9 @@ export function AppLayout() {
             />
             <aside className="relative flex w-[16rem] flex-col border-r border-line bg-subtle shadow-overlay">
               <div className="flex flex-none items-center justify-between gap-2 border-b border-line px-3 py-2.5">
-                <h2 className="min-w-0 truncate text-sm font-bold text-primary">{consoleTitle}</h2>
+                <h2 className="min-w-0 truncate text-[0.8125rem] font-medium tracking-[0.02em] text-secondary">
+                  {consoleTitle}
+                </h2>
                 <button
                   onClick={() => setMobileNavOpen(false)}
                   className="flex h-8 w-8 items-center justify-center rounded-lg text-tertiary transition-colors hover:bg-hover hover:text-primary"
@@ -308,7 +368,18 @@ export function AppLayout() {
         {/* min-h-0 overrides flex's default min-height:auto, without it a
  flex child can't shrink below its content height, so
  overflow-y-auto never actually engages. */}
-        <main className="min-h-0 min-w-0 flex-1 overflow-y-auto">
+        {/* FOCUS AND SCROLL MOVE WITH THE ROUTE.
+            A single page app changes the whole screen without moving either,
+            so a keyboard or screen reader user who follows a link stays parked
+            on the link they just left and hears nothing about where they are
+            now, and a mouse user arrives at a new page already scrolled
+            halfway down it. tabIndex -1 makes the region focusable
+            programmatically without adding it to the tab order. */}
+        <main
+          ref={mainRef}
+          id="main-content"
+          tabIndex={-1}
+          className="min-h-0 min-w-0 flex-1 overflow-y-auto outline-none">
           {/* Role-gated MFA enforcement. The server has already decided , 
  this renders the decision: a dismissible banner while a policy
  is in monitor mode or inside its grace window, and a full
@@ -324,6 +395,10 @@ export function AppLayout() {
               Breadcrumbs live here, above the page, because they describe
               where you are in your data rather than in the product. */}
           <div className="w-full px-4 py-5 sm:px-6 sm:py-6">
+            {/* Above the breadcrumb rather than below it: the session ending is
+                not a fact about the page you are on, and it has to be seen
+                before the reader starts something they cannot finish. */}
+            <SessionExpiryNotice onSignOut={handleLogout} />
             <Breadcrumbs />
             <Outlet />
           </div>

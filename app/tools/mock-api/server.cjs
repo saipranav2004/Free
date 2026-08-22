@@ -48,6 +48,7 @@ const db = {
   mfaRules: F.MFA_RULES.map((r) => ({ ...r })),
   rolePolicies: { 'r-1': ['p-5'], 'r-2': ['p-5', 'p-1'], 'r-3': ['p-6'], 'r-4': ['p-4'], 'r-5': ['p-2'], 'r-6': ['p-1'], 'r-7': ['p-3'] },
   criticalityOverrides: {},
+  userPolicies: { 'u-user-0004': ['p-2'], 'u-admin-0002': ['p-1'] },
   userPolicies: { 'u-user-0004': ['p-2'] },
   delegations: {},
   tokens: {},
@@ -558,10 +559,10 @@ on('POST', '/api/v1/pam/admin/actions/jit-requests/:id/approve', (ctx) => {
     return fail(ctx.res, 409, 'DUPLICATE_APPROVER', 'You have already approved this request. A second, different administrator has to approve it.')
   existing.push({
     id: uid('ap'), jit_request_id: r.id, approver_user_id: ctx.user.user_id, approver_username: ctx.user.username,
-    approver_rank: isRoot(ctx.user) ? 100 : 80, decision: 'APPROVE', reason: ctx.body?.reason || '',
+    approver_rank: isRoot(ctx.user) ? 100 : 80, decision: 'approved', reason: ctx.body?.reason || '',
     decided_at: new Date().toISOString(),
   })
-  const final = isRoot(ctx.user) || existing.filter((a) => a.decision === 'APPROVE').length >= 2
+  const final = isRoot(ctx.user) || existing.filter((a) => a.decision === 'approved').length >= 2
   r.status = final ? 'APPROVED' : 'PARTIALLY_APPROVED'
   let grant = null
   if (final) {
@@ -590,7 +591,7 @@ on('POST', '/api/v1/pam/admin/actions/jit-requests/:id/deny', (ctx) => {
   r.decision_reason = reason
   ;(db.approvals[r.id] ||= []).push({
     id: uid('ap'), jit_request_id: r.id, approver_user_id: ctx.user.user_id, approver_username: ctx.user.username,
-    approver_rank: isRoot(ctx.user) ? 100 : 80, decision: 'DENY', reason, decided_at: new Date().toISOString(),
+    approver_rank: isRoot(ctx.user) ? 100 : 80, decision: 'denied', reason, decided_at: new Date().toISOString(),
   })
   auditRow(ctx.user, 'JIT', 'jit.request.denied', 'DENIED', `resource:${r.resource_name}`, { reason })
   return ok(ctx.res, { request: r })
@@ -788,6 +789,146 @@ on('POST', '/api/v1/pam/admin/identity/users', (ctx) => {
   auditRow(ctx.user, 'ADMIN', 'admin.user.created', 'SUCCESS', `user:${u.username}`)
   return ok(ctx.res, { user: u }, 201)
 }, 'admin')
+
+// ── member identity graph ────────────────────────────────────────────────
+// Mirrors GET /api/v1/pam/admin/identity/users/:id/graph from the real
+// backend (internal/services/graph/user_graph.go). Same envelope, same nesting,
+// same field names, so the canvas behaves identically against either.
+const SYSTEM_ROLE_RANK = { root: 3, admin: 2, user: 1 }
+
+// Which live resources a policy's patterns actually hit. The real service does
+// this against pam_resources; the shapes it produces are what the UI reads.
+function matchResources(policy) {
+  const pats = policy.resources || []
+  if (!pats.length) return []
+  const wildcard = pats.includes('*')
+  const hits = db.resources.filter((r) => {
+    if (r.is_active === false) return false
+    if (wildcard) return true
+    return pats.some((p) => {
+      const body = String(p)
+        .replace(/^pam:resource\//, '')
+        .replace(/^resource:/, '')
+      if (body === '*') return true
+      if (body.endsWith('*')) {
+        const pre = body.slice(0, -1)
+        return String(r.id).startsWith(pre) || String(r.name).toLowerCase().startsWith(pre.toLowerCase())
+      }
+      return body === r.id || body.toLowerCase() === String(r.name).toLowerCase()
+    })
+  })
+  const acts = policy.actions || []
+  const all = acts.includes('*')
+  const canConnect = all || acts.includes('pam:resource:Connect')
+  const canRead = all || acts.includes('pam:resource:Read')
+  return hits.map((r) => {
+    let access = 'list'
+    if (all) access = 'all'
+    else if (canConnect) access = r.requires_jit ? 'jit_connect' : 'standing_connect'
+    else if (canRead) access = 'read'
+    return {
+      id: r.id, name: r.name, type: r.resource_type,
+      requires_jit: !!r.requires_jit, always_record: !!r.always_record,
+      active: r.is_active !== false,
+      access, standing: access === 'standing_connect' || access === 'all',
+    }
+  })
+}
+
+function matchCredentials(policy) {
+  const acts = policy.actions || []
+  if (!(acts.includes('*') || acts.includes('pam:vault:Reveal'))) return []
+  const pats = policy.resources || []
+  if (!pats.length) return []
+  const wildcard = pats.includes('*')
+  const out = []
+  for (const safeId of Object.keys(db.credentials)) {
+    for (const c of db.credentials[safeId] || []) {
+      if (!wildcard && !pats.some((p) => String(p).includes(c.id))) continue
+      out.push({ id: c.id, name: c.name, type: c.credential_type || 'password', account: c.account_name || '', access: 'reveal' })
+    }
+  }
+  return out
+}
+
+function policyView(p, origin, role) {
+  const deny = String(p.effect).toLowerCase() === 'deny'
+  return {
+    id: p.id, name: p.name, description: p.description || '',
+    effect: p.effect, actions: p.actions || [], resource_patterns: p.resources || [],
+    is_system: !!p.is_system, origin,
+    ...(role ? { origin_role_id: role.id, origin_role_name: role.name } : {}),
+    matched_resources: deny ? [] : matchResources(p),
+    matched_credentials: deny ? [] : matchCredentials(p),
+  }
+}
+
+function roleView(role, origin) {
+  const policies = (db.rolePolicies[role.id] || [])
+    .map((id) => db.policies.find((p) => p.id === id))
+    .filter(Boolean)
+    .map((p) => policyView(p, origin, role))
+  return {
+    id: role.id, name: role.name, description: role.description || '',
+    is_system: !!role.is_system, policies,
+  }
+}
+
+on('GET', '/api/v1/pam/admin/identity/users/:id/graph', (ctx) => {
+  const u = db.users.find((x) => x.user_id === ctx.params.id)
+  if (!u) return fail(ctx.res, 404, 'NOT_FOUND', 'User not found')
+
+  const held = db.roles.filter((r) => (u.roles || []).includes(r.name))
+  const systemHeld = held.filter((r) => SYSTEM_ROLE_RANK[r.name])
+  systemHeld.sort((a, b) => SYSTEM_ROLE_RANK[b.name] - SYSTEM_ROLE_RANK[a.name])
+  const typeRole = systemHeld[0] || null
+
+  const userType = typeRole ? roleView(typeRole, 'user_type') : null
+  const additional = held.filter((r) => !typeRole || r.id !== typeRole.id).map((r) => roleView(r, 'additional_role'))
+  const direct = (db.userPolicies?.[u.user_id] || [])
+    .map((id) => db.policies.find((p) => p.id === id))
+    .filter(Boolean)
+    .map((p) => policyView(p, 'direct', null))
+
+  const allPolicies = [
+    ...(userType ? userType.policies : []),
+    ...additional.flatMap((r) => r.policies),
+    ...direct,
+  ]
+  const resIds = new Set(), credIds = new Set()
+  let standing = 0
+  for (const p of allPolicies) {
+    for (const r of p.matched_resources) { resIds.add(r.id); if (r.standing) standing++ }
+    for (const c of p.matched_credentials) credIds.add(c.id)
+  }
+
+  return ok(ctx.res, {
+    graph: {
+      built_at: new Date().toISOString(),
+      user: {
+        id: u.user_id, username: u.username, email: u.email,
+        full_name: u.full_name || '', status: u.status,
+        mfa_enabled: !!u.mfa_enabled, is_protected: !!u.is_protected,
+      },
+      user_type: userType,
+      system_roles: systemHeld.map((r) => roleView(r, 'user_type')),
+      additional_roles: additional,
+      direct_policies: direct,
+      stats: {
+        roles: (userType ? 1 : 0) + additional.length,
+        additional_roles: additional.length,
+        direct_policies: direct.length,
+        policies: allPolicies.length,
+        matched_resources: resIds.size,
+        matched_credentials: credIds.size,
+        standing_connects: standing,
+      },
+      nodes: [],
+      edges: [],
+    },
+  })
+}, 'admin')
+
 on('PATCH', '/api/v1/pam/admin/identity/users/:id', (ctx) => {
   const u = db.users.find((x) => x.user_id === ctx.params.id)
   if (!u) return fail(ctx.res, 404, 'NOT_FOUND', 'That account does not exist.')

@@ -3,12 +3,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 import {
-  Boxes,
   KeyRound,
   ShieldAlert,
   ArrowRight,
   Users,
-  ClipboardList,
+  CalendarClock,
   Lock,
   Activity,
   ChevronRight,
@@ -31,9 +30,12 @@ import {
   getStats,
   listJitRequests,
   listAudit,
+  listGrants,
   /* verifyAudit, */ approveJitRequest,
   denyJitRequest,
 } from '../api/admin'
+import { listUsers } from '../api/identity'
+import { getCriticalitySummary } from '../api/criticality'
 import { listMyGrants, listMyJitRequests } from '../api/jit'
 import { listMySessions } from '../api/sessions'
 import { searchAudit } from '../api/audit'
@@ -45,13 +47,12 @@ import { Button } from '../components/common/Button'
 import { Spinner } from '../components/common/Spinner'
 import { SegmentedControl } from '../components/common/SegmentedControl'
 import { ConfirmDialog } from '../components/common/ConfirmDialog'
-import { AreaChart, DonutChart, BarList } from '../components/charts/Charts'
+import { ColumnChart, ActivityHeatmap } from '../components/charts/Charts'
 import {
   bucketByTime,
-  outcomeBreakdown,
-  topActions,
-  topActors,
-  categoryBreakdown,
+  postureFindings,
+  heatmapCells,
+  offHoursShare,
   attentionCounts,
   expiringGrants,
 } from '../lib/dashboardMetrics'
@@ -67,8 +68,7 @@ import {
   approveResultMessage,
   approvalErrorMessage,
   isStaleStateError,
-  viewerIdOf,
-} from '../lib/fourEyes'
+  viewerIdOf, userFacingNext } from '../lib/fourEyes'
 import { ApprovalProgress } from '../components/jit/ApprovalTrail'
 
 // ---------------------------------------------------------------------------
@@ -208,7 +208,22 @@ async function fetchAuditSample(target, signal) {
 // tracked from rows RECEIVED (not rows kept) - otherwise a de-duplicated row
 // would make the next request re-read a window it has already seen.
 // Returns searchAudit's { items, total } shape.
-async function fetchSelfAuditSample(target, signal) {
+//
+// SCOPED TO THE VIEWER, AND IT WAS NOT.
+//
+// GET /pam/audit is not caller-scoped on the server: it is guarded by
+// pam:audit:Read and filters on a `user_id` QUERY PARAMETER, so it returns the
+// whole organisation's log to anyone holding that permission, which the
+// standard user role does. This function passed no user_id, so a normal user's
+// dashboard was rendering everybody's events under the heading "Your activity"
+// and a footer that claimed "your own trail". Every figure on that half of the
+// page was org-wide while saying it was personal.
+//
+// The id is now required rather than optional. A missing one returns nothing,
+// because the failure mode of guessing here is showing one person another
+// person's activity, and an empty card is a far better wrong answer than that.
+async function fetchSelfAuditSample(target, userId, signal) {
+  if (!userId) return { items: [], total: 0 }
   const rows = []
   const seen = new Set()
   let offset = 0
@@ -216,7 +231,7 @@ async function fetchSelfAuditSample(target, signal) {
   for (let i = 0; i < MAX_SAMPLE_REQUESTS; i += 1) {
     const want = Math.min(SEARCH_PAGE_CAP, target - rows.length)
     if (want <= 0) break
-    const data = await searchAudit({ limit: want, offset }, signal)
+    const data = await searchAudit({ limit: want, offset, user_id: userId }, signal)
     const batch = data?.items || []
     total = data?.total ?? total
     appendUnique(rows, seen, batch)
@@ -545,17 +560,172 @@ function Masthead({ title, description, cells, loading }) {
 // The cards themselves, the footer copy, the chart wiring and the
 // extra-slot layout are unchanged.
 
-function ActivityAnalysis({ events, loading, range, scopeNote, auditHref, extra }) {
+// `personal` renders the reduced form an END USER needs, and it is a real
+// distinction rather than a density preference.
+//
+// Frequency and category breakdowns are FLEET analysis. "You performed
+// jit.request.created 10 times" and "24% of your events were JIT" tell one
+// person nothing they can act on; the same two panels over an org's traffic
+// tell an administrator where the load and the risk are. Shipping the analyst
+// view to everybody was the mistake: it filled a personal dashboard with
+// charts nobody reads, and buried the two things that do matter to the person
+// looking at it, whether their usage looks normal and whether anything they
+// tried was blocked.
+//
+// So a normal user gets volume plus denials. An administrator keeps the full
+// breakdown.
+/**
+ * The outcome ratio as a figure and a track, not as a two-slice donut.
+ *
+ * A pie with two segments is the canonical way to spend a whole card saying
+ * one number. The hero figure carries it, the meter puts it against the whole
+ * so a 16% reads as a sixth of the bar, and both counts are printed, so the
+ * card can be read without decoding any geometry at all.
+ *
+ * Proportional figures on the hero rather than tabular ones: equal-width
+ * digits make a large standalone number look loose.
+ */
+// ---------------------------------------------------------------------------
+// Posture findings
+// ---------------------------------------------------------------------------
+// Ranked by severity, never by count. A list sorted by "how many" puts the
+// biggest number on top; a list sorted by severity puts the thing that matters
+// on top, which is the only ordering that makes a landing page worth landing
+// on. Every row states the condition in a sentence, carries the count inside
+// that sentence rather than beside it, and ends in the surface that can act on
+// it. This is the shape Entra PIM's alerts and Security Hub's findings use.
+const FINDING_TONE = {
+  critical: { dot: 'bg-danger', chip: 'border-danger/35 bg-danger-soft text-danger', label: 'Critical' },
+  high: { dot: 'bg-warn', chip: 'border-warn/35 bg-warn-soft text-warn', label: 'High' },
+  medium: { dot: 'bg-accent', chip: 'border-accent/35 bg-accent-soft text-accent', label: 'Medium' },
+  info: { dot: 'bg-line-strong', chip: 'border-line bg-subtle text-secondary', label: 'For review' },
+}
+
+function FindingRow({ finding }) {
+  const tone = FINDING_TONE[finding.severity] || FINDING_TONE.info
+  return (
+    <li>
+      <Link
+        to={finding.to}
+        className="group flex gap-3 px-4 py-3 transition-colors hover:bg-hover"
+      >
+        <span
+          className={clsx('mt-[0.45rem] h-2 w-2 flex-none rounded-full', tone.dot)}
+          aria-hidden="true"
+        />
+        <span className="min-w-0 flex-1">
+          <span className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-semibold text-primary">{finding.title}</span>
+            <span
+              className={clsx(
+                'rounded border px-1.5 py-px text-2xs font-bold uppercase tracking-wide',
+                tone.chip
+              )}
+            >
+              {tone.label}
+            </span>
+          </span>
+          <span className="mt-0.5 block text-xs leading-relaxed text-secondary">{finding.detail}</span>
+        </span>
+        <span className="flex flex-none items-center gap-1 self-center text-xs font-semibold text-accent opacity-0 transition-opacity group-hover:opacity-100">
+          {finding.action}
+          <ArrowRight className="h-3.5 w-3.5" strokeWidth={2.2} />
+        </span>
+      </Link>
+    </li>
+  )
+}
+
+function PostureFindings({ findings, loading }) {
+  if (loading) {
+    return (
+      <div className="space-y-2 p-4">
+        <div className="skeleton h-12 rounded-lg" />
+        <div className="skeleton h-12 rounded-lg" />
+      </div>
+    )
+  }
+  if (!findings.length) {
+    return (
+      <div className="flex items-center gap-3 px-4 py-6">
+        <ShieldCheck className="h-5 w-5 flex-none text-ok" strokeWidth={1.9} />
+        <div>
+          <p className="text-sm font-semibold text-primary">Nothing outstanding</p>
+          <p className="mt-0.5 text-xs leading-relaxed text-secondary">
+            Every active account has MFA, no privileged role is sitting unused, and no emergency
+            access is in force.
+          </p>
+        </div>
+      </div>
+    )
+  }
+  return <ul className="divide-y divide-line-soft">{findings.map((f) => <FindingRow key={f.key} finding={f} />)}</ul>
+}
+
+function OutcomeMeter({ total, failed, rate }) {
+  const ok = Math.max(0, total - failed)
+  const pct = Math.max(0, Math.min(100, rate))
+  return (
+    <div>
+      <div className="flex items-end gap-2">
+        <span className="text-[2.5rem] font-bold leading-none tracking-tight text-primary">
+          {rate < 0.1 && failed > 0 ? '<0.1' : rate.toFixed(1)}
+          <span className="text-2xl">%</span>
+        </span>
+        <span className="pb-1.5 text-xs leading-tight text-tertiary">
+          denied
+          <br />
+          or failed
+        </span>
+      </div>
+
+      {/* One track, two fills, a 2px surface gap between them. */}
+      <div className="mt-3 flex h-2 overflow-hidden rounded-full bg-subtle">
+        <span
+          className="h-full"
+          style={{ width: `${100 - pct}%`, background: 'rgb(var(--chart-series))' }}
+        />
+        {failed > 0 && (
+          <span
+            className="h-full"
+            style={{
+              width: `${Math.max(pct, 1.5)}%`,
+              background: 'rgb(var(--chart-denied))',
+              borderLeft: '2px solid rgb(var(--bg-surface))',
+            }}
+          />
+        )}
+      </div>
+
+      <dl className="mt-3.5 space-y-2">
+        {[
+          ['Succeeded', ok, 'rgb(var(--chart-series))'],
+          ['Denied or failed', failed, 'rgb(var(--chart-denied))'],
+        ].map(([label, value, colour]) => (
+          <div key={label} className="flex items-center gap-2">
+            <span className="h-2 w-2 flex-none rounded-sm" style={{ background: colour }} aria-hidden="true" />
+            <dt className="min-w-0 flex-1 truncate text-xs text-secondary">{label}</dt>
+            <dd className="tabular text-sm font-semibold text-primary">{value.toLocaleString()}</dd>
+            <dd className="w-10 text-right tabular text-2xs text-tertiary">
+              {total > 0 ? `${Math.round((value / total) * 100)}%` : '-'}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  )
+}
+
+function ActivityAnalysis({ events, loading, range, scopeNote, auditHref, extra, personal = false }) {
   const preset = RANGES.find((r) => r.key === range) || RANGES[0]
 
   const series = useMemo(
     () => bucketByTime(events, { buckets: preset.buckets, span: preset.span }),
     [events, preset]
   )
-  const outcomes = useMemo(() => outcomeBreakdown(events), [events])
-  const actions = useMemo(() => topActions(events), [events])
-  const categories = useMemo(() => categoryBreakdown(events), [events])
   const counts = useMemo(() => attentionCounts(events), [events])
+  const heat = useMemo(() => heatmapCells(events), [events])
+  const offHours = useMemo(() => offHoursShare(events), [events])
   const plotted = series.reduce((n, s) => n + s.value, 0)
   // Computed here because the Outcomes card is the only place this percentage
   // is shown, keeping the math next to its display means the chart and the
@@ -580,7 +750,7 @@ function ActivityAnalysis({ events, loading, range, scopeNote, auditHref, extra 
             {loading ? (
               <div className="skeleton h-[200px] rounded-lg" />
             ) : (
-              <AreaChart points={series} valueLabel="Events" />
+              <ColumnChart points={series} valueLabel="Events" />
             )}
           </div>
           <CardFooter className="justify-between">
@@ -606,17 +776,19 @@ function ActivityAnalysis({ events, loading, range, scopeNote, auditHref, extra 
               </span>
             )}
           </CardHeader>
+          {/* NOT A DONUT ANY MORE.
+              It held two slices, and a two-slice pie is a stat tile drawn the
+              long way round: it takes a whole card to say one ratio that a
+              number and a track say better and smaller. The figure leads, the
+              meter shows it against the whole, and the two counts sit under it
+              so nothing has to be read off an arc. */}
           <div className="p-4">
             {loading ? (
               <div className="skeleton h-[148px] rounded-lg" />
             ) : counts.total === 0 ? (
               <p className="py-12 text-center text-xs text-ink-500">No events recorded yet</p>
             ) : (
-              <DonutChart
-                segments={outcomes}
-                centerValue={counts.total.toLocaleString()}
-                centerLabel="events"
-              />
+              <OutcomeMeter total={counts.total} failed={counts.failed} rate={failureRate} />
             )}
           </div>
           <CardFooter>
@@ -628,24 +800,51 @@ function ActivityAnalysis({ events, loading, range, scopeNote, auditHref, extra 
         </Card>
       </div>
 
-      <div className={clsx('mt-4 grid gap-4', extra ? 'lg:grid-cols-2 xl:grid-cols-3' : 'lg:grid-cols-2')}>
-        <Card className="overflow-hidden">
-          <CardHeader>
-            <CardTitle icon={Activity}>Most frequent actions</CardTitle>
-          </CardHeader>
-          <BarList items={actions} mono emptyLabel="No actions recorded yet" />
-        </Card>
+      {personal && extra && <div className="mt-4 grid gap-4">{extra}</div>}
 
-        <Card className="overflow-hidden">
-          <CardHeader>
-            <CardTitle icon={ClipboardList}>By category</CardTitle>
-            <span className="ml-auto text-2xs text-ink-500">red = contains a denial</span>
-          </CardHeader>
-          <BarList items={categories} emptyLabel="No categories recorded yet" />
-        </Card>
+      {/* THE THREE RANKED LISTS ARE GONE.
+          "Most frequent actions", "by category" and "most active accounts"
+          ranked the audit log by event count, which is a true statement that
+          nobody acts on: pam:jit:Request 17 and p.raghavan 39 change no
+          decision. The most active accounts card said as much in its own
+          footer. What they were standing in for is a posture view, which now
+          exists as its own band above, built from identity, role criticality
+          and live grants rather than from a log counting itself. */}
 
-        {extra}
-      </div>
+      {/* WHEN, not how much. Volume answers how much is happening; this
+          answers when, which in a privileged access product is most of the
+          signal. It sits last in the band because it is the slowest read on
+          the page: it rewards looking rather than glancing. */}
+      {!personal && (
+        <Card className="mt-4 overflow-hidden">
+          <CardHeader className="flex-wrap gap-y-2">
+            <CardTitle icon={CalendarClock}>When activity happens</CardTitle>
+            <span className="ml-auto flex items-center gap-2">
+              <MetaTag>whole sample</MetaTag>
+              {offHours.counted > 0 && (
+                <MetaTag mono>{offHours.pct.toFixed(0)}% outside hours</MetaTag>
+              )}
+            </span>
+          </CardHeader>
+          <div className="px-4 pb-3 pt-4">
+            {loading ? (
+              <div className="skeleton h-[168px] rounded-lg" />
+            ) : (
+              <ActivityHeatmap cells={heat} emptyLabel="No events in this sample" />
+            )}
+          </div>
+          <CardFooter>
+            <p className="text-2xs leading-relaxed text-ink-500">
+              Every event in the sample by weekday and local hour.{' '}
+              <span className="font-semibold text-ink-200">
+                {offHours.off.toLocaleString()} of {offHours.counted.toLocaleString()}
+              </span>{' '}
+              fell outside Monday to Friday, 07:00 to 19:00. Off-hours privileged work is not
+              wrong, it is just the part worth being able to account for.
+            </p>
+          </CardFooter>
+        </Card>
+      )}
     </>
   )
 }
@@ -732,6 +931,35 @@ function AdminDashboard({ user }) {
   // thing in the queue to clear. Filtering the queue to PENDING alone would
   // hide exactly those. The endpoint takes one status at a time, so this is a
   // second call rather than a widened filter.
+  // THREE MORE READS, AND EACH ONE BUYS A FINDING.
+  //
+  // The dashboard used to fetch stats and an audit sample and compute six
+  // charts off the sample, which is why everything it said was about the log
+  // rather than about the estate. Identity, criticality and grants are what
+  // let it say something true about posture. All three are single calls and
+  // none of them blocks the page: a failure produces one fewer finding, never
+  // a wrong one.
+  const usersQuery = useQuery({
+    queryKey: ['admin', 'users', 'dashboard'],
+    queryFn: ({ signal }) => listUsers(undefined, signal),
+    staleTime: 60_000,
+    retry: false,
+  })
+
+  const criticalityQuery = useQuery({
+    queryKey: ['admin', 'criticality', 'dashboard'],
+    queryFn: ({ signal }) => getCriticalitySummary(signal),
+    staleTime: 60_000,
+    retry: false,
+  })
+
+  const grantsQuery = useQuery({
+    queryKey: ['admin', 'grants', 'dashboard'],
+    queryFn: ({ signal }) => listGrants({ page: 1, page_size: 100 }, signal),
+    staleTime: 30_000,
+    retry: false,
+  })
+
   const partialQuery = useQuery({
     queryKey: ['admin', 'jit-requests', 'partial-list'],
     queryFn: ({ signal }) =>
@@ -752,7 +980,8 @@ function AdminDashboard({ user }) {
       const result = readApproveResult(data)
       toast.success(approveResultMessage(result), {
         description: result.partial
-          ? result.next || 'A second, different admin, or root, must approve to issue the grant.'
+          ? userFacingNext(result.next) ||
+            'A second, different admin, or root, must approve to issue the grant.'
           : undefined,
       })
       setApproveTarget(null)
@@ -781,7 +1010,19 @@ function AdminDashboard({ user }) {
 
   const s = statsQuery.data
   const events = useMemo(() => auditQuery.data?.events || [], [auditQuery.data])
-  const actors = useMemo(() => topActors(events), [events])
+
+  const findings = useMemo(
+    () =>
+      postureFindings({
+        users: usersQuery.data?.users,
+        criticality: criticalityQuery.data,
+        stats: statsQuery.data,
+        grants: grantsQuery.data?.grants,
+      }),
+    [usersQuery.data, criticalityQuery.data, statsQuery.data, grantsQuery.data]
+  )
+  const findingsLoading =
+    usersQuery.isLoading || criticalityQuery.isLoading || grantsQuery.isLoading || statsQuery.isLoading
 
   // One queue, oldest first, with the half-approved ones in it. Capped at the
   // same five rows the card was always sized for, this is a pointer to the
@@ -851,14 +1092,6 @@ function AdminDashboard({ user }) {
             value: pick(s, 'active_grants') ?? 'n/a',
             description: 'Elevation in force',
             to: '/admin/jit',
-          },
-          {
-            key: 'resources',
-            label: 'Resources',
-            icon: Boxes,
-            value: pick(s, 'active_resources') ?? 'n/a',
-            description: 'Registered',
-            to: '/resources',
           },
           {
             key: 'breakglass',
@@ -960,6 +1193,43 @@ function AdminDashboard({ user }) {
         </PrimarySection>
       )}
 
+      {/* ---- POSTURE ------------------------------------------------------
+          The band this dashboard did not have, and the one every product in
+          this category leads with. Findings are conditions about the ESTATE,
+          ranked by how bad they are, each ending in the surface that can fix
+          it. They are what "most active accounts" was standing in for and
+          could never be. */}
+      <QuietSection
+        label="Posture"
+        action={<SectionLink to="/admin/roles">Role criticality</SectionLink>}
+      >
+        <Card className="overflow-hidden">
+          <CardHeader>
+            <CardTitle icon={ShieldCheck}>Estate findings</CardTitle>
+            {findings.length > 0 && (
+              <span className="ml-auto">
+                <MetaTag>
+                  {findings.length} {findings.length === 1 ? 'finding' : 'findings'}
+                </MetaTag>
+              </span>
+            )}
+          </CardHeader>
+          <PostureFindings findings={findings} loading={findingsLoading} />
+          <CardFooter>
+            <p className="text-2xs leading-relaxed text-ink-500">
+              Computed live from identity, role criticality and active grants. Nothing here is a
+              score or a prediction: each line is a condition that is true right now.
+            </p>
+          </CardFooter>
+        </Card>
+      </QuietSection>
+
+      {/* ---- ACTIVITY -----------------------------------------------------
+          Two charts, and only two. This band used to carry five cards, three
+          of which ranked things by event count: most frequent actions, most
+          active accounts, by category. They were the log talking about itself.
+          What survives answers two questions an operator actually has, how
+          much is happening and when it happens. */}
       <QuietSection
         label="Activity"
         action={
@@ -978,40 +1248,6 @@ function AdminDashboard({ user }) {
           loading={auditQuery.isLoading}
           range={range}
           auditHref="/admin/audit"
-          // scopeNote={`Organization-wide, computed from ${sample.scope}.`}
-          extra={
-            <>
-              <Card className="overflow-hidden">
-                <CardHeader>
-                  <CardTitle icon={Users}>Most active accounts</CardTitle>
-                </CardHeader>
-                <BarList items={actors} emptyLabel="No actor activity in the sample" />
-                <CardFooter>
-                  <p className="text-2xs leading-relaxed text-ink-500">
-                    High volume is not itself suspicious. An automation account should be here.
-                  </p>
-                </CardFooter>
-              </Card>
-
-              {/* "Accounts hitting denials" lived here and is currently off.
-                  To bring it back, restore this block and compute
-                  `const deniedActors = topActors(denied)` above. */}
-              {/* {deniedActors.length > 0 && (
-                <Card className="overflow-hidden">
-                  <CardHeader>
-                    <CardTitle icon={ShieldAlert}>Accounts hitting denials</CardTitle>
-                  </CardHeader>
-                  <BarList items={deniedActors} emptyLabel="No denials in the sample" />
-                  <CardFooter>
-                    <p className="text-2xs leading-relaxed text-ink-500">
-                      From the {denied.length.toLocaleString()} denied or failed entries in this sample.
-                      Repeated refusals usually mean under-entitlement, not an attack.
-                    </p>
-                  </CardFooter>
-                </Card>
-              )} */}
-            </>
-          }
         />
       </QuietSection>
 
@@ -1057,6 +1293,8 @@ function UserDashboard({ user }) {
   const [range, setRange] = useState('7d')
   const [limitKey, setLimitKey] = useState(DEFAULT_EVENT_LIMIT)
   const sample = resolveLimit(limitKey)
+  // Who the trail belongs to. Every audit read on this page is filtered by it.
+  const selfId = viewerIdOf(user)
 
   const grantsQuery = useQuery({
     queryKey: ['jit', 'grants', 'mine', { activeOnly: true, dashboard: true }],
@@ -1081,8 +1319,9 @@ function UserDashboard({ user }) {
   })
   // Walked in pages of 500, the ceiling /audit/search enforces on limit.
   const auditQuery = useQuery({
-    queryKey: ['audit', 'dashboard-sample', sample.value],
-    queryFn: ({ signal }) => fetchSelfAuditSample(sample.value, signal),
+    queryKey: ['audit', 'dashboard-sample', sample.value, selfId],
+    queryFn: ({ signal }) => fetchSelfAuditSample(sample.value, selfId, signal),
+    enabled: !!selfId,
     placeholderData: (prev) => prev,
     retry: false,
   })
@@ -1281,12 +1520,17 @@ function UserDashboard({ user }) {
           />
         }
       >
+        {/* personal: volume plus what was blocked. The frequency and
+            category breakdowns are fleet analysis and are left to the admin
+            dashboard, see the note on ActivityAnalysis. */}
         <ActivityAnalysis
+          personal
           events={events}
           loading={auditQuery.isLoading}
           range={range}
           auditHref="/audit"
           scopeNote={`Your own trail, computed from ${sample.scope}.`}
+          extra={<DeniedList events={events} href="/audit" />}
         />
       </QuietSection>
     </div>

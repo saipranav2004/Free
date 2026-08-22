@@ -98,7 +98,12 @@ export function Card({ children, className = '', interactive = false, as: As = '
     <As
       className={clsx(
         'rounded-xl border border-line bg-surface',
-        interactive && 'transition-colors duration-150 hover:border-line-strong hover:bg-subtle/40',
+        // A card you can click says so by lifting. Colour alone is what a
+        // hovered ROW does; a card is an object, and an object that responds
+        // to the pointer by moving is the difference between a surface that
+        // feels built and one that feels printed.
+        interactive &&
+          'cursor-pointer transition-[transform,box-shadow,border-color,background-color] duration-150 ease-emphasis hover:-translate-y-px hover:border-line-strong hover:bg-subtle/40 hover:shadow-pop',
         className
       )}
       {...rest}

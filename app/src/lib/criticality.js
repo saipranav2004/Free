@@ -21,8 +21,13 @@ export const CRITICALITY_BANDS = ['CRITICAL', 'HIGH', 'MODERATE', 'LOW']
 // reader cannot separate Critical from High in a stacked bar.
 //
 // These four were picked by running the palette validator against the real
-// surfaces (#ffffff light, #161d26 dark). Light passes CVD separation at 10.9
-// ΔE, dark at 8.2, both above the 8 target. The neutral for Low is deliberate:
+// surfaces. Light is validated on #ffffff. The dark fills were RE-picked when
+// the dark theme's container plane moved from #161d26 to #1b232d: on the
+// lighter plane the old Critical fill fell to 3.93:1, under the 4.5 a 14px
+// semibold label needs, so all four were lifted and re-checked against every
+// dark plane a band can land on (page #161d26, container #1b232d, band
+// #212a36). Worst case is now 4.70:1, and the closest colour-vision-deficient
+// pair is 13.3 ΔE, well above the 8 target. The neutral for Low is deliberate:
 // "nothing to worry about" should read as absent, not as a fifth hue, and the
 // chroma-floor check that flags it exists to catch a categorical slot that
 // accidentally reads grey, which is not this case.
@@ -36,7 +41,7 @@ const BAND_META = {
     tier: 0,
     tone: 'danger',
     fill: '#cd0a0a',
-    fillDark: '#e0484d',
+    fillDark: '#ef6b6f',
     blurb: 'Unrestricted or self-escalating access. Treat a compromise here as a full control plane compromise.',
   },
   HIGH: {
@@ -52,7 +57,7 @@ const BAND_META = {
     tier: 2,
     tone: 'accent',
     fill: '#006ce0',
-    fillDark: '#3b8ef0',
+    fillDark: '#4d9af5',
     blurb: 'Real write access, scoped to one domain.',
   },
   LOW: {
@@ -60,7 +65,7 @@ const BAND_META = {
     tier: 3,
     tone: 'muted',
     fill: '#667085',
-    fillDark: '#8a8578',
+    fillDark: '#98937f',
     blurb: 'Read mostly. No standing path to a secret.',
   },
 }

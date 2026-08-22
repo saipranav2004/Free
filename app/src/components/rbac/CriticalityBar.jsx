@@ -62,10 +62,16 @@ export function CriticalityBar({ byBand, total, active, onSelect, className }) {
     <div className={className}>
       <div
         className="flex h-2.5 w-full gap-[2px] overflow-hidden rounded-full"
-        role="img"
+        // A GROUP, NOT AN IMG. role="img" declares the subtree to be a single
+        // graphic, so the buttons inside it were interactive controls nested
+        // in a element that says it has no interior: assistive technology is
+        // entitled to hide them entirely, which would make every band
+        // unreachable without a mouse. role="group" carries the same summary
+        // label and leaves the segments as the real controls they are.
+        role="group"
         aria-label={`Criticality across ${sum} roles: ${counts
           .map((s) => `${s.count} ${s.meta.label}`)
-          .join(', ')}`}
+          .join(', ')}. Select a band to filter.`}
       >
         {counts.map((s) => (
           <button

@@ -143,11 +143,16 @@ export function SortTh({ children, columnKey, sort, onSort, align = 'left', ...r
   const dir = active ? sort.dir : null
   const Icon = !active ? ChevronsUpDown : dir === 'asc' ? ArrowUp : ArrowDown
   return (
-    <Th align={align} {...rest}>
+    // aria-sort BELONGS ON THE HEADER CELL, not on the button inside it. It is
+    // only defined for a columnheader/rowheader, so on a <button> it is an
+    // unsupported attribute that assistive technology drops: the column
+    // announced no sort state at all, which is the one thing the attribute
+    // exists to convey. Moving it up one level is the whole fix.
+    <Th align={align} aria-sort={active ? (dir === 'asc' ? 'ascending' : 'descending') : 'none'} {...rest}>
       <button
         type="button"
         onClick={() => onSort?.(columnKey)}
-        aria-sort={active ? (dir === 'asc' ? 'ascending' : 'descending') : 'none'}
+        aria-label={`Sort by ${typeof children === 'string' ? children : columnKey}`}
         className={clsx(
           'group -mx-1 inline-flex h-full max-w-full items-center gap-1.5 rounded px-1 text-xs font-bold',
           align === 'right' && 'flex-row-reverse',

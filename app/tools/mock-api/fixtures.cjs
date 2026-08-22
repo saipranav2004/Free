@@ -132,14 +132,14 @@ const JIT_REQUESTS = [
 
 const APPROVALS = {
   'jit-02': [
-    { id: 'ap-1', jit_request_id: 'jit-02', approver_user_id: 'u-admin-0002', approver_username: 'p.raghavan', approver_rank: 80, decision: 'APPROVE', reason: 'Backfill window agreed with the data team.', decided_at: iso(-130) },
+    { id: 'ap-1', jit_request_id: 'jit-02', approver_user_id: 'u-admin-0002', approver_username: 'p.raghavan', approver_rank: 80, decision: 'approved', reason: 'Backfill window agreed with the data team.', decided_at: iso(-130) },
   ],
   'jit-04': [
-    { id: 'ap-2', jit_request_id: 'jit-04', approver_user_id: 'u-admin-0002', approver_username: 'p.raghavan', approver_rank: 80, decision: 'APPROVE', reason: 'Routine re-index.', decided_at: iso(-385) },
-    { id: 'ap-3', jit_request_id: 'jit-04', approver_user_id: 'u-admin-0003', approver_username: 'd.okonkwo', approver_rank: 80, decision: 'APPROVE', reason: 'Second approval, scope is one collection.', decided_at: iso(-380) },
+    { id: 'ap-2', jit_request_id: 'jit-04', approver_user_id: 'u-admin-0002', approver_username: 'p.raghavan', approver_rank: 80, decision: 'approved', reason: 'Routine re-index.', decided_at: iso(-385) },
+    { id: 'ap-3', jit_request_id: 'jit-04', approver_user_id: 'u-admin-0003', approver_username: 'd.okonkwo', approver_rank: 80, decision: 'approved', reason: 'Second approval, scope is one collection.', decided_at: iso(-380) },
   ],
   'jit-05': [
-    { id: 'ap-4', jit_request_id: 'jit-05', approver_user_id: 'u-root-0001', approver_username: 'root', approver_rank: 100, decision: 'DENY', reason: 'Automated export must go through the batch service account.', decided_at: iso(-1480) },
+    { id: 'ap-4', jit_request_id: 'jit-05', approver_user_id: 'u-root-0001', approver_username: 'root', approver_rank: 100, decision: 'denied', reason: 'Automated export must go through the batch service account.', decided_at: iso(-1480) },
   ],
 }
 

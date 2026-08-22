@@ -41,6 +41,7 @@ const IdentityListPage = lazy(() => import('./pages/admin/IdentityListPage'))
 const IdentityDetailPage = lazy(() => import('./pages/admin/IdentityDetailPage'))
 const RolesPage = lazy(() => import('./pages/admin/RolesPage'))
 const RoleDetailPage = lazy(() => import('./pages/admin/RoleDetailPage'))
+const IdentityGraphPage = lazy(() => import('./pages/admin/IdentityGraphPage'))
 const MfaPolicyPage = lazy(() => import('./pages/admin/MfaPolicyPage'))
 const PoliciesPage = lazy(() => import('./pages/admin/PoliciesPage'))
 const AdminJitPage = lazy(() => import('./pages/admin/AdminJitPage'))
@@ -208,6 +209,14 @@ export default function App() {
                 element={
                   <SuspenseRoute>
                     <IdentityDetailPage />
+                  </SuspenseRoute>
+                }
+              />
+              <Route
+                path="identity-graph"
+                element={
+                  <SuspenseRoute>
+                    <IdentityGraphPage />
                   </SuspenseRoute>
                 }
               />

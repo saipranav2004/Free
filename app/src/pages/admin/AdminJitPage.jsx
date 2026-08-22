@@ -7,9 +7,9 @@ import {
   Lock,
   ShieldAlert,
   CheckCircle2,
+  XCircle,
   SearchX,
   FileText,
-  ChevronRight,
   AlarmClock,
   UsersRound,
 } from 'lucide-react'
@@ -26,7 +26,6 @@ import {
 } from '../../api/admin'
 import { PageHeader, Card, DetailList, ListPanel } from '../../components/common/Layout'
 import { DataTable, RowActions, Td, Th, Tr, Trunc } from '../../components/ui/grid'
-import { MenuItem, MenuNote, RowMenu } from '../../components/ui/menu'
 import { AlarmTag, StatusDot } from '../../components/ui/bits'
 import { EmptyState } from '../../components/ui/states'
 import { QueryState } from '../../components/common/QueryState'
@@ -48,6 +47,7 @@ import { useAuthStore } from '../../store/authStore'
 import {
   approvalsOf,
   approvalProgress,
+  isApproval,
   approveBlockedReason,
   approveButtonLabel,
   approveConsequence,
@@ -56,6 +56,7 @@ import {
   approvalErrorMessage,
   isStaleStateError,
   viewerIdOf,
+  userFacingNext,
 } from '../../lib/fourEyes'
 import { ApprovalProgress, ApprovalTrail } from '../../components/jit/ApprovalTrail'
 import {
@@ -350,119 +351,206 @@ function ApprovalMeter({ progress }) {
   )
 }
 
-function DecisionRow({ request, approvals, viewer, onApprove, onDeny, onOpen, busy }) {
+// ── The decision card ──────────────────────────────────────────────────────
+//
+// WHY A CARD AND NOT A TABLE ROW.
+//
+// A table is right for scanning many similar things and wrong for deciding.
+// Approving standing access to production is the most consequential click in
+// this console, and to make it responsibly an approver needs, at once: who
+// asked, for what, WHY in full, for how long, how long they have waited, who
+// has already approved, and what pressing the button will actually do. A row
+// gives a truncated justification and a 12px text link.
+//
+// Every product that does approvals well, Entra PIM's Approve requests view,
+// ServiceNow's approval records, presents one request as one readable block
+// with the decision attached to it. So the queue is cards, and only the queue:
+// decided requests go back to a compact table below, because those are a log
+// to scan, not a decision to make.
+function DecisionCard({ request, approvals, viewer, onApprove, onDeny, onOpen, busy }) {
   const bg = isBreakglass(request)
+  const cooling = request.status === JIT_STATUS.WAITING
   const waited = waitedSeconds(raisedAt(request))
   const stale = waited >= 24 * 3600
   const duration = durationLabel(request)
   const progress = approvalProgress(request, approvals)
 
-  // Break glass has no approvers. It is granted by waiting out the cooling
-  // off period, not by deciding it, so none of the dual control chrome
-  // applies and pretending otherwise would misrepresent the mechanism.
+  // Break glass has no approvers: it is granted by waiting out a cooling off
+  // period, so none of the dual control chrome applies to it and pretending
+  // otherwise would misrepresent the mechanism.
   const fourEyes = !bg
-  const blockedReason = fourEyes ? approveBlockedReason(request, approvals, viewer) : null
+
+  // COMPUTED FOR EVERY REQUEST, INCLUDING BREAK GLASS, and that is a fix
+  // rather than a tidy-up. JITService.Approve accepts only PENDING and
+  // PARTIALLY_APPROVED; a break-glass request sitting in WAITING is rejected
+  // with a 409. Skipping the guard for break-glass put a live-looking Approve
+  // button on the one request on this page it can never work on. Deny, by
+  // contrast, DOES accept WAITING, and is the only way to stop an emergency
+  // elevation before its timer runs out, so it stays enabled.
+  const blockedReason = approveBlockedReason(request, approvals, viewer)
+  const consequence = fourEyes ? approveConsequence(request, progress, viewer) : null
 
   const viewerId = viewer?.id || viewer?.user_id
+  // isApproval, not a hand-rolled string compare. models.JITApproval writes
+  // the decision lower case ("approved" / "denied"); comparing against
+  // "APPROVE" matched nothing on the wire, so a request the viewer had
+  // already approved still offered them an Approve button that the server
+  // answers with a 409.
   const approverNames = (approvals || [])
-    .filter((a) => a && a.decision === 'APPROVE')
+    .filter(isApproval)
     .map((a) =>
       viewerId && (a.approver_user_id === viewerId || a.approver_id === viewerId)
         ? 'you'
         : a.approver_username || a.approver_user_id || 'unknown'
     )
 
+  // The cooling-off readout has two tenses, and using one for both produced
+  // "Access opens 26m ago" on any request whose window had already elapsed
+  // while it sat in the queue. Whether the timer is still running is the whole
+  // point of the line, so it is decided here rather than left to a relative
+  // formatter that is happy to phrase the past as the future.
+  const availableAt = cooling && request.available_at ? new Date(request.available_at) : null
+  const availableMs = availableAt && !Number.isNaN(availableAt.getTime()) ? availableAt.getTime() : null
+  const coolingOver = availableMs != null && availableMs <= Date.now()
+  const coolingLabel =
+    availableMs == null
+      ? null
+      : coolingOver
+        ? `Cooling off ended ${formatRelativeToNow(request.available_at)}`
+        : `Access opens ${formatRelativeToNow(request.available_at)}`
+
   return (
-    <Tr className={bg ? 'bg-danger-soft/50' : undefined}>
-      <Td sticky edge className={bg ? 'shadow-[inset_3px_0_0_0_rgb(var(--danger))]' : undefined}>
-        <div className="min-w-0">
-          <p className="flex min-w-0 items-center gap-1.5 text-sm">
-            <span className="flex-none font-medium text-primary">{requesterLabel(request)}</span>
-            <span className="flex-none text-tertiary">to</span>
-            <button
-              type="button"
-              onClick={onOpen}
-              title={request.resource_name || request.resource_id}
-              className="min-w-0 truncate font-medium text-primary transition-colors hover:text-accent hover:underline"
-            >
-              {request.resource_name || request.resource_id || 'a resource'}
-            </button>
-            {bg && <AlarmTag />}
-          </p>
-          <p
-            className="mt-0.5 truncate text-xs text-tertiary"
-            title={request.reason || request.justification || undefined}
+    <article
+      className={clsx(
+        'overflow-hidden rounded-xl border bg-surface transition-shadow hover:shadow-card',
+        bg ? 'border-danger/45' : 'border-line'
+      )}
+    >
+      {/* Break glass is the one thing on this page that is always an
+          emergency, so it is the one thing that gets a filled header. */}
+      {bg && (
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-danger/30 bg-danger-soft px-4 py-2">
+          <ShieldAlert className="h-3.5 w-3.5 flex-none text-danger" strokeWidth={2} />
+          <span className="text-xs font-bold uppercase tracking-wide text-danger">Break glass</span>
+          <span className="text-xs text-secondary">
+            {cooling
+              ? 'Cooling off. Access opens on its own unless it is denied first.'
+              : 'Emergency elevation, granted without a second approver.'}
+          </span>
+        </div>
+      )}
+
+      <div className="px-4 py-3.5">
+        <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
+          <span className="font-semibold text-primary">{requesterLabel(request)}</span>
+          <span className="text-sm text-tertiary">requests</span>
+          <button
+            type="button"
+            onClick={onOpen}
+            title={request.resource_name || request.resource_id}
+            className="min-w-0 truncate font-semibold text-primary transition-colors hover:text-accent hover:underline"
           >
-            {request.reason || request.justification || 'No justification given'}
+            {request.resource_name || request.resource_id || 'a resource'}
+          </button>
+        </div>
+
+        {/* THE JUSTIFICATION IS NOT TRUNCATED. It is the single thing an
+            approver is supposed to weigh, and a clipped one line forces them
+            to either open every request or approve without reading it. */}
+        <p className="mt-1.5 max-w-prose whitespace-pre-line text-sm leading-relaxed text-secondary">
+          {request.reason || request.justification || 'No justification was given.'}
+        </p>
+
+        {bg && request.breakglass_note && (
+          <p className="mt-1.5 max-w-prose text-sm leading-relaxed text-secondary">
+            <span className="font-medium text-primary">Incident note.</span>{' '}
+            {request.breakglass_note}
+          </p>
+        )}
+
+        {/* The qualifying facts, one line, in the order an approver reads
+            them: how much access, for how long, how long it has been sitting,
+            and what ticket it hangs off. */}
+        <div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs">
+          <span className="text-secondary">
+            Window <span className="font-semibold text-primary">{duration}</span>
+          </span>
+          <span
+            className={clsx(
+              'inline-flex items-center gap-1.5',
+              stale ? 'font-semibold text-warn' : 'text-secondary'
+            )}
+            title={formatDateTime(raisedAt(request))}
+          >
+            <AlarmClock className="h-3 w-3 flex-none" strokeWidth={1.9} />
+            Waiting {formatDuration(waited)}
+          </span>
+          {coolingLabel && (
+            <span className="inline-flex items-center gap-1.5 font-semibold text-danger">
+              <ShieldAlert className="h-3 w-3 flex-none" strokeWidth={1.9} />
+              {coolingLabel}
+            </span>
+          )}
+          {request.ticket_ref && <span className="font-mono text-tertiary">{request.ticket_ref}</span>}
+        </div>
+      </div>
+
+      {/* THE DECISION BAR.
+          A footer rather than a right hand column. The column version made
+          every card as tall as its tallest element and left a block of dead
+          space beside two lines of justification; a footer keeps the card the
+          height of its content and puts the two buttons in the one place a
+          reader's eye already ends up. State on the left, action on the
+          right, which is the arrangement every review surface converges on. */}
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2.5 border-t border-line-soft bg-subtle/50 px-4 py-2.5">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1">
+          {/* The dual control meter, but only where dual control exists. A
+              break-glass request has no approvers to count, and a two segment
+              meter reading "0 of 2" beside it would describe a rule that does
+              not apply to it. */}
+          {fourEyes && <ApprovalMeter progress={progress} />}
+          {fourEyes && approverNames.length > 0 && (
+            <span className="text-xs text-secondary">
+              by <span className="font-medium text-primary">{approverNames.join(', ')}</span>
+            </span>
+          )}
+          {/* What the click does, or why it cannot. Either way the approver is
+              never guessing at the consequence of a one-way action. */}
+          <p
+            className={clsx(
+              'min-w-0 flex-1 basis-full text-xs leading-relaxed sm:basis-auto',
+              blockedReason ? 'text-warn' : 'text-tertiary'
+            )}
+          >
+            {blockedReason || consequence}
           </p>
         </div>
-      </Td>
 
-      <Td>
-        <Trunc value={duration} muted />
-      </Td>
-
-      <Td>
-        <span
-          className={clsx('text-sm tabular', stale ? 'font-medium text-warn' : 'text-secondary')}
-          title={formatDateTime(raisedAt(request))}
-        >
-          {formatDuration(waited)}
-        </span>
-      </Td>
-
-      <Td>
-        {request.status === JIT_STATUS.WAITING ? (
-          <StatusDot tone="warn" label="Cooling off" />
-        ) : fourEyes ? (
-          <div className="min-w-0">
-            <ApprovalMeter progress={progress} />
-            {/* Who has already approved, by name, because "have I decided
-                this one?" is the first thing an approver asks of a partially
-                approved request. Names only: three stacked avatar tiles in a
-                table cell is decoration that pushes the row taller. */}
-            {approverNames.length > 0 && (
-              <p className="mt-0.5 truncate text-xs text-tertiary" title={approverNames.join(', ')}>
-                {approverNames.join(', ')}
-              </p>
-            )}
-          </div>
-        ) : (
-          <StatusDot tone="danger" label="No approval needed" />
-        )}
-      </Td>
-
-      <Td align="right">
-        <RowActions>
-          {/* An approver who cannot see WHY a button is dead will click it,
-              get a 409 and conclude the console is broken. The reason is on
-              the button's title AND spelled out in the row menu. */}
-          <button
-            type="button"
-            onClick={onApprove}
+        <div className="flex flex-none items-center gap-2">
+          {/* Subtle, not ghost. A borderless ghost sitting between two bordered
+              buttons reads as a caption rather than as a control. */}
+          <Button size="sm" variant="subtle" onClick={onOpen}>
+            Details
+          </Button>
+          {/* Deny stays live on a cooling-off break-glass request: the server
+              accepts it, and it is the only thing that stops the elevation
+              before the timer runs out. */}
+          <Button size="sm" variant="dangerGhost" icon={XCircle} disabled={busy} onClick={onDeny}>
+            Deny
+          </Button>
+          <Button
+            size="sm"
+            variant="primary"
+            icon={CheckCircle2}
             disabled={busy || !!blockedReason}
             title={blockedReason || undefined}
-            className="whitespace-nowrap rounded px-1 py-0.5 text-sm font-semibold text-accent transition-colors hover:text-accent-hover hover:underline disabled:pointer-events-none disabled:text-disabled"
+            onClick={onApprove}
           >
             {fourEyes ? approveButtonLabel(request, progress, viewer) : 'Approve'}
-          </button>
-          <button
-            type="button"
-            onClick={onDeny}
-            disabled={busy}
-            className="whitespace-nowrap rounded px-1 py-0.5 text-sm font-semibold text-danger transition-colors hover:underline disabled:pointer-events-none disabled:text-disabled"
-          >
-            Deny
-          </button>
-          <RowMenu label={`Actions for ${requesterLabel(request)}`}>
-            <MenuItem icon={ChevronRight} onClick={onOpen}>
-              Open request
-            </MenuItem>
-            {blockedReason && <MenuNote>{blockedReason}</MenuNote>}
-          </RowMenu>
-        </RowActions>
-      </Td>
-    </Tr>
+          </Button>
+        </div>
+      </div>
+    </article>
   )
 }
 
@@ -522,8 +610,101 @@ function DecidedRow({ request, onOpen }) {
   )
 }
 
+// ---------------------------------------------------------------------------
+// The approval queue
+// ---------------------------------------------------------------------------
+// THE SHAPE OF THIS PAGE, AND WHY IT CHANGED.
+//
+// It used to be one table holding everything: three requests that needed a
+// decision mixed in among expired, cancelled, denied and approved ones, sorted
+// oldest first, so the rows that actually needed a human were at the BOTTOM.
+// That is a log with buttons in it, not an approval surface.
+//
+// The page now separates the two jobs it was conflating, because they are not
+// the same job and they do not want the same layout:
+//
+//   THE QUEUE      work to do. Cards, one request each, nothing truncated,
+//                  the decision attached to the request it belongs to.
+//                  Break glass pinned to the top, always.
+//   THE HISTORY    a record to scan. A dense table, searchable, paginated,
+//                  with no decision controls on it because there is no
+//                  decision left to make.
+//
+// This is the same split Entra PIM draws between "Approve requests" and
+// "Request history", and the same one ServiceNow draws between an approval
+// record and the activity log. It is not decoration: an approver who opens
+// this page should be able to answer "what needs me?" without reading, and a
+// reviewer looking for last Tuesday's grant should not be scrolling past
+// live decisions to find it.
+const QUEUE_BATCH = 6
+
+/** Search that works the same way over both halves of the page. */
+function requestMatches(request, query) {
+  const needle = query.trim().toLowerCase()
+  if (!needle) return true
+  return [
+    request.resource_name,
+    request.resource_id,
+    request.reason,
+    request.justification,
+    request.ticket_ref,
+    requesterLabel(request),
+  ].some((v) => String(v || '').toLowerCase().includes(needle))
+}
+
+// The one line of status the page leads with. It is a sentence rather than a
+// row of hero numbers because there are only ever two or three facts worth
+// carrying here, and three big tiles above a queue that is usually shorter
+// than the tiles themselves is the pattern that makes a console read as
+// unfinished.
+function QueueHeadline({ count, oldest, breakglass, awaitingFirst, awaitingSecond }) {
+  if (count === 0) return null
+  return (
+    <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+      <h2 className="text-sm font-semibold text-primary">
+        <span className="tabular">{count}</span>{' '}
+        {count === 1 ? 'request needs a decision' : 'requests need a decision'}
+      </h2>
+      {breakglass > 0 && (
+        <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-danger">
+          <ShieldAlert className="h-3.5 w-3.5 flex-none" strokeWidth={1.9} />
+          <span className="tabular">{breakglass}</span> break glass
+        </span>
+      )}
+      {oldest > 0 && (
+        <span
+          className={clsx(
+            'inline-flex items-center gap-1.5 text-xs',
+            oldest >= 24 * 3600 ? 'font-semibold text-warn' : 'text-secondary'
+          )}
+        >
+          <AlarmClock className="h-3.5 w-3.5 flex-none" strokeWidth={1.9} />
+          longest wait {formatDuration(oldest)}
+        </span>
+      )}
+      {/* Org-wide, from GET /admin/stats. The counts to its left are only what
+          this page has loaded, so the two are labelled differently on purpose
+          and never presented as the same number. */}
+      {(awaitingFirst > 0 || awaitingSecond > 0) && (
+        <span
+          className="inline-flex items-center gap-1.5 text-xs text-tertiary"
+          title="Across the whole org: awaiting a first approval, then awaiting a second"
+        >
+          <UsersRound className="h-3.5 w-3.5 flex-none" strokeWidth={1.9} />
+          org wide <span className="tabular font-semibold text-secondary">{awaitingFirst ?? 0}</span>
+          <span aria-hidden="true">›</span>
+          <span className="tabular font-semibold text-accent">{awaitingSecond ?? 0}</span>
+        </span>
+      )}
+    </div>
+  )
+}
+
 function RequestsTab() {
   const [search, setSearch] = useState('')
+  const [queueFilter, setQueueFilter] = useState('all')
+  const [queueOrder, setQueueOrder] = useState('asc')
+  const [queueShown, setQueueShown] = useState(QUEUE_BATCH)
   const [approveTarget, setApproveTarget] = useState(null)
   const [denyTarget, setDenyTarget] = useState(null)
   const [detailId, setDetailId] = useState(null)
@@ -551,9 +732,9 @@ function RequestsTab() {
 
   const rows = useMemo(() => requestsQuery.data?.requests || [], [requestsQuery.data])
 
-  // The three queue numbers, straight from the server rather than counted off
-  // whatever page happens to be loaded. Cheap, and the only honest source for
-  // a total that spans pages.
+  // The org-wide queue numbers, straight from the server rather than counted
+  // off whatever page happens to be loaded. Cheap, and the only honest source
+  // for a total that spans pages.
   const statsQuery = useQuery({
     queryKey: ['admin', 'stats'],
     queryFn: ({ signal }) => getStats(signal),
@@ -561,59 +742,35 @@ function RequestsTab() {
     retry: false,
   })
 
-  const table = useTableState({
-    rows,
-    storageKey: 'jit-approvals',
-    rowId: (r) => r.id,
-    // `requested_at` is models.JITRequest's own "when was this raised"
-    // column; `created_at` is the row's audit column and is only a fallback.
-    initialSort: { key: 'requested_at', dir: 'asc' }, // oldest first: a queue, not a feed
-    initialPageSize: 25,
-    initialFilters: { status: 'all' },
-    searchFields: ['resource_name', 'reason', requesterLabel],
-    filterFn: (r, f) => {
-      if (f.status === 'pending') return PENDING_LIKE.includes(r.status)
-      if (f.status === 'all') return true
-      return r.status === f.status
-    },
-    // THE ORDERING FIX. Two things were wrong and both are handled here.
-    //
-    //   1. Time was compared as TEXT. Go emits RFC3339 with variable-length
-    // fractional seconds, and the string comparator's `numeric: true`
-    // option read ".123456789" and ".5" as the numbers 123456789 and 5
-    //     , so same-second rows came out backwards. Returning an epoch
-    // number makes the comparator take its numeric path instead.
-    //   2. The key could miss the field. A stored preference from before
-    // this change still says `created_at`, so BOTH time keys resolve to
-    // the same value rather than one of them silently returning
-    // undefined for every row (which sorts everything equal, exactly
-    // the "nothing happens when I click it" symptom).
-    sortAccessor: (r, key) => {
-      if (key === 'requester') return requesterLabel(r)
-      if (key === 'requested_at' || key === 'created_at') {
-        const t = new Date(raisedAt(r) || 0).getTime()
-        return Number.isNaN(t) ? null : t
-      }
-      return r[key]
-    },
-  })
+  const pendingAll = useMemo(() => rows.filter((r) => PENDING_LIKE.includes(r.status)), [rows])
+  const decided = useMemo(() => rows.filter((r) => !PENDING_LIKE.includes(r.status)), [rows])
 
-  useEffect(() => {
-    table.setQuery(search)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search])
+  const pendingBreakglass = pendingAll.filter(isBreakglass).length
+  const oldest = pendingAll.reduce((max, r) => Math.max(max, waitedSeconds(raisedAt(r))), 0)
+  const awaitingSecond = pendingAll.filter((r) => r.status === JIT_STATUS.PARTIALLY_APPROVED).length
+
+  const stats = statsQuery.data
+  const awaitingFirstTotal = stats?.awaiting_first_approval
+  const awaitingSecondTotal = stats?.awaiting_second_approval
 
   // ---- four-eyes trail hydration -----------------------------------------
-  // Only PARTIALLY_APPROVED rows have a trail worth reading, and only the ones
-  // on the visible page are worth a request. A PENDING row has no approvals by
-  // definition, so fetching one would buy nothing.
+  // Only PARTIALLY_APPROVED requests have a trail worth reading. A PENDING
+  // one has no approvals by definition, so fetching it would buy nothing.
+  //
+  // Hydrated from the WHOLE pending set rather than from the cards currently
+  // on screen, and that ordering is deliberate: the "needs my decision"
+  // filter and its count both have to know whether this viewer is already on
+  // a request's trail, and deriving the trails from the visible slice would
+  // make the filter depend on the very list the filter produces. Bounded by
+  // TRAIL_HYDRATION_LIMIT, and the partially-approved set is small by nature,
+  // so this is a handful of requests, not one per row.
   const trailIds = useMemo(
     () =>
-      table.pageRows
+      pendingAll
         .filter((r) => r.status === JIT_STATUS.PARTIALLY_APPROVED)
         .slice(0, TRAIL_HYDRATION_LIMIT)
         .map((r) => r.id),
-    [table.pageRows]
+    [pendingAll]
   )
 
   const trailQueries = useQueries({
@@ -637,6 +794,132 @@ function RequestsTab() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trailIds, trailQueries.map((q) => q.dataUpdatedAt).join(',')])
 
+  /**
+   * Can this viewer act on this request right now.
+   *
+   * The trail is passed in wherever it has loaded, so the guard catches all
+   * three blocking cases rather than two: a request the viewer raised, one
+   * they have already approved, and a break-glass request still cooling off
+   * (JITService.Approve rejects WAITING outright). The server stays the
+   * authority; this only decides what is worth showing.
+   */
+  const actionable = (request) => !approveBlockedReason(request, trailsById[request.id] ?? null, viewer)
+
+  // ---- the queue ----------------------------------------------------------
+  // Break glass is pinned to the top regardless of the order control. It is
+  // an emergency grant that is already ticking through its cooling off
+  // period, so burying it under an hour of ordinary requests is the one
+  // ordering this page must never produce.
+  const queueSorted = useMemo(() => {
+    const list = pendingAll.filter((r) => requestMatches(r, search))
+    return list.sort((a, b) => {
+      const emergency = Number(isBreakglass(b)) - Number(isBreakglass(a))
+      if (emergency !== 0) return emergency
+      const ta = new Date(raisedAt(a) || 0).getTime() || 0
+      const tb = new Date(raisedAt(b) || 0).getTime() || 0
+      return queueOrder === 'desc' ? tb - ta : ta - tb
+    })
+  }, [pendingAll, search, queueOrder])
+
+  const mineCount = queueSorted.filter(actionable).length
+
+  const queue = useMemo(() => {
+    if (queueFilter === 'second') return queueSorted.filter((r) => r.status === JIT_STATUS.PARTIALLY_APPROVED)
+    if (queueFilter === 'mine') return queueSorted.filter(actionable)
+    return queueSorted
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queueSorted, queueFilter, viewer, trailsById])
+
+  const queueVisible = queue.slice(0, queueShown)
+  const queueRemaining = Math.max(0, queue.length - queueVisible.length)
+
+  // Reset the reveal whenever the queue is re-cut, otherwise a filter that
+  // returns four results still claims to be hiding some.
+  useEffect(() => {
+    setQueueShown(QUEUE_BATCH)
+  }, [queueFilter, queueOrder, search])
+
+  const queueFacets = useMemo(
+    () => [
+      { key: 'all', label: 'All', count: queueSorted.length },
+      { key: 'mine', label: 'Needs my decision', count: mineCount },
+      // Its own facet, not folded into the rest: a request that already has
+      // one approval is a single click from live access, which makes it the
+      // fastest thing in the queue to clear.
+      ...(awaitingSecond > 0
+        ? [
+            {
+              key: 'second',
+              label: 'Needs 2nd approval',
+              count: queueSorted.filter((r) => r.status === JIT_STATUS.PARTIALLY_APPROVED).length,
+            },
+          ]
+        : []),
+    ],
+    [queueSorted, mineCount, awaitingSecond]
+  )
+
+
+  // ---- the history --------------------------------------------------------
+  const table = useTableState({
+    rows: decided,
+    storageKey: 'jit-approvals',
+    rowId: (r) => r.id,
+    // `requested_at` is models.JITRequest's own "when was this raised"
+    // column; `created_at` is the row's audit column and is only a fallback.
+    initialSort: { key: 'requested_at', dir: 'desc' }, // a log reads newest first
+    initialPageSize: 25,
+    initialFilters: { status: 'all' },
+    searchFields: ['resource_name', 'reason', requesterLabel],
+    filterFn: (r, f) => (f.status === 'all' ? true : r.status === f.status),
+    // THE ORDERING FIX. Two things were wrong and both are handled here.
+    //
+    //   1. Time was compared as TEXT. Go emits RFC3339 with variable-length
+    //      fractional seconds, and the string comparator's `numeric: true`
+    //      option read ".123456789" and ".5" as the numbers 123456789 and 5,
+    //      so same-second rows came out backwards. Returning an epoch number
+    //      makes the comparator take its numeric path instead.
+    //   2. The key could miss the field. A stored preference from before this
+    //      change still says `created_at`, so BOTH time keys resolve to the
+    //      same value rather than one of them silently returning undefined
+    //      for every row (which sorts everything equal, exactly the "nothing
+    //      happens when I click it" symptom).
+    sortAccessor: (r, key) => {
+      if (key === 'requester') return requesterLabel(r)
+      if (key === 'requested_at' || key === 'created_at') {
+        const t = new Date(raisedAt(r) || 0).getTime()
+        return Number.isNaN(t) ? null : t
+      }
+      return r[key]
+    },
+  })
+
+  useEffect(() => {
+    table.setQuery(search)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search])
+
+  const historyFacets = useMemo(() => {
+    const seen = [...new Set(decided.map((r) => r.status))].sort()
+    return [
+      { key: 'all', label: 'All', count: decided.length },
+      ...seen.map((s) => ({
+        key: s,
+        label: JIT_STATUS_LABELS[s] || s,
+        count: decided.filter((r) => r.status === s).length,
+      })),
+    ]
+  }, [decided])
+
+  // A stored filter from the old single-table layout can name a status that
+  // no longer exists in this control ("pending", or a decided status that is
+  // not on this page). Left alone it shows an empty history with no selected
+  // segment and no way back.
+  useEffect(() => {
+    if (!historyFacets.some((f) => f.key === table.filters.status)) table.setFilter('status', 'all')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [historyFacets])
+
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ['admin', 'jit-requests'] })
     queryClient.invalidateQueries({ queryKey: ['admin', 'jit-request'] })
@@ -652,7 +935,9 @@ function RequestsTab() {
       const result = readApproveResult(data)
       if (result.partial) {
         toast.success(approveResultMessage(result), {
-          description: result.next || 'A second, different admin, or root, must approve to issue the grant.',
+          description:
+            userFacingNext(result.next) ||
+            'A second, different admin, or root, must approve to issue the grant.',
         })
       } else {
         toast.success(approveResultMessage(result), {
@@ -690,225 +975,231 @@ function RequestsTab() {
 
   const busy = approveMutation.isPending || denyMutation.isPending
 
-  const pending = rows.filter((r) => PENDING_LIKE.includes(r.status))
-  const pendingBreakglass = pending.filter(isBreakglass).length
-  const oldest = pending.reduce((max, r) => Math.max(max, waitedSeconds(raisedAt(r))), 0)
-  const awaitingSecond = rows.filter((r) => r.status === JIT_STATUS.PARTIALLY_APPROVED).length
-
-  // Server-side totals where we have them, page-derived counts where we don't.
-  // The stats endpoint spans every page; the loaded rows do not.
-  const stats = statsQuery.data
-  const awaitingFirstTotal = stats?.awaiting_first_approval
-  const awaitingSecondTotal = stats?.awaiting_second_approval
-
-  const facets = useMemo(() => {
-    const decided = rows.filter((r) => !PENDING_LIKE.includes(r.status))
-    const seen = [...new Set(decided.map((r) => r.status))].sort()
-    return [
-      { key: 'all', label: 'All', count: rows.length },
-      { key: 'pending', label: 'Awaiting decision', count: pending.length },
-      // Its own facet, not folded into "awaiting decision": a request that
-      // already has one approval is one click from live access, and it is the
-      // fastest thing in the queue to clear.
-      ...(awaitingSecond > 0
-        ? [{ key: JIT_STATUS.PARTIALLY_APPROVED, label: 'Needs 2nd approval', count: awaitingSecond }]
-        : []),
-      ...seen.map((s) => ({
-        key: s,
-        label: JIT_STATUS_LABELS[s] || s,
-        count: decided.filter((r) => r.status === s).length,
-      })),
-    ]
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows])
-
-  const queueView = table.filters.status === 'pending'
+  const searching = search.trim().length > 0
 
   return (
     <>
-      {/* NO KPI STRIP HERE. It carried three figures, awaiting decision,
- longest wait, break-glass pending, and every one of them is now
- restated more usefully further down the page: the facet row counts
- them, the decision cards each carry their own waiting time, and
- break-glass rows are red-railed and impossible to miss. Three hero
- numbers on top of a queue that is usually one screen long is exactly
- the pattern that makes a console read as unfinished.
-
-          The default view is ALL requests, not just the pending ones: an
- approver arriving here wants to see what the queue looks like
- including what has just been decided, and a screen that opens on
-          "nothing to do" tells them nothing about whether the system is
- working. Awaiting-decision is one click away and always first-sorted
- to the top. */}
-      <ListPanel
-        toolbar={
-          <div className="flex flex-wrap items-center gap-2">
-            <SearchField
-              value={search}
-              onChange={setSearch}
-              placeholder="Search requester, resource or reason…"
-              className="min-w-[15rem] sm:max-w-sm"
+      <div className="space-y-5">
+        {/* ---- the queue ---------------------------------------------- */}
+        <section aria-label="Requests awaiting a decision" className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+            <QueueHeadline
+              count={pendingAll.length}
+              oldest={oldest}
+              breakglass={pendingBreakglass}
+              awaitingFirst={awaitingFirstTotal}
+              awaitingSecond={awaitingSecondTotal}
             />
-            <SegmentedControl
-              size="sm"
-              ariaLabel="Filter requests"
-              value={table.filters.status}
-              onChange={(v) => table.setFilter('status', v)}
-              options={facets}
-            />
-
-            {/* ORDER CONTROL. The queue sorts oldest-first by default, correct
- for working through a backlog, wrong when you want to see what
- just came in, and previously not changeable at all: the newest
- request was always at the bottom of the list with no way to flip
- it. Two explicit options rather than a click-cycling sort header,
- because there is only one thing here worth ordering by (time) and
- a card list has no header row to put a sort control in. */}
-            <SegmentedControl
-              size="sm"
-              ariaLabel="Sort by request time"
-              value={table.sort?.dir === 'desc' ? 'desc' : 'asc'}
-              onChange={(dir) => {
-                table.setSort({ key: 'requested_at', dir })
-                table.setPage(1)
-              }}
-              options={[
-                { key: 'asc', label: 'Oldest first' },
-                { key: 'desc', label: 'Newest first' },
-              ]}
-            />
-            <span className="ml-auto flex items-center gap-3">
-              {/* The two facts the strip used to carry, as one honest line of
- chrome instead of three hero cards. They only appear when they
- mean something. */}
-              {/* Org-wide, from GET /admin/stats, the counts above are only what
- this page has loaded. Rendered as "3 → 2" because the two numbers
- are stages of one queue, not two unrelated totals. */}
-              {(awaitingFirstTotal > 0 || awaitingSecondTotal > 0) && (
-                <span
-                  className="hidden items-center gap-1.5 text-xs font-medium text-ink-400 sm:flex"
-                  title="Org-wide: awaiting a first approval → awaiting a second"
-                >
-                  <UsersRound className="h-3.5 w-3.5 flex-none" strokeWidth={1.9} />
-                  <span className="tabular-nums">{awaitingFirstTotal ?? 0}</span>
-                  <span className="text-ink-600">→</span>
-                  <span className="tabular-nums text-blue-600 dark:text-blue-400">
-                    {awaitingSecondTotal ?? 0}
-                  </span>
-                  <span className="text-ink-500">awaiting approval</span>
-                </span>
-              )}
-              {pending.length > 0 && (
-                <span className="hidden items-center gap-1.5 text-xs font-medium text-amber-600 dark:text-amber-400 sm:flex">
-                  <AlarmClock className="h-3.5 w-3.5 flex-none" strokeWidth={1.9} />
-                  longest wait {formatDuration(oldest)}
-                </span>
-              )}
-              {pendingBreakglass > 0 && (
-                <span className="hidden items-center gap-1.5 text-xs font-medium text-red-600 dark:text-red-400 sm:flex">
-                  <ShieldAlert className="h-3.5 w-3.5 flex-none" strokeWidth={1.9} />
-                  <span className="tabular-nums">{pendingBreakglass}</span> break-glass pending
-                </span>
-              )}
+            <div className="ml-auto flex flex-wrap items-center gap-2">
+              <SearchField
+                value={search}
+                onChange={setSearch}
+                placeholder="Search requester, resource or reason"
+                className="min-w-[14rem] sm:max-w-xs"
+              />
               <RefreshControl
                 onRefresh={() => requestsQuery.refetch()}
                 isFetching={requestsQuery.isFetching}
                 updatedAt={requestsQuery.dataUpdatedAt}
               />
-            </span>
+            </div>
           </div>
-        }
-      >
-        <QueryState
-          query={requestsQuery}
-          empty={(d) => !d?.requests || d.requests.length === 0}
-          emptyTitle="No JIT requests"
-          emptyMessage="Access requests from across the org land here for approval."
-        >
-          {() =>
-            table.total === 0 ? (
+
+          {pendingAll.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2">
+              <SegmentedControl
+                size="sm"
+                ariaLabel="Filter the queue"
+                value={queueFilter}
+                onChange={setQueueFilter}
+                options={queueFacets}
+              />
+              {/* ORDER CONTROL. Oldest first is right for working through a
+                  backlog and wrong for seeing what just came in, and it was
+                  previously not changeable at all. Two explicit options
+                  rather than a click-cycling header, because a card list has
+                  no header row and there is only one thing here worth
+                  ordering by. */}
+              <SegmentedControl
+                size="sm"
+                ariaLabel="Order the queue"
+                value={queueOrder}
+                onChange={setQueueOrder}
+                options={[
+                  { key: 'asc', label: 'Oldest first' },
+                  { key: 'desc', label: 'Newest first' },
+                ]}
+              />
+            </div>
+          )}
+
+          <QueryState
+            query={requestsQuery}
+            empty={() => false}
+            emptyTitle="No JIT requests"
+            emptyMessage="Access requests from across the org land here for approval."
+          >
+            {() =>
+              queue.length === 0 ? (
+                <Card className="!p-0">
+                  <EmptyState
+                    icon={pendingAll.length === 0 ? CheckCircle2 : SearchX}
+                    title={
+                      pendingAll.length === 0
+                        ? 'Queue clear, nothing awaiting a decision'
+                        : 'Nothing in the queue matches'
+                    }
+                    description={
+                      pendingAll.length === 0
+                        ? 'Every access request has been decided. New requests appear here the moment they are raised.'
+                        : `${pendingAll.length} ${pendingAll.length === 1 ? 'request is' : 'requests are'} awaiting a decision, but none match the current search or filter.`
+                    }
+                    action={
+                      pendingAll.length > 0 && (
+                        <Button
+                          variant="secondary"
+                          onClick={() => {
+                            setSearch('')
+                            setQueueFilter('all')
+                          }}
+                        >
+                          Show the whole queue
+                        </Button>
+                      )
+                    }
+                  />
+                </Card>
+              ) : (
+                <div className="space-y-3">
+                  {queueVisible.map((r) => (
+                    <DecisionCard
+                      key={r.id}
+                      request={r}
+                      approvals={trailsById[r.id] ?? null}
+                      viewer={viewer}
+                      busy={busy}
+                      onApprove={() => setApproveTarget(r)}
+                      onDeny={() => setDenyTarget(r)}
+                      onOpen={() => setDetailId(r.id)}
+                    />
+                  ))}
+                  {/* Revealed in batches rather than paginated. A queue is
+                      worked from the top down, and a page control would let
+                      an approver leave page two undecided without ever
+                      seeing it. The count says exactly what is still
+                      hidden. */}
+                  {queueRemaining > 0 && (
+                    <Button
+                      variant="secondary"
+                      className="w-full"
+                      onClick={() => setQueueShown((n) => n + QUEUE_BATCH)}
+                    >
+                      Show {Math.min(QUEUE_BATCH, queueRemaining)} more, {queueRemaining} still hidden
+                    </Button>
+                  )}
+                </div>
+              )
+            }
+          </QueryState>
+        </section>
+
+        {/* ---- the history -------------------------------------------- */}
+        {decided.length > 0 && (
+          <section aria-label="Decided requests" className="space-y-3">
+            <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2 border-t border-line-soft pt-5">
               <div>
+                <h2 className="text-sm font-semibold text-primary">Decided</h2>
+                <p className="mt-0.5 text-xs text-secondary">
+                  Approved, denied, cancelled and expired requests. Nothing here needs a decision.
+                </p>
+              </div>
+              <SegmentedControl
+                size="sm"
+                ariaLabel="Filter decided requests"
+                value={table.filters.status}
+                onChange={(v) => {
+                  table.setFilter('status', v)
+                  table.setPage(1)
+                }}
+                options={historyFacets}
+              />
+            </div>
+
+            <ListPanel>
+              {table.total === 0 ? (
                 <EmptyState
-                  icon={queueView ? CheckCircle2 : SearchX}
-                  title={
-                    queueView ? 'Queue clear, nothing awaiting a decision' : 'Nothing matches these filters'
-                  }
+                  icon={SearchX}
+                  title="Nothing matches these filters"
                   description={
-                    queueView
-                      ? 'Every access request has been decided. New requests appear here the moment they are raised.'
-                      : 'No request matches the current search or status selection.'
+                    searching
+                      ? `No decided request matches "${search.trim()}".`
+                      : 'No decided request matches the current status selection.'
                   }
                   action={
-                    !queueView && (
-                      <Button
-                        variant="secondary"
-                        onClick={() => {
-                          setSearch('')
-                          table.setFilter('status', 'all')
-                        }}
-                      >
-                        Show all requests
-                      </Button>
-                    )
+                    <Button
+                      variant="secondary"
+                      onClick={() => {
+                        setSearch('')
+                        table.setFilter('status', 'all')
+                      }}
+                    >
+                      Clear filters
+                    </Button>
                   }
                 />
-              </div>
-            ) : (
-              <>
-                <DataTable minWidth="58rem">
-                  <colgroup>
-                    <col className="w-[24rem] min-w-[16rem]" />
-                    <col className="w-[8rem]" />
-                    <col className="w-[8rem]" />
-                    <col className="w-[11rem]" />
-                    <col className="w-[15rem]" />
-                  </colgroup>
-                  <thead>
-                    <tr>
-                      <Th sticky edge>
-                        Request
-                      </Th>
-                      <Th>Window</Th>
-                      <Th>Age</Th>
-                      <Th>State</Th>
-                      <Th align="right">
-                        <span className="sr-only">Actions</span>
-                      </Th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {table.pageRows.map((r) =>
-                      PENDING_LIKE.includes(r.status) ? (
-                        <DecisionRow
-                          key={r.id}
-                          request={r}
-                          approvals={trailsById[r.id] ?? null}
-                          viewer={viewer}
-                          busy={busy}
-                          onApprove={() => setApproveTarget(r)}
-                          onDeny={() => setDenyTarget(r)}
-                          onOpen={() => setDetailId(r.id)}
+              ) : (
+                <>
+                  <DataTable minWidth="52rem">
+                    <colgroup>
+                      <col className="w-[26rem] min-w-[16rem]" />
+                      <col className="w-[8rem]" />
+                      <col className="w-[9rem]" />
+                      <col className="w-[11rem]" />
+                      <col className="w-[7rem]" />
+                    </colgroup>
+                    <thead>
+                      <tr>
+                        <Th sticky edge>
+                          Request
+                        </Th>
+                        <Th>Window</Th>
+                        {/* SortHeader renders its own th. */}
+                        <SortHeader
+                          label="Raised"
+                          columnKey="requested_at"
+                          sort={table.sort}
+                          onSort={(key) => {
+                            table.toggleSort(key)
+                            table.setPage(1)
+                          }}
                         />
-                      ) : (
+                        <Th>Outcome</Th>
+                        <Th align="right">
+                          <span className="sr-only">Actions</span>
+                        </Th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {table.pageRows.map((r) => (
                         <DecidedRow key={r.id} request={r} onOpen={() => setDetailId(r.id)} />
-                      )
-                    )}
-                  </tbody>
-                </DataTable>
-                <Pagination
-                  page={table.page}
-                  pageSize={table.pageSize}
-                  total={table.total}
-                  totalPages={table.totalPages}
-                  onPageChange={table.setPage}
-                  onPageSizeChange={table.setPageSize}
-                  label="requests"
-                />
-              </>
-            )
-          }
-        </QueryState>
-      </ListPanel>
+                      ))}
+                    </tbody>
+                  </DataTable>
+                  <Pagination
+                    page={table.page}
+                    pageSize={table.pageSize}
+                    total={table.total}
+                    totalPages={table.totalPages}
+                    onPageChange={table.setPage}
+                    onPageSizeChange={table.setPageSize}
+                    label="requests"
+                  />
+                </>
+              )}
+            </ListPanel>
+          </section>
+        )}
+      </div>
 
       <RequestDetailDrawer id={detailId} onClose={() => setDetailId(null)} viewerId={viewer.id} />
 

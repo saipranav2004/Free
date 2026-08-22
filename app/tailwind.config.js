@@ -57,6 +57,8 @@ export default {
         accent: {
           DEFAULT: 'rgb(var(--accent) / <alpha-value>)',
           hover: 'rgb(var(--accent-hover) / <alpha-value>)',
+          // Foreground for anything sitting ON an accent fill.
+          on: 'rgb(var(--accent-on) / <alpha-value>)',
           soft: 'rgb(var(--accent-soft) / <alpha-value>)',
           active: 'rgb(var(--accent-active) / <alpha-value>)',
         },

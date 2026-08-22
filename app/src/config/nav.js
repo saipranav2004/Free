@@ -12,6 +12,7 @@ import {
   Archive,
   Settings as SettingsIcon,
   ShieldCheck,
+  Share2,
 } from 'lucide-react'
 
 // ---------------------------------------------------------------------------
@@ -66,6 +67,10 @@ export function consoleNav(isAdmin) {
 // there (see App.jsx).
 export const ADMIN_NAV = [
   { to: '/admin/identity', label: 'Identity', icon: Users },
+  // Sits directly under Identity because it answers the question the identity
+  // list raises: this account holds these roles, so what does that actually
+  // reach? Same subject, one level deeper.
+  { to: '/admin/identity-graph', label: 'Identity Graph', icon: Share2 },
   { to: '/admin/roles', label: 'Roles', icon: Lock },
   // Role-gated MFA enforcement. Sits next to Roles because that is what it
   // gates, the rule targets a role, and membership of the role is the gate.
@@ -91,6 +96,7 @@ export const CRUMB_LABELS = {
   identity: 'Identity',
   dashboard: 'Dashboard',
   roles: 'Roles',
+  'identity-graph': 'Identity Graph',
   policies: 'Policies',
   'vault-ops': 'Vault Operations',
   'mfa-policy': 'MFA Policy',

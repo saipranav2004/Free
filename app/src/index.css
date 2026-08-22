@@ -54,6 +54,11 @@
 
   /* -- accent ------------------------------------------------------------- */
   --accent: 0 108 224;
+  /* The text that goes ON an accent fill. It is a token rather than a literal
+     because the answer flips between themes: white reads on the light theme's
+     deep blue (4.97:1) and fails badly on the dark theme's pale one (2.28:1),
+     which is exactly what every primary button in dark mode was doing. */
+  --accent-on: 255 255 255;
   --accent-hover: 0 43 102;
   --accent-soft: 240 251 255;
   --accent-active: 209 241 255;
@@ -85,7 +90,13 @@
   --ink-300: 66 70 80;
   --ink-400: 101 104 113;
   --ink-500: 101 104 113;
-  --ink-600: 140 140 148;
+  /* Darkened from 140 140 148. It is used for small-caps section labels at
+     13px ("Console", "Filtered by"), which measured 3.09:1 on the app plane
+     and 3.22:1 on a card: below the 4.5 that normal-size text needs, and the
+     only WCAG AA failure an axe sweep of the console turned up. 106 110 120
+     clears it on every light surface the token lands on (4.73:1 worst case)
+     while staying clearly quieter than --text-tertiary. */
+  --ink-600: 106 110 120;
 
   /* -- elevation ---------------------------------------------------------- */
   /* Cloudscape sets shadow-card to none. A static surface gets a border. Only
@@ -110,28 +121,94 @@
   --chrome-line: 198 198 205;
   --chrome-hover: 235 235 240;
 
+  /* ---------------------------------------------------------------------
+   * CHART PALETTE
+   * ---------------------------------------------------------------------
+   * The charts used to hold one hard-coded set of hex values for both
+   * themes, which meant every one of them failed contrast in one theme or
+   * the other: the blue measured 3.07:1 on the dark card, and the green and
+   * amber 2.54:1 and 2.15:1 on the white one. A dark palette is a SELECTED
+   * palette, not a flipped one, so there are two, and both were run through
+   * the palette validator rather than eyeballed.
+   *
+   * THE PAIRING IS EMPHASIS, NOT CATEGORICAL. Volume and denials are not two
+   * peer categories; the denials are the point and the volume is the context
+   * they sit in. A red/green succeeded-versus-denied pair, which is what this
+   * wanted to be, measures 5.0 dE under deuteranopia and 2.8 in dark: a red
+   * green colourblind reader cannot separate them at all. Blue for context
+   * and red for the exception measures 20+ dE in every simulation.
+   *
+   * Validated: lightness band, chroma floor, colour-vision separation,
+   * normal-vision floor, and contrast against this mode's real card colour.
+   */
+  --chart-series: 22 104 201;
+  --chart-denied: 200 16 46;
+  --chart-muted: 118 128 142;
+  --chart-grid: 235 235 240;
+
+  /* Sequential ramp for the activity heatmap: one hue, monotone lightness,
+     four steps. Zero is drawn as an empty cell rather than a fifth pale step,
+     which is both honest and what keeps the light end above the 2:1 floor. */
+  --chart-seq-1: 127 178 234;
+  --chart-seq-2: 79 146 224;
+  --chart-seq-3: 36 112 200;
+  --chart-seq-4: 11 67 130;
+
   color-scheme: light;
 }
 
 .dark {
+  /* ---------------------------------------------------------------------
+   * THE SURFACE LADDER, AND THE ONE THING THAT WAS WRONG WITH IT
+   * ---------------------------------------------------------------------
+   * `--bg-app` and `--bg-surface` used to hold the SAME value. Every card,
+   * table and panel sat on exactly the page colour, so nothing was ever
+   * raised off anything: the only thing separating a container from the page
+   * behind it was a hairline, and a screen of them read as one flat sheet
+   * with lines drawn on it. That is the whole reason this theme felt heavier
+   * than the console it is modelled on.
+   *
+   * AWS's dark mode is clean because it keeps four distinct planes and never
+   * skips one. These are its values, and they are used the same way:
+   *
+   *   #161d26  the page behind everything          (layout main)
+   *   #1b232d  a container: card, table, panel     (container content)
+   *   #212a36  a band inside one: header, footer   (container header)
+   *   #2a3442  hover
+   *
+   * Each step is small enough to stay calm and large enough to read as a
+   * separate plane, which is what lets the borders drop to a hairline
+   * without anything dissolving.
+   */
   --bg-app: 22 29 38;
-  --bg-surface: 22 29 38;
-  --bg-subtle: 27 35 45;
-  --bg-hover: 33 42 54;
+  --bg-surface: 27 35 45;
+  --bg-subtle: 33 42 54;
+  --bg-hover: 42 52 66;
 
-  --border: 66 70 80;
-  --border-soft: 35 43 55;
-  --border-strong: 101 104 113;
+  /* Bluer than the greys they replace, so a divider belongs to the navy
+     ground instead of sitting on top of it as a neutral smear. */
+  --border: 65 77 92;
+  --border-soft: 39 50 64;
+  --border-strong: 125 137 152;
 
-  --text-primary: 235 235 240;
-  --text-secondary: 198 198 205;
-  --text-tertiary: 164 164 173;
-  --text-disabled: 116 120 130;
+  /* Headings go to near white and body text to a light blue grey. The old
+     values ran everything through one neutral ramp, which left headings
+     looking slightly switched off next to the accent. */
+  --text-primary: 249 249 250;
+  --text-secondary: 209 213 219;
+  --text-tertiary: 182 190 201;
+  --text-disabled: 116 124 138;
 
   --accent: 66 180 255;
+  /* Near-black on the pale blue, which is what Cloudscape's own dark primary
+     button does and the only way a light accent fill can carry text: 8.31:1
+     at rest, 10.95:1 on hover. */
+  --accent-on: 8 17 28;
   --accent-hover: 117 207 255;
-  --accent-soft: 0 17 41;
-  --accent-active: 0 32 74;
+  /* Lifted off pure navy so a selected row still reads as a surface rather
+     than as a hole cut in the page. */
+  --accent-soft: 6 37 71;
+  --accent-active: 11 52 97;
 
   --danger: 255 122 122;
   --danger-soft: 44 21 21;
@@ -143,22 +220,28 @@
   --ok: 43 181 52;
   --ok-soft: 12 36 18;
 
+  /* The numbered ramp moves with the named tokens above, one step each. The
+     screens still on it (segmented controls, table chrome) would otherwise
+     drift a plane away from everything that uses --bg-surface. */
   --surface-1000: 16 21 28;
   --surface-950: 22 29 38;
-  --surface-900: 22 29 38;
-  --surface-850: 27 35 45;
-  --surface-800: 27 35 45;
-  --surface-750: 33 42 54;
-  --surface-700: 66 70 80;
-  --surface-600: 101 104 113;
+  --surface-900: 27 35 45;
+  --surface-850: 33 42 54;
+  --surface-800: 33 42 54;
+  --surface-750: 42 52 66;
+  --surface-700: 65 77 92;
+  --surface-600: 125 137 152;
 
-  --ink-50: 235 235 240;
-  --ink-100: 224 224 231;
-  --ink-200: 198 198 205;
-  --ink-300: 180 180 189;
-  --ink-400: 164 164 173;
-  --ink-500: 148 151 160;
-  --ink-600: 116 120 130;
+  --ink-50: 249 249 250;
+  --ink-100: 232 234 238;
+  --ink-200: 209 213 219;
+  --ink-300: 196 202 211;
+  --ink-400: 182 190 201;
+  --ink-500: 150 160 174;
+  /* Same label token, same fix, selected against the dark planes rather than
+     derived from the light value: 116 124 138 measured 2.99:1 on the hover
+     plane. 150 159 174 clears 4.5 on all four (4.72:1 worst case). */
+  --ink-600: 150 159 174;
 
   --shadow-card: none;
   --shadow-raised: none;
@@ -166,11 +249,22 @@
   --shadow-overlay: 0 8px 28px -8px rgb(0 0 0 / 0.70), 0 2px 6px -2px rgb(0 0 0 / 0.50);
   --shadow-frozen: 8px 0 10px -8px rgb(0 0 0 / 0.55);
 
-  --chrome-bg: 27 35 45;
-  --chrome-fg: 235 235 240;
-  --chrome-muted: 164 164 173;
-  --chrome-line: 66 70 80;
-  --chrome-hover: 33 42 54;
+  --chrome-bg: 33 42 54;
+  --chrome-fg: 249 249 250;
+  --chrome-muted: 182 190 201;
+  --chrome-line: 65 77 92;
+  --chrome-hover: 42 52 66;
+
+  /* Selected against the dark card (#1b232d), not flipped from light. */
+  --chart-series: 66 149 232;
+  --chart-denied: 224 95 102;
+  --chart-muted: 150 160 174;
+  --chart-grid: 39 50 64;
+
+  --chart-seq-1: 47 93 143;
+  --chart-seq-2: 58 122 184;
+  --chart-seq-3: 72 151 220;
+  --chart-seq-4: 111 178 242;
 
   color-scheme: dark;
 }
@@ -394,6 +488,38 @@ html {
     inset 0 1px 0 0 rgb(255 255 255 / 0.04);
 }
 
+/* Chart entrance. The only motion on this page that carries meaning rather
+   than decorating: a column growing from the baseline shows the reader where
+   zero is, which is the one thing a bar chart's encoding depends on. It runs
+   once on mount and once per data change, never on hover, and the global
+   reduced-motion rule above collapses it to nothing. */
+@keyframes chart-rise {
+  from {
+    transform: scaleY(0);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+
+.chart-rise {
+  transform-origin: bottom;
+  animation: chart-rise 480ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes cell-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.cell-in {
+  animation: cell-in 320ms ease-out both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   .animate-overlay-in,
@@ -402,6 +528,8 @@ html {
   .animate-sheet-in,
   .animate-drawer-in,
   .skeleton,
+  .chart-rise,
+  .cell-in,
   .dot-live::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
@@ -482,4 +610,39 @@ input:-webkit-autofill:focus {
   -webkit-text-fill-color: rgb(var(--text-primary));
   -webkit-box-shadow: 0 0 0 1000px rgb(var(--bg-subtle)) inset;
   caret-color: rgb(var(--text-primary));
+}
+
+/* React Flow ships its own hard-coded light palette for the zoom controls
+   (#fefefe fill, #222 glyph), which renders as a white box with invisible
+   icons on the dark canvas. The library exposes no token for these, so the
+   only way to make the graph obey the theme is to repaint them here. Scoped
+   to the control buttons, so nothing else the library draws is touched. */
+/* Scoped through .react-flow on purpose. The library's own rule is a single
+   class, and its stylesheet is imported from the page component, so it lands
+   AFTER this file in the bundle and wins any tie. Two classes settles it
+   without resorting to !important. */
+.react-flow .react-flow__controls-button {
+  background: rgb(var(--bg-surface));
+  border-bottom: 1px solid rgb(var(--border-soft));
+  fill: rgb(var(--text-secondary));
+  color: rgb(var(--text-secondary));
+}
+.react-flow .react-flow__controls-button:hover {
+  background: rgb(var(--bg-hover));
+  fill: rgb(var(--text-primary));
+  color: rgb(var(--text-primary));
+}
+.react-flow .react-flow__controls-button:last-child {
+  border-bottom: none;
+}
+.react-flow .react-flow__controls-button:disabled {
+  opacity: 0.4;
+}
+.react-flow .react-flow__controls-button svg {
+  fill: currentColor;
+}
+
+/* The minimap ships the same hard-coded light fill. */
+.react-flow .react-flow__minimap {
+  background: rgb(var(--bg-surface));
 }

@@ -37,8 +37,7 @@ import {
   approveResultMessage,
   approvalErrorMessage,
   isStaleStateError,
-  viewerIdOf,
-} from '../../lib/fourEyes'
+  viewerIdOf, userFacingNext } from '../../lib/fourEyes'
 import { ApprovalProgress } from '../../components/jit/ApprovalTrail'
 import {
   JIT_STATUS,
@@ -231,7 +230,8 @@ export default function AdminOverviewPage() {
       const result = readApproveResult(data)
       toast.success(approveResultMessage(result), {
         description: result.partial
-          ? result.next || 'A second, different admin, or root, must approve to issue the grant.'
+          ? userFacingNext(result.next) ||
+            'A second, different admin, or root, must approve to issue the grant.'
           : undefined,
       })
       setApproveTarget(null)

@@ -26,7 +26,7 @@ import { Spinner } from './Spinner'
 // #002b66). Lightening on hover reads as the control receding; darkening
 // reads as it firming up under the pointer.
 const VARIANTS = {
-  primary: 'border border-transparent bg-accent text-white hover:bg-accent-hover active:bg-accent-hover',
+  primary: 'border border-transparent bg-accent text-accent-on hover:bg-accent-hover active:bg-accent-hover',
   secondary: 'border border-line-strong bg-surface text-accent hover:bg-accent-soft active:bg-accent-active',
   // A neutral secondary, for toolbars where a row of blue labels would be
   // louder than the data underneath them.
@@ -107,7 +107,12 @@ export const Button = forwardRef(function Button(
       {loading ? (
         <Spinner
           size={glyph}
-          className={variant === 'primary' || variant === 'danger' ? 'text-white' : undefined}
+          // The icon inherits the same foreground rule as the label, so a
+          // dark-theme primary button does not end up with a white glyph beside
+          // near-black text.
+          className={
+            variant === 'primary' ? 'text-accent-on' : variant === 'danger' ? 'text-white' : undefined
+          }
         />
       ) : (
         Icon && <Icon className={clsx(glyph, 'flex-none')} strokeWidth={2} />

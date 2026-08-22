@@ -18,12 +18,20 @@ import logoMark from '../../assets/logo-mark.png'
 // area, with a real border underneath. Chrome is quiet, data is on white, and
 // a line separates them rather than a change of brightness.
 //
-// It is 48px instead of the previous 64px because the breadcrumb left.
-// Breadcrumbs describe where you are inside your data, so they belong in the
-// content area above the page title (see Breadcrumbs.jsx), not in product
-// chrome. Stacking a console name over a breadcrumb is what made the bar two
-// lines tall in the first place.
-export const NAVBAR_HEIGHT_CLASS = 'h-12'
+// 64px. It carries a single line (no breadcrumb, that lives in the content
+// area above the page title, see Breadcrumbs.jsx), but 48px squeezed the
+// wordmark down to a size where it read as an icon rather than as a brand,
+// and left the controls feeling cramped against the top edge.
+//
+// EVERY OTHER SURFACE MEASURES OFF THESE. The shell's top padding and the
+// overlay panels that must sit below the bar all import these constants
+// rather than repeating a number, because the last time this height changed
+// the drawer kept its old offset and slid underneath the navbar.
+export const NAVBAR_HEIGHT_CLASS = 'h-16'
+/** Top offset for anything that must begin below the navbar. */
+export const NAVBAR_BELOW_CLASS = 'top-16'
+/** Padding the app shell needs so content clears the fixed navbar. */
+export const NAVBAR_PT_CLASS = 'pt-16'
 
 export function TopNavbar({
   isAdmin = false,
@@ -37,8 +45,8 @@ export function TopNavbar({
   const isDark = useThemeStore((s) => s.isDark)
 
   return (
-    <header className="fixed inset-x-0 top-0 z-50 h-12 border-b border-chrome-line bg-chrome text-chrome-fg">
-      <div className="flex h-full items-center gap-2 pl-3 pr-2 sm:gap-3 sm:pl-4 sm:pr-3">
+    <header className="fixed inset-x-0 top-0 z-50 h-16 border-b border-chrome-line bg-chrome text-chrome-fg">
+      <div className="flex h-full items-center gap-2 pl-4 pr-3 sm:gap-3 sm:pl-5 sm:pr-4">
         {/* Company mark, left corner, and the only place it appears. */}
         <NavLink
           to="/"
@@ -48,9 +56,9 @@ export function TopNavbar({
           <img
             src={isDark ? logoWordmarkDark : logoWordmark}
             alt="Deep Algorithms"
-            className="hidden h-6 w-auto sm:block"
+            className="hidden h-8 w-auto sm:block"
           />
-          <img src={logoMark} alt="Deep Algorithms" className="h-6 w-6 object-contain sm:hidden" />
+          <img src={logoMark} alt="Deep Algorithms" className="h-8 w-8 object-contain sm:hidden" />
         </NavLink>
 
         <button
