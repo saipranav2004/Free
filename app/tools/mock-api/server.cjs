@@ -1519,8 +1519,11 @@ function classifyRootBypass(role, policies, members, resources) {
       },
       {
         key: 'escalation', label: 'Escalation path', score: CRIT.maxEscalation, max: CRIT.maxEscalation,
-        summary: 'Holds Admin Center write access, so it can create accounts, grant roles and rewrite the policies that constrain every other role.',
-        evidence: ['middleware.RequireAdmin accepts root'],
+        summary: 'Holds Admin Center write access, and is the only role that can hand out admin. It can create accounts, delegate administrative access to any of them, and rewrite the policies that constrain every other role.',
+        evidence: [
+          'middleware.RequireAdmin accepts root',
+          'IdentityService.DelegateAdmin requires root rank; no other role can grant admin',
+        ],
       },
     ],
     // No mitigations. A JIT gate and a recording flag are properties of a
@@ -1623,6 +1626,12 @@ on('PUT', '/api/v1/pam/admin/rbac/roles/:id/criticality', (ctx) => {
   if (TIER[band] === undefined) fields.band = 'Choose one of the four bands.'
   if (!reason) fields.reason = 'Say why the computed band is wrong.'
   if (Object.keys(fields).length) return fail(ctx.res, 422, 'VALIDATION_FAILED', 'Check the highlighted fields.', fields)
+  // Mirrors SetOverride's refusal. classifyRootBypass does not consult
+  // overrides, so accepting one here would store a decision, audit a reviewer
+  // against it, answer 200, and leave the band exactly where it was.
+  if (String(r.name).toLowerCase() === ROOT_BYPASS_ROLE) {
+    return fail(ctx.res, 409, 'ROOT_NOT_OVERRIDABLE', "The root role is classified from the authorization engine's bypass rather than from its policies, so its band cannot be overridden.")
+  }
   const computed = classifyRole(r)
   db.criticalityOverrides[r.id] = {
     role_id: r.id, band, reason,

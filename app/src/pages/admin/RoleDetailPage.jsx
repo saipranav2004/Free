@@ -42,7 +42,7 @@ import {
 } from '../../components/rbac/Criticality'
 import { apiErrorMessage, normalizeApiError } from '../../lib/apiError'
 import { formatDateTime, formatRelativeToNow } from '../../lib/format'
-import { isSystemRole, POLICY_EFFECT_BADGE } from '../../config/constants'
+import { isRootRoleName, isSystemRole, POLICY_EFFECT_BADGE } from '../../config/constants'
 
 // ---------------------------------------------------------------------------
 // Role detail
@@ -255,6 +255,11 @@ export default function RoleDetailPage() {
   )
   const c = criticalityQuery.data
   const system = role ? isSystemRole(role) : false
+  // Root is classified from the authorization engine's bypass rather than from
+  // its policies, and the engine does not consult an override when it does so.
+  // The backend refuses the override for that reason, so offering the button
+  // here would only produce a rejected request.
+  const rootRole = role ? isRootRoleName(role.name) : false
 
   // Breadcrumbs are rendered globally by AppLayout, above every page, so
   // this one does not add its own.
@@ -300,7 +305,17 @@ export default function RoleDetailPage() {
         actions={
           <>
             {c && (
-              <Button variant="secondary" icon={Pencil} onClick={() => setOverrideOpen(true)}>
+              <Button
+                variant="secondary"
+                icon={Pencil}
+                disabled={rootRole}
+                title={
+                  rootRole
+                    ? 'Root is classified from the authorization bypass, not from its policies, so its band cannot be reclassified'
+                    : undefined
+                }
+                onClick={() => setOverrideOpen(true)}
+              >
                 {c.is_overridden ? 'Change band' : 'Override band'}
               </Button>
             )}
@@ -355,7 +370,29 @@ export default function RoleDetailPage() {
             </Container>
           ) : c ? (
             <>
-              <AttentionBanner classification={c} />
+              {rootRole && (
+                <div className="flex items-start gap-3 rounded-xl border border-danger/40 bg-danger-soft px-4 py-3">
+                  <ShieldAlert className="mt-0.5 h-4 w-4 flex-none text-danger" strokeWidth={1.9} />
+                  <p className="text-sm leading-relaxed text-primary">
+                    <span className="font-semibold">
+                      Scored from the authorization bypass, not from the policies below.
+                    </span>{' '}
+                    The engine allows every request from this role before it reads a
+                    single policy, so detaching everything attached here would not
+                    narrow it. It is also the only role that can hand out admin. That
+                    is why this classification is fixed at Critical and cannot be
+                    reclassified.
+                  </p>
+                </div>
+              )}
+              {/* Not for root. That banner's advice is "the usual candidate for
+                  removal or for tightening", and root can be neither: the
+                  Delete button above is disabled for built-ins, and there is
+                  nothing to tighten because the score does not come from an
+                  attachment. Dormant root is worth acting on, but the action is
+                  to take the role off the accounts holding it, which is the
+                  identity screens' job and not this banner's. */}
+              {!rootRole && <AttentionBanner classification={c} />}
               <CriticalityHeadline c={c} />
               {c.is_overridden && (
                 <div className="flex flex-wrap items-start gap-3">
