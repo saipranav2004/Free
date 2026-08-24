@@ -18,6 +18,7 @@ import {
   ChevronDown,
   ChevronLeft,
   Clock,
+  Crown,
   Database,
   FileKey2,
   Focus,
@@ -25,8 +26,6 @@ import {
   Maximize2,
   Minimize2,
   Network,
-  PanelLeftClose,
-  PanelLeftOpen,
   PanelRightOpen,
   RotateCcw,
   Route as RouteIcon,
@@ -224,8 +223,8 @@ function IconAction({ icon: Icon, label, onClick, disabled, active }) {
 const LEGEND = [
   {
     tone: 'bg-danger',
-    label: 'Secret or full access',
-    hint: 'Readable in plaintext, or unrestricted on the resource',
+    label: 'Secret, full access or bypass',
+    hint: 'Readable in plaintext, unrestricted on the resource, or authority no policy limits',
   },
   {
     tone: 'bg-warn',
@@ -312,6 +311,9 @@ function StatTile({ icon: Icon, label, value, tone }) {
  */
 function RiskChips({ stats, user }) {
   const chips = []
+  // First, because it is the one finding that makes every other number on this
+  // panel a floor rather than a total.
+  if (stats.rootBypass) chips.push({ tone: 'danger', label: 'Policy bypass' })
   if (!user?.mfa_enabled) chips.push({ tone: 'danger', label: 'No MFA' })
   if (stats.credentials > 0) chips.push({ tone: 'danger', label: `${stats.credentials} revealable` })
   if (stats.standing > 0) chips.push({ tone: 'warn', label: `${stats.standing} standing` })
@@ -363,6 +365,7 @@ const PATH_ICON = {
   direct_policy: FileKey2,
   resource: Database,
   credential: KeyRound,
+  capability: Crown,
 }
 
 /** The relation that gets you from the previous hop to this one. */
@@ -378,9 +381,29 @@ function relationInto(node) {
       return 'reaches'
     case 'credential':
       return 'reveals'
+    case 'capability':
+      return node.meta?.edgeKind === 'ROOT_BYPASS' ? 'bypasses into' : 'carries'
     default:
       return 'then'
   }
+}
+
+/**
+ * Tier is the backend's own rating of what a capability is worth to an
+ * attacker, sent on the node. Spelled out rather than shown as "2", which
+ * means nothing to a reader who has not read the graph service.
+ */
+const TIER_LABEL = {
+  0: 'Ordinary',
+  1: 'Sensitive',
+  2: 'Crown jewel',
+}
+
+/** Where the authority comes from, in the words of the edge that carries it. */
+const CAPABILITY_SOURCE = {
+  ROOT_BYPASS: 'The root role, ahead of any policy',
+  ADMIN_CENTER: 'The role itself, with no policy check',
+  ALLOWS_ACTION: 'A policy on this account',
 }
 
 const KIND_LABEL = {
@@ -529,6 +552,25 @@ function AccountView({ tree, stats }) {
 
   return (
     <>
+      {stats.rootBypass && (
+        <PanelSection>
+          <div className="flex gap-2.5 rounded-lg border border-danger/35 bg-danger-soft px-3 py-2.5">
+            <Crown className="mt-0.5 h-3.5 w-3.5 flex-none text-danger" strokeWidth={2} />
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-primary">
+                Read the numbers below as a floor
+              </p>
+              <p className="mt-1 text-2xs leading-relaxed text-secondary">
+                This account holds root. Requests are allowed before any policy is
+                read, so what it can actually reach is the whole estate, not the
+                objects its attachments happen to match. Root is also the only
+                role that can grant admin access to another account.
+              </p>
+            </div>
+          </div>
+        </PanelSection>
+      )}
+
       <PanelSection>
         <PanelLead icon={Target} eyebrow="Access reach" title="What can this account touch?" />
         <div className="mt-3">
@@ -556,6 +598,23 @@ function AccountView({ tree, stats }) {
             value={stats.directPolicies}
             tone={stats.directPolicies > 0 ? 'warn' : undefined}
           />
+          {/* Only when there is one, and full width when there is. Six tiles
+              fill a two column grid; a seventh would sit alone against an empty
+              half, and this is not a fact to present as a leftover. */}
+          {stats.capabilities > 0 && (
+            <div className="col-span-2">
+              <StatTile
+                icon={Crown}
+                label={
+                  stats.unmediated > 0
+                    ? `High value capabilities, ${stats.unmediated} held by a role outright`
+                    : 'High value capabilities reached'
+                }
+                value={stats.capabilities}
+                tone="danger"
+              />
+            </div>
+          )}
         </div>
       </PanelSection>
 
@@ -583,11 +642,15 @@ function SelectedView({ tree, selected, onSelect, onBack }) {
   // Only where a real page exists for the object. A dead link that 404s is
   // worse than no link, so policies and credentials, which have no detail
   // route, simply do not get one.
+  // meta.nodeId, not id: a card's id is scoped to the path that reached it, so
+  // the same resource under two policies has two ids and neither of them is
+  // the record's. meta.nodeId is the object itself.
+  const objectId = selected.meta?.nodeId || selected.id
   const href =
     selected.kind === 'resource'
-      ? `/resources/${selected.id.replace(/^resource:/, '')}`
+      ? `/resources/${objectId.replace(/^resource:/, '')}`
       : selected.kind === 'role'
-        ? `/admin/roles/${selected.id.replace(/^role:/, '')}`
+        ? `/admin/roles/${objectId.replace(/^role:/, '')}`
         : selected.kind === 'user'
           ? `/admin/identity/${selected.meta?.id || ''}`
           : null
@@ -612,7 +675,13 @@ function SelectedView({ tree, selected, onSelect, onBack }) {
               ['Type', selected.meta?.type || 'Secret'],
               ['Account', selected.meta?.account || 'Not recorded'],
             ]
-          : []
+          : selected.kind === 'capability'
+            ? [
+                ['Tier', TIER_LABEL[selected.meta?.tier] || 'Not rated'],
+                ['Held through', CAPABILITY_SOURCE[selected.meta?.edgeKind] || 'A grant on this account'],
+                ['Always on', selected.meta?.standing ? 'Yes' : 'No'],
+              ]
+            : []
 
   return (
     <>
@@ -685,7 +754,7 @@ function SelectedView({ tree, selected, onSelect, onBack }) {
               </div>
             ))}
           </dl>
-          {selected.meta?.standing && (
+          {selected.kind === 'resource' && selected.meta?.standing && (
             <p className="mt-2.5 rounded-lg border border-warn/35 bg-warn-soft px-2.5 py-1.5 text-xs leading-relaxed text-primary">
               Standing access. Reachable right now, with nothing to request.
             </p>
@@ -693,6 +762,23 @@ function SelectedView({ tree, selected, onSelect, onBack }) {
           {selected.kind === 'credential' && (
             <p className="mt-2.5 rounded-lg border border-danger/35 bg-danger-soft px-2.5 py-1.5 text-xs leading-relaxed text-primary">
               A policy on this account can reveal this secret in plaintext.
+            </p>
+          )}
+          {selected.meta?.fullLabel && (
+            <p className="mt-2.5 text-xs leading-relaxed text-secondary">{selected.meta.fullLabel}</p>
+          )}
+          {selected.meta?.edgeKind === 'ROOT_BYPASS' && (
+            <p className="mt-2.5 rounded-lg border border-danger/35 bg-danger-soft px-2.5 py-1.5 text-xs leading-relaxed text-primary">
+              Authorisation stops at the role. Every request from this account is
+              allowed before a single policy is read, so nothing attached below
+              limits it and detaching all of it changes nothing.
+            </p>
+          )}
+          {selected.meta?.edgeKind === 'ADMIN_CENTER' && (
+            <p className="mt-2.5 rounded-lg border border-warn/35 bg-warn-soft px-2.5 py-1.5 text-xs leading-relaxed text-primary">
+              Holding the role is the whole check. The Admin Center accepts it
+              without asking any policy, so this cannot be narrowed by editing
+              what the role carries.
             </p>
           )}
         </PanelSection>
@@ -835,7 +921,9 @@ function Canvas({ tree, expanded, revealed, maxLevel, onToggle, onReveal, select
   const rfEdges = useMemo(
     () =>
       nodes
-        .filter((n) => n.parentId)
+        // A "more" pill gets no connector: it is a note about what is missing,
+        // not one of the children, and an arrow into it makes it read as one.
+        .filter((n) => n.parentId && !n.noEdge)
         .map((n) => {
           const onPath = lit.has(n.id) && lit.has(n.parentId)
           return {
@@ -869,15 +957,21 @@ function Canvas({ tree, expanded, revealed, maxLevel, onToggle, onReveal, select
               textTransform: 'uppercase',
               letterSpacing: '0.06em',
             },
-            // Only the lit branch animates. Animating every edge is how a
-            // canvas turns into a screensaver: motion stops meaning anything
-            // once it is everywhere.
-            animated: onPath,
+            // EVERY EDGE FLOWS, FROM THE MOMENT THE CANVAS OPENS.
+            //
+            // Flow is what a directed graph is trying to say, and a canvas
+            // that only moves after you click one looks frozen until you do.
+            // The lit branch is still unmistakable because it flows faster,
+            // brighter and thicker: the discriminator is the DIFFERENCE in
+            // motion, not its presence. React Flow's own `animated` prop is
+            // not used because it hard-codes its own dash and speed; the
+            // classes carry both (see index.css) and respect reduced motion.
+            className: onPath ? 'edge-flow-lit' : 'edge-flow',
             style: {
               stroke: onPath ? 'rgb(var(--accent))' : 'rgb(var(--border))',
               strokeWidth: onPath ? 2 : 1.25,
-              strokeDasharray: onPath ? '6 5' : undefined,
-              opacity: lit.size > 0 && !onPath ? 0.3 : 1,
+              strokeDasharray: onPath ? '6 5' : '4 7',
+              opacity: lit.size > 0 && !onPath ? 0.3 : 0.85,
               transition: 'stroke 200ms ease, opacity 200ms ease',
             },
           }
@@ -1020,136 +1114,152 @@ function Canvas({ tree, expanded, revealed, maxLevel, onToggle, onReveal, select
   )
 }
 
-// ── Account rail ───────────────────────────────────────────────────────────
+// ── Account search ─────────────────────────────────────────────────────────
 //
-// The account picker was a native <select> beside a search box that did not
-// visibly do anything: you typed, the dropdown quietly re-populated, and you
-// still had to open it to find out what you had matched. Typing into a search
-// field should narrow a list you can see.
+// THIS WAS A PERMANENT LEFT RAIL, AND THE RAIL WAS THE PROBLEM.
 //
-// So the two controls are one control. The field filters the list underneath
-// it as each character lands, and the list carries the things you pick an
-// account BY: whether it is active, whether MFA is on it, what it is called in
-// full. That is the same shape Okta's people list and the AWS console's
-// resource pickers use, for the same reason.
-function AccountRail({ query, onQuery, users, loading, error, activeId, onPick, onClose }) {
+// It held a search field and a list of accounts, and it held them all the
+// time: 250px of the canvas, permanently, for a control used once per visit.
+// With the detail panel on the other side the graph was squeezed into the
+// middle third of the screen, which is the opposite of what a canvas wants.
+//
+// The picker is a toolbar field with its results underneath it instead. Same
+// behaviour, typing narrows a list you can see, and the list still carries the
+// things you pick an account BY (full name, MFA, status). It just stops
+// charging the canvas rent for the whole session. The results panel closes on
+// Escape, on an outside click, and on picking someone.
+function AccountSearch({ query, onQuery, users, loading, error, activeId, activeLabel, onPick }) {
+  const [open, setOpen] = useState(false)
+  const wrapRef = useRef(null)
+
+  useEffect(() => {
+    if (!open) return undefined
+    const onDown = (e) => {
+      if (!wrapRef.current?.contains(e.target)) setOpen(false)
+    }
+    const onKey = (e) => {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
   return (
-    <nav
-      aria-label="Accounts"
-      className="flex h-full w-full flex-col border-r border-line bg-surface"
-    >
-      <div className="flex items-center gap-2 border-b border-line-soft px-3 py-2.5">
-        <span className="text-xs font-semibold uppercase tracking-wide text-tertiary">Accounts</span>
-        {typeof users?.length === 'number' && !loading && (
-          <span className="tabular text-2xs font-semibold text-secondary">{users.length}</span>
-        )}
-        {onClose && (
+    <div ref={wrapRef} className="relative min-w-0 flex-1 sm:max-w-xs">
+      <label className="relative flex items-center">
+        <Search
+          className="pointer-events-none absolute left-2.5 h-3.5 w-3.5 text-tertiary"
+          strokeWidth={1.8}
+        />
+        <input
+          value={query}
+          onChange={(e) => {
+            onQuery(e.target.value)
+            setOpen(true)
+          }}
+          onFocus={() => setOpen(true)}
+          placeholder={activeLabel ? `Account: ${activeLabel}` : 'Search an account'}
+          aria-label="Search accounts"
+          aria-expanded={open}
+          className="h-8 w-full rounded-lg border border-line-strong bg-surface pl-8 pr-7 text-sm text-primary transition-colors placeholder:text-tertiary hover:border-primary/40 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/25"
+        />
+        {query && (
           <button
             type="button"
-            onClick={onClose}
-            aria-label="Hide the account list"
-            className="ml-auto flex h-6 w-6 flex-none items-center justify-center rounded text-tertiary transition-colors hover:bg-hover hover:text-primary"
+            onClick={() => {
+              onQuery('')
+              setOpen(false)
+            }}
+            aria-label="Clear the search"
+            className="absolute right-1.5 flex h-5 w-5 items-center justify-center rounded text-tertiary transition-colors hover:bg-hover hover:text-primary"
           >
-            <PanelLeftClose className="h-4 w-4" strokeWidth={1.8} />
+            <X className="h-3.5 w-3.5" strokeWidth={2} />
           </button>
         )}
-      </div>
+      </label>
 
-      <div className="border-b border-line-soft p-2.5">
-        <label className="relative flex items-center">
-          <Search
-            className="pointer-events-none absolute left-2.5 h-3.5 w-3.5 text-tertiary"
-            strokeWidth={1.8}
-          />
-          <input
-            value={query}
-            onChange={(e) => onQuery(e.target.value)}
-            placeholder="Filter by name or email"
-            aria-label="Filter accounts"
-            className="h-8 w-full rounded-lg border border-line-strong bg-surface pl-8 pr-7 text-sm text-primary transition-colors placeholder:text-tertiary hover:border-primary/40 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/25"
-          />
-          {query && (
-            <button
-              type="button"
-              onClick={() => onQuery('')}
-              aria-label="Clear the filter"
-              className="absolute right-1.5 flex h-5 w-5 items-center justify-center rounded text-tertiary transition-colors hover:bg-hover hover:text-primary"
-            >
-              <X className="h-3.5 w-3.5" strokeWidth={2} />
-            </button>
-          )}
-        </label>
-      </div>
-
-      <div className="min-h-0 flex-1 overflow-y-auto p-1.5">
-        {loading ? (
-          <p className="px-2 py-3 text-xs text-tertiary">Loading accounts</p>
-        ) : error ? (
-          <p className="px-2 py-3 text-xs leading-relaxed text-warn">{error}</p>
-        ) : users.length === 0 ? (
-          <p className="px-2 py-3 text-xs leading-relaxed text-tertiary">
-            {query ? `No account matches "${query}".` : 'No accounts to show.'}
+      {open && (
+        <div className="animate-menu-in absolute left-0 right-0 top-full z-40 mt-1 overflow-hidden rounded-lg border border-line bg-surface shadow-overlay">
+          <p className="flex items-center justify-between border-b border-line-soft px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-tertiary">
+            Accounts
+            {!loading && <span className="tabular font-bold text-secondary">{users.length}</span>}
           </p>
-        ) : (
-          <ul className="space-y-0.5">
-            {users.map((u) => {
-              const active = u.user_id === activeId
-              return (
-                <li key={u.user_id}>
-                  <button
-                    type="button"
-                    onClick={() => onPick(u.user_id)}
-                    aria-current={active ? 'true' : undefined}
-                    className={clsx(
-                      'flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-colors',
-                      active ? 'bg-accent-soft' : 'hover:bg-hover'
-                    )}
-                  >
-                    <span
-                      className={clsx(
-                        'flex h-7 w-7 flex-none items-center justify-center rounded-lg text-2xs font-bold',
-                        active ? 'bg-accent text-accent-on' : 'bg-subtle text-tertiary'
-                      )}
-                    >
-                      {(u.username || '?').slice(0, 2).toUpperCase()}
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span
+          <div className="max-h-72 overflow-y-auto p-1.5">
+            {loading ? (
+              <p className="px-2 py-3 text-xs text-tertiary">Loading accounts</p>
+            ) : error ? (
+              <p className="px-2 py-3 text-xs leading-relaxed text-warn">{error}</p>
+            ) : users.length === 0 ? (
+              <p className="px-2 py-3 text-xs leading-relaxed text-tertiary">
+                {query ? `No account matches "${query}".` : 'No accounts to show.'}
+              </p>
+            ) : (
+              <ul className="space-y-0.5">
+                {users.map((u) => {
+                  const active = u.user_id === activeId
+                  return (
+                    <li key={u.user_id}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onPick(u.user_id)
+                          setOpen(false)
+                        }}
+                        aria-current={active ? 'true' : undefined}
                         className={clsx(
-                          'block truncate text-sm font-medium',
-                          active ? 'text-accent' : 'text-primary'
+                          'flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-colors',
+                          active ? 'bg-accent-soft' : 'hover:bg-hover'
                         )}
                       >
-                        {u.username}
-                      </span>
-                      <span className="block truncate text-2xs text-tertiary">{u.full_name || u.email}</span>
-                    </span>
-                    {/* The two facts worth carrying at this size. A dormant or
-                        locked account and an account with no MFA are both
-                        reasons to look at it, and both are invisible once you
-                        are inside the graph. */}
-                    <span className="flex flex-none items-center gap-1">
-                      {!u.mfa_enabled && (
-                        <ShieldOff
-                          className="h-3.5 w-3.5 text-danger"
-                          strokeWidth={1.9}
-                          aria-label="MFA not enrolled"
-                        />
-                      )}
-                      {u.status && u.status !== 'ACTIVE' && (
-                        <span className="rounded bg-subtle px-1 py-0.5 text-2xs font-semibold uppercase tracking-wide text-tertiary">
-                          {u.status}
+                        <span
+                          className={clsx(
+                            'flex h-7 w-7 flex-none items-center justify-center rounded-lg text-2xs font-bold',
+                            active ? 'bg-accent text-accent-on' : 'bg-subtle text-tertiary'
+                          )}
+                        >
+                          {(u.username || '?').slice(0, 2).toUpperCase()}
                         </span>
-                      )}
-                    </span>
-                  </button>
-                </li>
-              )
-            })}
-          </ul>
-        )}
-      </div>
-    </nav>
+                        <span className="min-w-0 flex-1">
+                          <span
+                            className={clsx(
+                              'block truncate text-sm font-medium',
+                              active ? 'text-accent' : 'text-primary'
+                            )}
+                          >
+                            {u.username}
+                          </span>
+                          <span className="block truncate text-2xs text-tertiary">
+                            {u.full_name || u.email}
+                          </span>
+                        </span>
+                        <span className="flex flex-none items-center gap-1">
+                          {!u.mfa_enabled && (
+                            <ShieldOff
+                              className="h-3.5 w-3.5 text-danger"
+                              strokeWidth={1.9}
+                              aria-label="MFA not enrolled"
+                            />
+                          )}
+                          {u.status && u.status !== 'ACTIVE' && (
+                            <span className="rounded bg-subtle px-1 py-0.5 text-2xs font-semibold uppercase tracking-wide text-tertiary">
+                              {u.status}
+                            </span>
+                          )}
+                        </span>
+                      </button>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -1167,7 +1277,6 @@ export default function IdentityGraphPage() {
   const [revealed, setRevealed] = useState({})
   const [selectedId, setSelectedId] = useState(null)
   const [panelOpen, setPanelOpen] = useState(true)
-  const [listOpen, setListOpen] = useState(() => !userId)
   const [full, setFull] = useState(false)
   // How deep the canvas may go, and which objects it may draw. Both narrow the
   // TREE rather than greying things out on it, so every count on the page keeps
@@ -1257,11 +1366,24 @@ export default function IdentityGraphPage() {
   // tree, because a branch opened under the old cut may not exist under the
   // new one and a stale expansion set would leave the canvas half drawn.
   useEffect(() => {
-    if (tree) {
-      setExpanded(new Set([tree.id]))
-      setRevealed({})
-      setSelectedId(null)
-    }
+    if (!tree) return
+    // OPEN TO POLICIES, NOT TO GRANTS.
+    //
+    // The canvas used to land on the account and its grants, which answers
+    // "what is this account made of" and stops one level short of the only
+    // question anyone opens this page with: what do those grants actually
+    // let it do. Policies are where a role stops being a name and becomes
+    // permissions, so the base view now reaches them.
+    //
+    // It stays readable because the policy level is capped tighter than the
+    // others (see initialRevealFor): three per grant, and the rest folded
+    // behind a "+N more" pill. Six grants of three is eighteen cards, which
+    // fits; six of six would not.
+    const next = new Set([tree.id])
+    for (const grant of tree.children || []) next.add(grant.id)
+    setExpanded(next)
+    setRevealed({})
+    setSelectedId(null)
   }, [tree])
 
   const toggle = useCallback((id) => {
@@ -1317,7 +1439,15 @@ export default function IdentityGraphPage() {
   const totalObjects = tree ? subtreeCount(tree) + 1 : 0
 
   const resetView = () => {
-    if (tree) setExpanded(new Set([tree.id]))
+    if (tree) {
+      // Back to the BASE view, which is account + grants + policies, the same
+      // thing the page opens on. Resetting to something narrower than the
+      // starting point makes the button read as "collapse" rather than
+      // "reset".
+      const base = new Set([tree.id])
+      for (const grant of tree.children || []) base.add(grant.id)
+      setExpanded(base)
+    }
     setRevealed({})
     setSelectedId(null)
     patchParams({ depth: null, access: null })
@@ -1389,12 +1519,16 @@ export default function IdentityGraphPage() {
   // sends. Nothing here is a score or a rating.
   const toolbar = (
     <div className="flex flex-wrap items-center gap-1.5 border-b border-line-soft bg-surface px-2.5 py-2">
-      {!listOpen && (
-        <IconAction icon={PanelLeftOpen} label="Show the account list" onClick={() => setListOpen(true)} />
-      )}
-      <span className="min-w-0 truncate px-1 text-sm font-bold text-primary">
-        {activeUser ? activeUser.username : 'No account selected'}
-      </span>
+      <AccountSearch
+        query={searchInput}
+        onQuery={setSearchInput}
+        users={users}
+        loading={usersQuery.isLoading}
+        error={usersQuery.isError ? apiErrorMessage(usersQuery.error) : null}
+        activeId={userId}
+        activeLabel={activeUser?.username}
+        onPick={selectUser}
+      />
       {activeUser?.full_name && (
         <span className="hidden min-w-0 truncate text-xs text-tertiary xl:inline">
           {activeUser.full_name}
@@ -1543,7 +1677,7 @@ export default function IdentityGraphPage() {
       <EmptyState
         icon={UserRound}
         title="Choose an account"
-        description="Pick an account from the list to see how it is assembled: its user type, the roles and policies attached to it, and the resources and credentials those actually reach."
+        description="Search for an account above to see how it is assembled: its user type, the roles and policies attached to it, and the resources, secrets and capabilities those actually reach."
       />
     </div>
   ) : graphQuery.isLoading ? (
@@ -1642,23 +1776,10 @@ export default function IdentityGraphPage() {
       )}
     >
       {toolbar}
-      <div className="flex min-h-0 flex-1">
-        {listOpen && (
-          <div className="hidden w-[15.5rem] flex-none md:block">
-            <AccountRail
-              query={searchInput}
-              onQuery={setSearchInput}
-              users={users}
-              loading={usersQuery.isLoading}
-              error={usersQuery.isError ? apiErrorMessage(usersQuery.error) : null}
-              activeId={userId}
-              onPick={selectUser}
-              onClose={() => setListOpen(false)}
-            />
-          </div>
-        )}
-        <div className="flex min-w-0 flex-1">{body}</div>
-      </div>
+      {/* Canvas and detail panel only. The account rail that used to sit here
+          moved into the toolbar as a search field, which hands ~250px back to
+          the graph on every screen. */}
+      <div className="flex min-h-0 flex-1">{body}</div>
     </div>
   )
 

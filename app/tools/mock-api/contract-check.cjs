@@ -112,7 +112,7 @@ function concrete(template, consts = {}) {
 }
 
 // GET only: a conformance run must not mutate the fixture set.
-;(async () => {
+(async () => {
   const login = await request('POST', '/api/v1/auth/login', null, { identifier: 'root', password: 'password' })
   const challenge = login.json.data.challenge_token
   const verified = await request('POST', '/api/v1/auth/mfa/verify', null, { challenge_token: challenge, code: '123456' })

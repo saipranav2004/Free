@@ -152,6 +152,12 @@ export default function App() {
                 </SelfServiceOnly>
               }
             />
+            {/* The parent path is a real destination, not a dead end.
+                /jit/requests carries no id and matches nothing, so anything
+                that reaches it, a stale bookmark, a hand-typed URL, a row
+                whose id never arrived, used to land on the 404 page. It means
+                "the requests list", so send it there. */}
+            <Route path="jit/requests" element={<Navigate to="/jit" replace />} />
             <Route
               path="jit/requests/:id"
               element={

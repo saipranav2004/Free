@@ -2,6 +2,7 @@ import { memo } from 'react'
 import { Handle, Position } from '@xyflow/react'
 import {
   ChevronRight,
+  Crown,
   Database,
   FileKey2,
   KeyRound,
@@ -9,7 +10,6 @@ import {
   Lock,
   Plus,
   ShieldCheck,
-  Sparkles,
   UserRound,
   Video,
 } from 'lucide-react'
@@ -52,7 +52,7 @@ const KIND_ICON = {
   direct_policy: FileKey2,
   resource: Database,
   credential: KeyRound,
-  capability: Sparkles,
+  capability: Crown,
 }
 
 // Tinted strip, dot, and the text on it. One entry per tone so the three can
@@ -83,6 +83,17 @@ function stateLabel(data) {
       return 'Direct policy'
     case 'policy':
       return String(meta?.effect || '').toLowerCase() === 'deny' ? 'Deny policy' : 'Policy'
+    case 'capability':
+      // Not "Capability". The strip's job is to say what is unusual about the
+      // card, and what is unusual here is that this authority does not come
+      // from anything attached: revoking every policy on the account leaves it
+      // exactly where it is.
+      if (meta?.edgeKind === 'ROOT_BYPASS') return 'Policy bypass'
+      // ADMIN_CENTER is held by the role with no policy consulted. Anything
+      // else on this card arrived through a policy, so calling it unmediated
+      // would be the one thing on the canvas that is not true.
+      if (meta?.edgeKind === 'ADMIN_CENTER') return 'Unmediated'
+      return 'Capability'
     case 'credential':
       return 'Revealable secret'
     case 'resource':

@@ -1473,7 +1473,10 @@ function UserDashboard({ user }) {
                   </span>
                 </CardHeader>
                 <ul className="divide-y divide-surface-800">
-                  {pendingRequests.map((r) => (
+                  {/* Rows with no id are dropped rather than linked: the
+                      template would collapse to /jit/requests, which matches
+                      no route and lands on the 404 page. */}
+                  {pendingRequests.filter((r) => r?.id).map((r) => (
                     <li key={r.id}>
                       <Link
                         to={`/jit/requests/${r.id}`}

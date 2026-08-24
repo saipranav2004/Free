@@ -245,12 +245,25 @@ function RequestRow({ request, onCancel, cancelling }) {
 
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <Link
-              to={`/jit/requests/${request.id}`}
-              className="truncate text-sm font-semibold text-ink-100 outline-none transition-colors hover:text-blue-600 dark:hover:text-blue-300"
-            >
-              {request.resource_name || request.resource_id || '-'}
-            </Link>
+            {/* NO LINK WITHOUT AN ID.
+                `/jit/requests/${undefined-or-empty}` collapses to
+                /jit/requests, which matches no route and drops the reader on
+                the 404 page with a breadcrumb that says JIT Access > Request.
+                GrantRow directly below already guards its own link this way;
+                this one did not. A row we cannot open is still worth showing,
+                it just stops pretending to be a link. */}
+            {request.id ? (
+              <Link
+                to={`/jit/requests/${request.id}`}
+                className="truncate text-sm font-semibold text-ink-100 outline-none transition-colors hover:text-blue-600 dark:hover:text-blue-300"
+              >
+                {request.resource_name || request.resource_id || '-'}
+              </Link>
+            ) : (
+              <span className="truncate text-sm font-semibold text-ink-100">
+                {request.resource_name || request.resource_id || '-'}
+              </span>
+            )}
             {isBreakglass(request) && <BreakglassChip />}
             {request.action && (
               <span className="rounded border border-surface-700 bg-surface-850 px-1.5 py-0.5 font-mono text-2xs text-ink-400">
@@ -276,13 +289,15 @@ function RequestRow({ request, onCancel, cancelling }) {
               Withdraw
             </Button>
           )}
-          <Link
-            to={`/jit/requests/${request.id}`}
-            aria-label="Open request"
-            className="flex h-7 w-7 items-center justify-center rounded-md text-ink-600 transition-all duration-200 hover:bg-surface-800 hover:text-ink-100 group-hover:translate-x-0.5"
-          >
-            <ChevronRight className="h-4 w-4" strokeWidth={2} />
-          </Link>
+          {request.id && (
+            <Link
+              to={`/jit/requests/${request.id}`}
+              aria-label="Open request"
+              className="flex h-7 w-7 items-center justify-center rounded-md text-ink-600 transition-all duration-200 hover:bg-surface-800 hover:text-ink-100 group-hover:translate-x-0.5"
+            >
+              <ChevronRight className="h-4 w-4" strokeWidth={2} />
+            </Link>
+          )}
         </div>
       </div>
     </li>

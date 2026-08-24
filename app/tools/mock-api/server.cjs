@@ -48,7 +48,6 @@ const db = {
   mfaRules: F.MFA_RULES.map((r) => ({ ...r })),
   rolePolicies: { 'r-1': ['p-5'], 'r-2': ['p-5', 'p-1'], 'r-3': ['p-6'], 'r-4': ['p-4'], 'r-5': ['p-2'], 'r-6': ['p-1'], 'r-7': ['p-3'] },
   criticalityOverrides: {},
-  userPolicies: { 'u-user-0004': ['p-2'], 'u-admin-0002': ['p-1'] },
   userPolicies: { 'u-user-0004': ['p-2'] },
   delegations: {},
   tokens: {},
@@ -874,6 +873,120 @@ function roleView(role, origin) {
   }
 }
 
+// The flat node/edge pair the same endpoint returns beside the nested tree.
+// Mirrors internal/services/graph/user_graph.go, and the capability slice is
+// the part that matters: the console draws roles and policies from the tree,
+// but ROOT_BYPASS and ADMIN_CENTER exist nowhere in the tree at all. They are
+// how the real backend says that root's authority does not pass through an
+// attachment, which is exactly what the canvas has to be able to show.
+const CAP_SUPERUSER = 'capability:superuser'
+const CAP_ADMIN_WRITE = 'capability:admin_center_write'
+const CAP_VAULT_PLAINTEXT = 'capability:vault_plaintext_any'
+const CAP_AUDIT_READ = 'capability:audit_read_org_wide'
+
+function flatGraph(user, userType, additional, direct) {
+  const nodes = new Map()
+  const edges = []
+  const addNode = (n) => { if (!nodes.has(n.id)) nodes.set(n.id, n) }
+  const addEdge = (e) => edges.push({ cost: 0, via: '', finding: '', standing: true, ...e })
+
+  const uid = `user:${user.user_id}`
+  addNode({
+    id: uid, kind: 'user', label: user.username, tier: 0,
+    attrs: { status: user.status, role_kind: 'user_type' },
+  })
+
+  // graph.go seedCapabilities: the well known targets, so an edge never names
+  // a node that was not sent.
+  const capNode = (id, tier, label) => addNode({ id, kind: 'capability', tier, label, attrs: {} })
+
+  // user_graph.go attachTypeCapabilities. Root gets both; admin gets one.
+  const typeCapabilities = (roleNodeId, name) => {
+    if (name === 'root') {
+      capNode(CAP_SUPERUSER, 2, 'Effective superuser (policy bypass / *:*)')
+      capNode(CAP_ADMIN_WRITE, 2, 'Admin Center write access')
+      addEdge({ from: roleNodeId, to: CAP_SUPERUSER, kind: 'ROOT_BYPASS' })
+      addEdge({ from: roleNodeId, to: CAP_ADMIN_WRITE, kind: 'ADMIN_CENTER' })
+    } else if (name === 'admin') {
+      capNode(CAP_ADMIN_WRITE, 2, 'Admin Center write access')
+      addEdge({ from: roleNodeId, to: CAP_ADMIN_WRITE, kind: 'ADMIN_CENTER' })
+    }
+  }
+
+  const has = (list, v) => (list || []).includes(v)
+
+  // user_graph.go expandPolicyViews.
+  const expandPolicy = (p) => {
+    const pid = `policy:${p.id}`
+    if (has(p.actions, '*') && has(p.resource_patterns, '*')) {
+      capNode(CAP_SUPERUSER, 2, 'Effective superuser (policy bypass / *:*)')
+      addEdge({ from: pid, to: CAP_SUPERUSER, kind: 'ALLOWS_ACTION' })
+    }
+    if ((has(p.actions, '*') || has(p.actions, 'pam:audit:Read')) && has(p.resource_patterns, '*')) {
+      capNode(CAP_AUDIT_READ, 1, 'Org-wide audit read')
+      addEdge({ from: pid, to: CAP_AUDIT_READ, kind: 'ALLOWS_ACTION', cost: 1, finding: 'H6' })
+    }
+    if ((has(p.actions, '*') || has(p.actions, 'pam:vault:Reveal')) && has(p.resource_patterns, '*')) {
+      capNode(CAP_VAULT_PLAINTEXT, 2, 'Decrypt any vaulted credential')
+      addEdge({ from: pid, to: CAP_VAULT_PLAINTEXT, kind: 'ALLOWS_ACTION', cost: 1, finding: 'C5' })
+    }
+    for (const r of p.matched_resources) {
+      const rid = `resource:${r.id}`
+      addNode({
+        id: rid, kind: 'resource', label: r.name, tier: 0,
+        attrs: {
+          type: r.type, requires_jit: String(!!r.requires_jit),
+          always_record: String(!!r.always_record), active: String(!!r.active), access: r.access,
+        },
+      })
+      const standing = r.access === 'standing_connect'
+      addEdge({
+        from: pid, to: rid, kind: standing ? 'STANDING_USE' : 'ALLOWS_ACTION',
+        cost: 1, standing: !!r.standing, finding: standing ? 'C6' : '',
+      })
+    }
+    for (const c of p.matched_credentials) {
+      const cid = `credential:${c.id}`
+      addNode({
+        id: cid, kind: 'credential', label: c.name, tier: 0,
+        attrs: { type: c.type, account: c.account || '', access: c.access },
+      })
+      addEdge({ from: pid, to: cid, kind: 'CAN_REVEAL', cost: 1 })
+    }
+  }
+
+  const attachRole = (role, roleKind) => {
+    const rid = `role:${role.id}`
+    addNode({
+      id: rid, kind: 'role', label: role.name, tier: 0,
+      attrs: { role_kind: roleKind, is_system: String(!!role.is_system) },
+    })
+    addEdge({ from: uid, to: rid, kind: roleKind === 'user_type' ? 'USER_TYPE' : 'HAS_ROLE' })
+    for (const p of role.policies) {
+      addNode({
+        id: `policy:${p.id}`, kind: 'policy', label: p.name, tier: 0,
+        attrs: { effect: p.effect, origin: p.origin },
+      })
+      addEdge({ from: rid, to: `policy:${p.id}`, kind: 'ROLE_GRANTS' })
+    }
+    if (roleKind === 'user_type') typeCapabilities(rid, role.name)
+    for (const p of role.policies) expandPolicy(p)
+  }
+
+  if (userType) attachRole(userType, 'user_type')
+  for (const r of additional) attachRole(r, 'additional_role')
+  for (const p of direct) {
+    addNode({
+      id: `policy:${p.id}`, kind: 'policy', label: p.name, tier: 0,
+      attrs: { effect: p.effect, origin: 'direct' },
+    })
+    addEdge({ from: uid, to: `policy:${p.id}`, kind: 'HAS_POLICY' })
+    expandPolicy(p)
+  }
+
+  return { nodes: [...nodes.values()], edges }
+}
+
 on('GET', '/api/v1/pam/admin/identity/users/:id/graph', (ctx) => {
   const u = db.users.find((x) => x.user_id === ctx.params.id)
   if (!u) return fail(ctx.res, 404, 'NOT_FOUND', 'User not found')
@@ -923,8 +1036,7 @@ on('GET', '/api/v1/pam/admin/identity/users/:id/graph', (ctx) => {
         matched_credentials: credIds.size,
         standing_connects: standing,
       },
-      nodes: [],
-      edges: [],
+      ...flatGraph(u, userType, additional, direct),
     },
   })
 }, 'admin')
@@ -1375,12 +1487,66 @@ function scoreExposure(role, allow, members) {
   return e
 }
 
+// The role name policy_engine_service.IsRoot recognises. Its authority does not
+// come from pam_role_policies and cannot be edited there.
+const ROOT_BYPASS_ROLE = 'root'
+
+// Port of RoleCriticalityService.evaluateRootBypass.
+//
+// ROOT IS SCORED STRUCTURALLY, NOT FROM ITS ATTACHMENTS. opa.Engine.Evaluate
+// returns root_bypass before it consults a single policy, so scoring root from
+// pam_role_policies answers a question nobody asked: it reports what root would
+// be allowed if the engine bothered to check, which it does not. Detach every
+// policy from root and it still owns the install.
+function classifyRootBypass(role, policies, members, resources) {
+  const allow = policies.filter((p) => String(p.effect).toLowerCase() !== 'deny')
+  const reach = resources.length
+  return {
+    role_id: role.id, role_name: role.name, is_system: !!role.is_system,
+    band: 'CRITICAL', score: 100, tier: TIER.CRITICAL,
+    computed_band: 'CRITICAL', computed_score: 100,
+    is_overridden: false, override: null,
+    factors: [
+      {
+        key: 'privilege', label: 'Privilege level', score: CRIT.maxPrivilege, max: CRIT.maxPrivilege,
+        summary: 'Unrestricted, and not by policy. The authorization engine short circuits for this role before any policy is read, so every action the API exposes is permitted regardless of what is or is not attached here.',
+        evidence: ['opa.Engine.Evaluate returns root_bypass before consulting any policy'],
+      },
+      {
+        key: 'blast_radius', label: 'Blast radius', score: CRIT.maxBlast, max: CRIT.maxBlast,
+        summary: `Every resource in the estate, all ${reach} of them, plus anything added later. A bypass has no resource pattern to narrow.`,
+        evidence: ['No resource pattern is evaluated for this role'],
+      },
+      {
+        key: 'escalation', label: 'Escalation path', score: CRIT.maxEscalation, max: CRIT.maxEscalation,
+        summary: 'Holds Admin Center write access, so it can create accounts, grant roles and rewrite the policies that constrain every other role.',
+        evidence: ['middleware.RequireAdmin accepts root'],
+      },
+    ],
+    // No mitigations. A JIT gate and a recording flag are properties of a
+    // resource a policy matched; a bypass matched nothing to be gated.
+    mitigations: [],
+    exposure: scoreExposure(role, allow, members),
+    policy_count: policies.length, member_count: members, resource_reach: reach,
+    model_version: MODEL_VERSION,
+    evaluated_at: new Date().toISOString(),
+  }
+}
+
 function classifyRole(role) {
   const policies = (db.rolePolicies[role.id] || []).map((id) => db.policies.find((p) => p.id === id)).filter(Boolean)
   const members = db.users.filter((u) => (u.roles || []).includes(role.name)).length
   const allow = policies.filter((p) => String(p.effect).toLowerCase() !== 'deny')
   const deny = policies.filter((p) => String(p.effect).toLowerCase() === 'deny')
   const resources = db.resources.filter((r) => r.is_active !== false)
+
+  // An override is deliberately NOT applied to root either: everywhere else an
+  // override is a reviewer exercising judgement the engine cannot, but here it
+  // would let somebody mark the one role that bypasses the engine as anything
+  // other than Critical.
+  if (String(role.name).toLowerCase() === ROOT_BYPASS_ROLE) {
+    return classifyRootBypass(role, policies, members, resources)
+  }
 
   const priv = scorePrivilege(allow)
   const { f: blast, reach, allJIT, allRecorded } = scoreBlast(allow, resources)

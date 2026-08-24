@@ -74,6 +74,114 @@ export function tierTone(tier) {
 
 const arr = (v) => (Array.isArray(v) ? v : [])
 
+// ── Capabilities ───────────────────────────────────────────────────────────
+//
+// THE ONE PART OF THE ANSWER THAT IS NOT IN THE NESTED TREE.
+//
+// Everything else this file draws comes from `user_type` / `additional_roles` /
+// `direct_policies`, because those already carry parenthood. Capabilities do
+// not appear there at all, and they are the difference between an account that
+// was granted a lot and an account whose authority does not pass through a
+// grant in the first place. The root role is the case that matters: the policy
+// engine returns a bypass before it consults a single attachment, so a canvas
+// drawn only from attachments shows root as an ordinary account with one
+// policy on it. That is not a small omission, it is the opposite of the truth.
+//
+// The API does send them, in the flat `nodes` / `edges` pair the tree docs tell
+// you to skip. Only the capability slice of that pair is read here, and only to
+// hang it off a node the tree already built: the edge source ids are the same
+// `role:<uuid>` / `policy:<uuid>` strings buildTree mints, so attaching is a
+// map lookup rather than a second parse of the whole payload.
+//
+// A backend that sends `nodes: []` produces no capability cards and everything
+// else behaves exactly as before.
+
+/**
+ * Card titles for the capabilities the backend declares as well-known targets.
+ *
+ * The payload's own labels are written for an auditor reading a report ("
+ * Effective superuser (policy bypass / *:*)") and do not fit a 236px card.
+ * The full text is kept on the node and shown in the panel; only the heading
+ * is shortened. Anything not in this map falls back to what was sent, so a
+ * capability added to the backend later still draws.
+ */
+const CAPABILITY_LABEL = {
+  'capability:superuser': 'Effective superuser',
+  'capability:admin_center_write': 'Admin Center write',
+  'capability:vault_plaintext_any': 'Decrypt any secret',
+  'capability:audit_read_org_wide': 'Org-wide audit read',
+}
+
+/** How the account came to hold it, said in the words of the edge that carries it. */
+const CAPABILITY_VIA = {
+  ROOT_BYPASS: 'Bypasses every policy',
+  ADMIN_CENTER: 'Held by the role itself',
+  ALLOWS_ACTION: 'Granted by this policy',
+}
+
+const CAPABILITY_BADGE = {
+  ROOT_BYPASS: 'Bypass',
+  ADMIN_CENTER: 'Unmediated',
+  ALLOWS_ACTION: 'Granted',
+}
+
+/**
+ * Every capability the payload hangs off a role or a policy, keyed by that
+ * source's node id.
+ *
+ * Defensive throughout: the arrays are optional in the contract, an edge can
+ * name a node that was not sent, and the same capability can be reached twice
+ * (root holds admin write both as root and as admin). The first edge to reach
+ * one wins, so a card is never drawn twice under the same parent.
+ */
+export function capabilitiesBySource(graph) {
+  const byId = new Map()
+  for (const n of arr(graph?.nodes)) {
+    if (n?.id) byId.set(n.id, n)
+  }
+  const out = new Map()
+  for (const e of arr(graph?.edges)) {
+    const target = byId.get(e?.to)
+    if (!target || target.kind !== 'capability') continue
+    if (!out.has(e.from)) out.set(e.from, [])
+    const list = out.get(e.from)
+    if (list.some((x) => x.node.id === target.id)) continue
+    list.push({ node: target, edge: e })
+  }
+  return out
+}
+
+/**
+ * One capability card, sitting in the column BELOW whatever grants it, so a
+ * role's bypass reads beside that role's policies and a policy's capability
+ * reads beside the resources that policy matched.
+ */
+function capabilityNode({ node, edge }, level) {
+  const kind = edge?.kind || 'ALLOWS_ACTION'
+  return {
+    id: node.id,
+    level,
+    kind: 'capability',
+    label: CAPABILITY_LABEL[node.id] || node.label || 'Capability',
+    sublabel: CAPABILITY_VIA[kind] || 'Held directly',
+    tone: tierTone(node.tier),
+    badge: CAPABILITY_BADGE[kind] || 'Capability',
+    meta: {
+      tier: node.tier ?? 0,
+      fullLabel: node.label || '',
+      edgeKind: kind,
+      standing: edge?.standing !== false,
+      finding: edge?.finding || '',
+    },
+    children: [],
+  }
+}
+
+/** The capability cards for one source id, already levelled for their parent. */
+function capabilitiesFor(caps, sourceId, level) {
+  return (caps?.get(sourceId) || []).map((c) => capabilityNode(c, level))
+}
+
 /**
  * A policy's reach: everything it matches, flattened into one child list so a
  * policy node has a single expandable set rather than two.
@@ -117,12 +225,17 @@ function policyReach(policy) {
   return out
 }
 
-function policyNode(policy, originLabel) {
+function policyNode(policy, originLabel, caps, level = 2) {
   const deny = String(policy.effect || '').toLowerCase() === 'deny'
-  const children = deny ? [] : policyReach(policy)
+  // Capabilities lead the list. They are at most a couple of cards and they are
+  // the highest-signal thing under the parent, so they must never be the ones
+  // that fold away behind a "+N more" when a policy matches forty resources.
+  const children = deny
+    ? []
+    : [...capabilitiesFor(caps, `policy:${policy.id}`, level + 1), ...policyReach(policy)]
   return {
     id: `policy:${policy.id}`,
-    level: 2,
+    level,
     kind: 'policy',
     label: policy.name,
     sublabel: originLabel,
@@ -148,8 +261,11 @@ function policyNode(policy, originLabel) {
   }
 }
 
-function roleNode(role, kind) {
-  const policies = arr(role.policies).map((p) => policyNode(p, role.name))
+function roleNode(role, kind, caps) {
+  const policies = arr(role.policies).map((p) => policyNode(p, role.name, caps))
+  // Same reasoning as on a policy: an unmediated capability outranks anything
+  // it sits beside, so it goes first and is never the card that gets folded.
+  const children = [...capabilitiesFor(caps, `role:${role.id}`, 2), ...policies]
   return {
     id: `role:${role.id}`,
     level: 1,
@@ -167,8 +283,41 @@ function roleNode(role, kind) {
       isSystem: !!role.is_system,
       roleKind: kind,
     },
-    children: policies,
+    children,
   }
+}
+
+/**
+ * Makes every id in the tree unique by scoping it to the path that reached it.
+ *
+ * THE BUG THIS FIXES, WHICH IS NOT COSMETIC. An object can be reached more than
+ * once: `prod-postgres` is matched by both `pam-read-all` and
+ * `standard-user-access`, and a policy attached to a role can also be attached
+ * straight to the person. Every one of those produced the same `resource:<id>`
+ * on two different branches. React Flow keys nodes by id, so the second card
+ * was silently dropped, and pathToRoot returned whichever branch it walked
+ * into first.
+ *
+ * On a page whose entire reason to exist is answering THROUGH WHAT, showing one
+ * of the two routes and hiding the other is the worst failure available: the
+ * missing hop is a real grant somebody still holds after they revoke the one
+ * the canvas showed them.
+ *
+ * The object's own id is kept on `meta.nodeId`, which is what anything that
+ * needs to talk about the object rather than the position reads: links out to a
+ * record, and the de-duplicated counts in summarise.
+ */
+function scopeIds(root) {
+  const walk = (node, prefix) => {
+    const id = prefix ? `${prefix}>${node.id}` : node.id
+    return {
+      ...node,
+      id,
+      meta: { ...(node.meta || {}), nodeId: node.id },
+      children: (node.children || []).map((c) => walk(c, id)),
+    }
+  }
+  return walk(root, '')
 }
 
 /**
@@ -182,17 +331,23 @@ function roleNode(role, kind) {
 export function buildTree(graph) {
   if (!graph) return null
 
+  // Read once, up front. Every role and policy node below asks this map whether
+  // anything hangs off it that the nested tree does not carry.
+  const caps = capabilitiesBySource(graph)
+
   const grants = []
-  if (graph.user_type) grants.push(roleNode(graph.user_type, 'user_type'))
-  for (const r of arr(graph.additional_roles)) grants.push(roleNode(r, 'additional_role'))
+  if (graph.user_type) grants.push(roleNode(graph.user_type, 'user_type', caps))
+  for (const r of arr(graph.additional_roles)) grants.push(roleNode(r, 'additional_role', caps))
   for (const p of arr(graph.direct_policies)) {
-    const n = policyNode(p, 'Attached directly')
+    // Level 1, not 2: a direct policy IS a grant from the account's point of
+    // view, so it and everything under it sits one column to the left of a
+    // policy that hangs off a role.
+    const n = policyNode(p, 'Attached directly', caps, 1)
     // Warn, not accent: a policy bolted straight onto a person is a finding
     // in its own right. It does not move when they change team and it is
     // invisible to anyone reviewing role membership.
     grants.push({
       ...n,
-      level: 1,
       kind: 'direct_policy',
       sublabel: 'Attached to the account',
       tone: n.tone === 'ok' ? 'ok' : 'warn',
@@ -200,7 +355,7 @@ export function buildTree(graph) {
   }
 
   const user = graph.user || {}
-  return {
+  return scopeIds({
     id: `user:${user.id || 'unknown'}`,
     level: 0,
     kind: 'user',
@@ -217,7 +372,7 @@ export function buildTree(graph) {
       id: user.id,
     },
     children: grants,
-  }
+  })
 }
 
 /** Total nodes underneath a subtree, which is what a collapsed card reports. */
@@ -247,6 +402,27 @@ export function subtreeCount(node) {
 export const REVEAL_INITIAL = 6
 export const REVEAL_STEP = 5
 
+/**
+ * How many children a parent shows before the rest fold behind "+N more",
+ * BY LEVEL rather than one number for the whole tree.
+ *
+ * One cap for every level was wrong once the canvas started opening two levels
+ * on arrival. Six grants beside an account is a comfortable read; six policies
+ * beside EACH of six grants is thirty-six cards on screen before the reader
+ * has clicked anything, which is the flood the disclosure exists to prevent.
+ * Policies are the level that multiplies, so that is the level that gets the
+ * tight cap.
+ */
+const INITIAL_BY_LEVEL = {
+  0: 6, // grants under the account
+  1: 4, // capabilities and policies under one grant
+  2: 6, // resources, secrets and capabilities under one policy
+}
+
+export function initialRevealFor(node) {
+  return INITIAL_BY_LEVEL[node?.level] ?? REVEAL_INITIAL
+}
+
 /** True for the synthetic card that stands in for a parent's hidden children. */
 export function isMoreNode(node) {
   return node?.kind === 'more'
@@ -269,6 +445,7 @@ export const KIND_FILTERS = [
   { key: 'policy', label: 'Policies' },
   { key: 'resource', label: 'Resources' },
   { key: 'credential', label: 'Credentials' },
+  { key: 'capability', label: 'Capabilities' },
 ]
 
 export const DEFAULT_FILTERS = {
@@ -322,6 +499,16 @@ export function filterTree(root, filters) {
   const wantKind = (k) => kinds.has(k)
 
   const keepReach = (n) => {
+    if (n.kind === 'capability') {
+      if (!wantKind('capability')) return false
+      // The resource-shaped cuts ask questions a capability cannot answer: it
+      // has no JIT gate, no recording flag and no safe behind it. Rather than
+      // letting it slip through every narrowed view and look like a match, it
+      // is shown only when nothing is being narrowed.
+      if (f.exposure !== 'all') return false
+      if (f.jitOnly || f.recordedOnly) return false
+      return true
+    }
     if (n.kind === 'credential') {
       if (!wantKind('credential')) return false
       // A credential is not a resource, so the resource-shaped cuts exclude it
@@ -389,7 +576,7 @@ export function visibleNodes(root, expanded, revealed = {}, maxLevel = 3) {
     const total = subtreeCount(node)
     const atDepthLimit = node.level >= maxLevel && kids.length > 0
     const isExpanded = expanded.has(node.id) && !atDepthLimit
-    const shown = isExpanded ? Math.min(revealed[node.id] ?? REVEAL_INITIAL, kids.length) : 0
+    const shown = isExpanded ? Math.min(revealed[node.id] ?? initialRevealFor(node), kids.length) : 0
 
     out.push({
       ...node,
@@ -419,6 +606,10 @@ export function visibleNodes(root, expanded, revealed = {}, maxLevel = 3) {
         parentId: node.id,
         hiddenCount: hidden,
         nextCount: Math.min(REVEAL_STEP, hidden),
+        // No edge is drawn to a "more" pill. It is not one of the children, it
+        // is a note saying how many are missing, and giving it the same
+        // connector as a real object makes it read as one more of them.
+        noEdge: true,
         shownCount: 0,
         childCount: 0,
         subtreeCount: 0,
@@ -501,11 +692,19 @@ export function summarise(root) {
     standing: 0,
     jitGated: 0,
     denyPolicies: 0,
+    capabilities: 0,
+    // Of those, the ones held by a role outright, with no policy in between.
+    unmediated: 0,
+    // Set when the account holds the role the policy engine short circuits on.
+    // Read off the edge the backend sent rather than off the role's name, so a
+    // rename cannot quietly turn the loudest finding on this page off.
+    rootBypass: false,
   }
   if (!root) return acc
 
   const seenResources = new Set()
   const seenCredentials = new Set()
+  const seenCapabilities = new Set()
 
   acc.grants = root.children?.length || 0
   const walk = (node) => {
@@ -515,15 +714,28 @@ export function summarise(root) {
       acc.policies++
       if (String(node.meta?.effect || '').toLowerCase() === 'deny') acc.denyPolicies++
     }
-    if (node.kind === 'resource' && !seenResources.has(node.id)) {
-      seenResources.add(node.id)
+    // Keyed on the object, not the path: a resource reached through two
+    // policies is one resource with two routes to it, and counting it twice
+    // would overstate the estate this account touches.
+    const objectId = node.meta?.nodeId || node.id
+    if (node.kind === 'resource' && !seenResources.has(objectId)) {
+      seenResources.add(objectId)
       acc.resources++
       if (node.meta?.standing) acc.standing++
       if (node.meta?.requiresJit) acc.jitGated++
     }
-    if (node.kind === 'credential' && !seenCredentials.has(node.id)) {
-      seenCredentials.add(node.id)
+    if (node.kind === 'credential' && !seenCredentials.has(objectId)) {
+      seenCredentials.add(objectId)
       acc.credentials++
+    }
+    if (node.kind === 'capability') {
+      if (!seenCapabilities.has(objectId)) {
+        seenCapabilities.add(objectId)
+        acc.capabilities++
+      }
+      const via = node.meta?.edgeKind
+      if (via === 'ROOT_BYPASS' || via === 'ADMIN_CENTER') acc.unmediated++
+      if (via === 'ROOT_BYPASS') acc.rootBypass = true
     }
     for (const c of node.children || []) walk(c)
   }

@@ -612,6 +612,45 @@ input:-webkit-autofill:focus {
   caret-color: rgb(var(--text-primary));
 }
 
+/* ---------------------------------------------------------------------------
+ * Identity graph: flowing edges
+ * ---------------------------------------------------------------------------
+ * A dashed stroke whose dashoffset animates reads as flow along the path, and
+ * flow is the thing a directed graph is trying to say: this grants that, which
+ * reaches this. Static dashes say nothing a solid line does not.
+ *
+ * Every edge flows from the moment the canvas opens, quietly. The branch the
+ * reader has lit flows faster and brighter, so motion still discriminates: it
+ * is the DIFFERENCE in speed that marks the selected path, not the presence of
+ * motion. Animating only the selection left the rest of the graph looking
+ * frozen until something was clicked.
+ *
+ * Both are switched off entirely under prefers-reduced-motion. */
+@keyframes edge-flow {
+  to {
+    stroke-dashoffset: -14;
+  }
+}
+
+.react-flow .edge-flow path,
+.react-flow path.edge-flow {
+  animation: edge-flow 2.4s linear infinite;
+}
+
+.react-flow .edge-flow-lit path,
+.react-flow path.edge-flow-lit {
+  animation: edge-flow 0.9s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .react-flow .edge-flow path,
+  .react-flow path.edge-flow,
+  .react-flow .edge-flow-lit path,
+  .react-flow path.edge-flow-lit {
+    animation: none;
+  }
+}
+
 /* React Flow ships its own hard-coded light palette for the zoom controls
    (#fefefe fill, #222 glyph), which renders as a white box with invisible
    icons on the dark canvas. The library exposes no token for these, so the
