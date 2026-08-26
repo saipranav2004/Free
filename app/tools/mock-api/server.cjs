@@ -158,7 +158,14 @@ on('POST', '/api/v1/auth/login', (ctx) => {
     db.tokens[`challenge:${challenge}`] = user.user_id
     return ok(ctx.res, { mfa_required: true, challenge_token: challenge, expires_in_seconds: 300 })
   }
-  return ok(ctx.res, issueSession(user))
+  // Mirrors auth_service.go's "No MFA -> issue tokens directly", which passes
+  // mfaVerified=true even though nothing was verified. The console has to cope
+  // with a token that claims a factor was cleared on an account that holds
+  // none, so the mock has to reproduce it or the fix cannot be tested.
+  const session = issueSession(user)
+  session.mfa_verified = true
+  db.verified[session.access_token] = true
+  return ok(ctx.res, session)
 }, 'public')
 
 on('POST', '/api/v1/auth/mfa/verify', (ctx) => {
@@ -207,6 +214,30 @@ on('POST', '/api/v1/auth/mfa/recover', (ctx) => {
 
 // The console does setUser(data.data) straight off this response and then
 // reads user.roles, so the payload is the account itself, not a wrapper.
+// The role-gated MFA decision for one account, mirroring
+// MFAPolicyService.Evaluate: strictest mode across the roles held wins, and
+// enforce + not enrolled is the only combination that blocks.
+function mfaPostureFor(user) {
+  const byRole = new Map(db.mfaRules.filter((r) => r.mode !== 'off').map((r) => [String(r.role_name).toLowerCase(), r]))
+  const matched = (user.roles || []).filter((r) => byRole.has(String(r).toLowerCase()))
+  if (matched.length === 0) {
+    return { mfa_required: false, mfa_policy_mode: 'off', mfa_enrolment_required: false }
+  }
+  const rank = { off: 0, monitor: 1, enforce: 2 }
+  let mode = 'off'
+  for (const r of matched) {
+    const m = byRole.get(String(r).toLowerCase()).mode
+    if (rank[m] > rank[mode]) mode = m
+  }
+  return {
+    mfa_required: true,
+    mfa_policy_mode: mode,
+    // Enforce, and no second factor: the restricted session.
+    mfa_enrolment_required: mode === 'enforce' && !user.mfa_enabled,
+    mfa_policy_roles: matched.sort(),
+  }
+}
+
 on('GET', '/api/v1/auth/me', (ctx) => {
   // Roles come from the CURRENT user row, not from whatever was stamped into
   // the session at sign-in. Mirrors middleware.LiveRoles: the whole point is
@@ -216,7 +247,12 @@ on('GET', '/api/v1/auth/me', (ctx) => {
     ...ctx.user,
     roles: live.roles || [],
     status: live.status,
+    mfa_enabled: !!live.mfa_enabled,
     mfa_verified: !!db.verified[(ctx.req.headers.authorization || '').slice(7)],
+    // The policy decision the console renders its banner and interrupt from.
+    // Absent here, readMfaPolicyPosture reports "no policy in play" and both
+    // monitor and enforce become invisible to the person they apply to.
+    ...mfaPostureFor(live),
   })
 })
 on('POST', '/api/v1/auth/logout', (ctx) => {
@@ -234,7 +270,19 @@ on('POST', '/api/v1/auth/mfa/setup/verify', (ctx) => {
   if (String(ctx.body?.code || '') !== '123456')
     return fail(ctx.res, 400, 'INVALID_CODE', 'That code is not right. Check the clock on your device and try again.')
   if (ctx.user) ctx.user.mfa_enabled = true
-  return ok(ctx.res, { backup_codes: ['4KQ2-91MD', '7ZR8-4XCV', 'LM03-88TB', 'QW51-2NDE', 'PP74-6HGA', 'TT19-0JKL', 'BB62-5RQZ', 'XN44-7YUE'], message: 'Two factor authentication is on for this account.' })
+  const live = db.users.find((u) => u.user_id === ctx.user?.user_id)
+  if (live) live.mfa_enabled = true
+  // A replacement session, mirroring AuthService.SetupMFAVerify. Under an
+  // enforce rule the caller is holding a restricted token this enrolment has
+  // just made obsolete; without a new one the only way out of the interrupt
+  // would be to sign in again.
+  const fresh = live ? issueSession(live) : null
+  if (fresh) db.verified[fresh.access_token] = true
+  return ok(ctx.res, {
+    backup_codes: ['4KQ2-91MD', '7ZR8-4XCV', 'LM03-88TB', 'QW51-2NDE', 'PP74-6HGA', 'TT19-0JKL', 'BB62-5RQZ', 'XN44-7YUE'],
+    message: 'Two factor authentication is on for this account.',
+    ...(fresh ? { access_token: fresh.access_token, token_type: fresh.token_type, expires_at: fresh.expires_at, mfa_verified: true } : {}),
+  })
 }, 'public')
 on('POST', '/api/v1/auth/mfa/backup-codes/regenerate', (ctx) =>
   ok(ctx.res, { backup_codes: ['9AA1-33KD', '2BB7-81MN', 'CC40-77QR', 'DD22-19ZX', 'EE68-04VB', 'FF15-52LK', 'GG93-38TY', 'HH07-66PA'], count: 8 }))
