@@ -175,10 +175,50 @@ on('POST', '/api/v1/auth/mfa/verify', (ctx) => {
   return ok(ctx.res, session)
 }, 'public')
 
+// Mirrors POST /api/v1/auth/mfa/recover (auth_handler.go MFARecover). A
+// SEPARATE route from /mfa/verify, binding `backup_code` rather than `code`,
+// because a recovery code is a stored single-use hash and has nothing to do
+// with the enrolled device's shared secret. backup_codes_remaining is set
+// only here, which is how the console knows a code was spent.
+db.backupCodes = db.backupCodes || {}
+on('POST', '/api/v1/auth/mfa/recover', (ctx) => {
+  const { challenge_token: ch, backup_code: bc } = ctx.body || {}
+  const userId = db.tokens[`challenge:${ch}`]
+  if (!userId) return fail(ctx.res, 401, 'CHALLENGE_EXPIRED', 'That verification session has expired. Sign in again.')
+  if (!String(bc || '').trim()) return fail(ctx.res, 400, 'VALIDATION_FAILED', 'challenge_token and backup_code are required')
+  // Ten codes per account, lowercase hex, matching GenerateBackupCodes. The
+  // service normalises with trim + lowercase before hashing, so this does too.
+  if (!db.backupCodes[userId]) {
+    db.backupCodes[userId] = Array.from({ length: 10 }, (_, i) => `bc${String(i + 1).padStart(2, '0')}a1b2c3`)
+  }
+  const norm = String(bc).trim().toLowerCase()
+  const pool = db.backupCodes[userId]
+  const idx = pool.indexOf(norm)
+  if (idx === -1) return fail(ctx.res, 401, 'INVALID_BACKUP_CODE', 'That backup code is not valid, or it has already been used.')
+  pool.splice(idx, 1) // single use
+  const user = db.users.find((u) => u.user_id === userId)
+  const session = issueSession(user)
+  session.mfa_verified = true
+  session.backup_codes_remaining = pool.length
+  db.verified[session.access_token] = true
+  auditRow(user, 'AUTH', 'auth.mfa.backup_code.used', 'SUCCESS', null, { codes_remaining: pool.length })
+  return ok(ctx.res, session)
+}, 'public')
+
 // The console does setUser(data.data) straight off this response and then
 // reads user.roles, so the payload is the account itself, not a wrapper.
-on('GET', '/api/v1/auth/me', (ctx) =>
-  ok(ctx.res, { ...ctx.user, mfa_verified: !!db.verified[(ctx.req.headers.authorization || '').slice(7)] }))
+on('GET', '/api/v1/auth/me', (ctx) => {
+  // Roles come from the CURRENT user row, not from whatever was stamped into
+  // the session at sign-in. Mirrors middleware.LiveRoles: the whole point is
+  // that a delegation or a revocation reaches a session already open.
+  const live = db.users.find((u) => u.user_id === ctx.user.user_id) || ctx.user
+  return ok(ctx.res, {
+    ...ctx.user,
+    roles: live.roles || [],
+    status: live.status,
+    mfa_verified: !!db.verified[(ctx.req.headers.authorization || '').slice(7)],
+  })
+})
 on('POST', '/api/v1/auth/logout', (ctx) => {
   delete db.tokens[(ctx.req.headers.authorization || '').slice(7)]
   return ok(ctx.res, { message: 'Signed out' })
