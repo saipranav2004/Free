@@ -44,16 +44,32 @@ export const API_BASE_URL = configuredApiBase || 'http://localhost:8080'
 // everything the guard does is friction and attribution. It is not a control
 // that prevents anything, and it must never be described as one.
 //
-// OFF unless VITE_DEVTOOLS_GUARD is explicitly "true". A guard that wipes the
-// page on a bad signal is the kind of thing that should be opted into per
-// deployment, never something a developer inherits by accident from a default.
-// Vite inlines this at BUILD time, so flipping it needs a rebuild.
+// ON IN A PRODUCTION BUILD, OFF IN DEVELOPMENT, and VITE_DEVTOOLS_GUARD
+// overrides either direction.
+//
+// Requiring an environment variable to turn a security-adjacent control ON is
+// the wrong way round: the failure mode is a production console that silently
+// ships with no guard because nobody remembered the variable, and nothing about
+// the running app would say so. Defaulting to the build mode means a real
+// deployment is protected with no configuration at all, while a developer
+// running `vite` locally is never locked out of their own DevTools.
+//
+// Set VITE_DEVTOOLS_GUARD=true to force it on in development (that is how it
+// gets tested), or =false to force it off in a production build. Vite inlines
+// both at BUILD time, so either needs a rebuild, not a restart.
 const devtoolsGuardFlag = String(import.meta.env.VITE_DEVTOOLS_GUARD ?? '')
   .trim()
   .toLowerCase()
 
+const devtoolsGuardOverride =
+  devtoolsGuardFlag === 'true' || devtoolsGuardFlag === '1'
+    ? true
+    : devtoolsGuardFlag === 'false' || devtoolsGuardFlag === '0'
+      ? false
+      : null
+
 export const DEVTOOLS_GUARD = {
-  enabled: devtoolsGuardFlag === 'true' || devtoolsGuardFlag === '1',
+  enabled: devtoolsGuardOverride === null ? import.meta.env.PROD === true : devtoolsGuardOverride,
 
   // Where a detection is reported, relative to API_BASE_URL. EMPTY BY DEFAULT,
   // because this frontend has no endpoint to report to: nothing in the PAM API
