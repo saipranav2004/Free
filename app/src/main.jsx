@@ -8,6 +8,10 @@ import App from './App.jsx'
 import { ErrorBoundary } from './components/common/ErrorBoundary'
 import { DensityProvider } from './components/ui/grid'
 import { useThemeStore } from './store/themeStore'
+import { useAuthStore } from './store/authStore'
+import { installDevtoolsGuard } from './lib/devtoolsGuard'
+import { reportDevToolsDetected } from './api/clientGuard'
+import { DEVTOOLS_GUARD } from './config/constants'
 import './index.css'
 
 // Bridges the theme store to sonner's own theme prop so toasts match whichever
@@ -61,7 +65,50 @@ const queryClient = new QueryClient({
   },
 })
 
-createRoot(document.getElementById('root')).render(
+// ---------------------------------------------------------------------------
+// Developer Tools guard
+// ---------------------------------------------------------------------------
+// Installed BEFORE the first render, on purpose: the whole point is to be the
+// first thing running on the page. It is a DETERRENT, not a security boundary
+// (see src/lib/devtoolsGuard.js for what that means and why), and it is off
+// unless VITE_DEVTOOLS_GUARD says otherwise.
+//
+// isProtected keeps it dormant until there is a real session to protect, so the
+// sign-in and MFA screens are never wiped. An operator who cannot sign in and
+// cannot see why has no way to report the problem.
+let appRoot = null
+
+installDevtoolsGuard({
+  enabled: DEVTOOLS_GUARD.enabled,
+  dockedDeltaPx: DEVTOOLS_GUARD.dockedDeltaPx,
+  debuggerPauseMs: DEVTOOLS_GUARD.debuggerPauseMs,
+  checkIntervalMs: DEVTOOLS_GUARD.checkIntervalMs,
+  recoveryIntervalMs: DEVTOOLS_GUARD.recoveryIntervalMs,
+  confirmTicks: DEVTOOLS_GUARD.confirmTicks,
+  isProtected: () => Boolean(useAuthStore.getState().accessToken),
+  report: reportDevToolsDetected,
+  // Shut the app down before the guard removes the document. Unmounting first
+  // stops React rendering into a mount point that is about to disappear, and
+  // cancelling the query cache stops react-query issuing further requests,
+  // which is what "stop the page from loading" has to mean for an SPA: the
+  // fetches keep going otherwise, wiped DOM or not.
+  onDetect: () => {
+    try {
+      queryClient.cancelQueries()
+      queryClient.clear()
+    } catch {
+      // Nothing here may keep the block from being drawn.
+    }
+    try {
+      if (appRoot) appRoot.unmount()
+    } catch {
+      // Same.
+    }
+  },
+})
+
+appRoot = createRoot(document.getElementById('root'))
+appRoot.render(
   <StrictMode>
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>

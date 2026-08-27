@@ -10,7 +10,74 @@
 // reads as barely-visible pale text on a white card in light mode, so this
 // is deliberate, not decorative.
 
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://das-iam.bharatgen.dev'
+// Where the API lives. Vite inlines this at BUILD time, so changing it needs a
+// rebuild, not a restart.
+//
+// The fallback used to be a hard-coded third-party domain. That is a bad
+// default for this console specifically: every request carries a Bearer token,
+// so a build that forgot the variable would have shipped credentials to a host
+// nobody on this project controls, and it would have looked like it was
+// working right up until someone read the network tab.
+//
+// So an unset variable is now loud instead of silent. In development it falls
+// back to the local API, which is what a developer means by omitting it. In a
+// production build it throws at module load: a console that cannot possibly
+// reach its backend should fail where the mistake is visible, not send tokens
+// somewhere unintended.
+const configuredApiBase = import.meta.env.VITE_API_BASE_URL
+
+if (import.meta.env.PROD && !configuredApiBase) {
+  throw new Error(
+    'VITE_API_BASE_URL is not set. This is a production build of the PAM console, ' +
+      'and it carries a bearer token on every request — it will not guess a backend. ' +
+      'Set VITE_API_BASE_URL to your PAM API origin (e.g. https://dashboard-dev.adapid.link) and rebuild.'
+  )
+}
+
+export const API_BASE_URL = configuredApiBase || 'http://localhost:8080'
+
+// ---------------------------------------------------------------------------
+// Developer Tools guard (deterrent, not a security boundary)
+// ---------------------------------------------------------------------------
+// The switch for src/lib/devtoolsGuard.js. Read that file's header before
+// touching any of this: DevTools sits outside the page's security boundary, so
+// everything the guard does is friction and attribution. It is not a control
+// that prevents anything, and it must never be described as one.
+//
+// OFF unless VITE_DEVTOOLS_GUARD is explicitly "true". A guard that wipes the
+// page on a bad signal is the kind of thing that should be opted into per
+// deployment, never something a developer inherits by accident from a default.
+// Vite inlines this at BUILD time, so flipping it needs a rebuild.
+const devtoolsGuardFlag = String(import.meta.env.VITE_DEVTOOLS_GUARD ?? '')
+  .trim()
+  .toLowerCase()
+
+export const DEVTOOLS_GUARD = {
+  enabled: devtoolsGuardFlag === 'true' || devtoolsGuardFlag === '1',
+
+  // Where a detection is reported, relative to API_BASE_URL. EMPTY BY DEFAULT,
+  // because this frontend has no endpoint to report to: nothing in the PAM API
+  // currently accepts a client-reported guard event. That is deliberate rather
+  // than an oversight to paper over. The block screen prints "This event has
+  // been recorded" ONLY when a report actually lands, and falls back to "This
+  // session is monitored" otherwise, so the wording can never claim an audit
+  // row that does not exist.
+  //
+  // Point this at a real endpoint (it receives POST {signal, path} with the
+  // session's bearer token) and the guard starts recording, with no other
+  // change needed here.
+  reportPath: String(import.meta.env.VITE_DEVTOOLS_GUARD_REPORT_PATH ?? '').trim(),
+
+  // Detection thresholds, exposed so a deployment that false-positives can be
+  // tuned without a code change. Raising dockedDeltaPx makes the guard quieter,
+  // lowering it makes it twitchier; confirmTicks is how many consecutive
+  // positive checks are required before the page is actually blocked.
+  dockedDeltaPx: 160,
+  debuggerPauseMs: 100,
+  checkIntervalMs: 1000,
+  recoveryIntervalMs: 2000,
+  confirmTicks: 2,
+}
 
 // ---------------------------------------------------------------------------
 // Roles (RBAC), the three system roles that ship with every install
