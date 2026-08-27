@@ -11,6 +11,14 @@ RUN npm ci
 COPY . .
 ARG VITE_API_BASE_URL
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
+
+# Developer Tools guard. Leave this unset and a production build is guarded,
+# which is the intended deployment. Pass --build-arg VITE_DEVTOOLS_GUARD=false
+# to ship a build without it. Declared here because an undeclared build arg is
+# silently dropped, which would make the off-switch look broken.
+ARG VITE_DEVTOOLS_GUARD
+ENV VITE_DEVTOOLS_GUARD=$VITE_DEVTOOLS_GUARD
+
 RUN npm run build
 
 # ------------------------------------------------------------------ serve stage
