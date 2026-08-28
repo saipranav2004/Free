@@ -31,9 +31,8 @@ type Config struct {
 	Network   NetworkConfig   `mapstructure:"network"`
 }
 
-// NetworkConfig holds the perimeter controls: which source networks may reach
-// this API at all, and how hard a single source may hammer the endpoints worth
-// brute-forcing.
+// NetworkConfig holds the perimeter control: which source networks may reach
+// this API at all.
 //
 // EVERY LIST IS A SINGLE STRING, NOT A SLICE, and that is deliberate. Viper's
 // AutomaticEnv cannot decode a comma-separated environment variable into a
@@ -77,14 +76,6 @@ type NetworkConfig struct {
 	// the probe pulls the instance out of the pool and causes the outage it
 	// was meant to prevent. Nothing that returns data belongs here.
 	AllowlistExemptPaths string `mapstructure:"allowlist_exempt_paths"`
-
-	// Auth endpoint throttling. On by default: before it existed, sign-in, MFA
-	// verification and backup-code recovery all accepted unlimited attempts
-	// from a single source, and a 6-digit code is a small enough space to be
-	// worth grinding.
-	AuthRateLimitEnabled   bool `mapstructure:"auth_rate_limit_enabled"`
-	AuthRateLimitPerMinute int  `mapstructure:"auth_rate_limit_per_minute"`
-	AuthRateLimitBurst     int  `mapstructure:"auth_rate_limit_burst"`
 }
 
 // noProxySentinel is the explicit "this process is reached directly" value.
@@ -490,9 +481,6 @@ func Load() (*Config, error) {
 	v.SetDefault("network.allowed_cidrs", "")
 	v.SetDefault("network.break_glass_cidrs", "")
 	v.SetDefault("network.allowlist_exempt_paths", "/api/health")
-	v.SetDefault("network.auth_rate_limit_enabled", true)
-	v.SetDefault("network.auth_rate_limit_per_minute", 20)
-	v.SetDefault("network.auth_rate_limit_burst", 10)
 	v.SetDefault("webproxy.enabled", false)
 	v.SetDefault("webproxy.base_domain", "")
 	v.SetDefault("webproxy.public_port", 0)

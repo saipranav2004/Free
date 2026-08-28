@@ -667,37 +667,6 @@ func main() {
 
 	// Public (no token required)
 	pub := r.Group("/api/v1/auth")
-
-	// Throttled per source address. These three are the only unauthenticated
-	// endpoints that check a secret, and two of them check a six-digit one.
-	// Account lockout bounds the damage to a single account; it does nothing
-	// about one password sprayed across every username, nor about grinding a
-	// TOTP or backup code. Mounted here rather than globally because a signed
-	// in console legitimately makes far more requests than this allows.
-	pub.Use(middleware.RateLimit(
-		middleware.RateLimitConfig{
-			Enabled:   cfg.Network.AuthRateLimitEnabled,
-			PerMinute: cfg.Network.AuthRateLimitPerMinute,
-			Burst:     cfg.Network.AuthRateLimitBurst,
-		},
-		func(sourceIP, path, userAgent string) {
-			auditService.Write(services.AuditEntry{
-				ActorType: "SYSTEM",
-				Action:    models.AuditRateLimited,
-				Outcome:   models.AuditOutcomeDenied,
-				Severity:  models.AuditSeverityWarn,
-				SourceIP:  sourceIP,
-				UserAgent: userAgent,
-				Resource:  path,
-				Details: map[string]interface{}{
-					"control":     "auth_rate_limit",
-					"enforcement": "server_side_prevented",
-					"path":        path,
-				},
-			})
-		},
-		logger,
-	))
 	{
 		pub.POST("/login", authHandler.Login)
 		pub.POST("/mfa/verify", authHandler.MFAVerify)

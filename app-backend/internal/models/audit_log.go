@@ -134,11 +134,16 @@ const (
 	AuditClipboardBlocked     = "CLIPBOARD_BLOCKED"
 	AuditConnectMethodDenied  = "CONNECT_METHOD_DENIED"
 
-	// ── Perimeter (internal/middleware/network_allowlist.go, ratelimit.go) ──
+	//   DEVTOOLS_DETECTED is the same class of evidence as
+	//   CLIPBOARD_BLOCKED: a report from the operator's own browser that
+	//   the injected deterrent fired. It is intent, never prevention.
+	AuditDevToolsDetected = "DEVTOOLS_DETECTED"
+
+	// ── Perimeter (internal/middleware/network_allowlist.go) ──
 	//
 	// These fire BEFORE authentication, so they carry a source address and a
 	// path but no user: refusing an unapproved network is precisely a decision
-	// made without knowing who is calling. All three keep the AUTHZ_ prefix so
+	// made without knowing who is calling. Both keep the AUTHZ_ prefix so
 	// CategoryForAction files them under AUTHZ with the other access
 	// decisions, which is where an investigator looks for them.
 	//
@@ -147,7 +152,6 @@ const (
 	// never throttled.
 	AuditNetworkDenied     = "AUTHZ_NETWORK_DENIED"
 	AuditNetworkBreakGlass = "AUTHZ_NETWORK_BREAK_GLASS"
-	AuditRateLimited       = "AUTHZ_RATE_LIMITED"
 )
 
 // AuditLog is one immutable, hash-chained audit record — the superset of
@@ -255,7 +259,8 @@ func deriveCategory(action string) AuditCategory {
 	case strings.HasPrefix(action, "AUTHZ"):
 		return AuditAuthz
 	case action == AuditDownloadBlocked, action == AuditEgressBudgetExceeded,
-		action == AuditClipboardBlocked, action == AuditConnectMethodDenied:
+		action == AuditClipboardBlocked, action == AuditConnectMethodDenied,
+		action == AuditDevToolsDetected:
 		// Data-protection enforcement is session-scoped evidence; without
 		// this it would fall through to OTHER and drop out of every
 		// session-filtered audit query an investigator actually runs.
