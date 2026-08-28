@@ -2,10 +2,15 @@ package webproxy
 
 import (
 	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
 	"github.com/yourorg/pam/internal/models"
+	"go.uber.org/zap"
 )
 
 // ── injection ─────────────────────────────────────────────────────────────
@@ -187,5 +192,115 @@ func TestGuardDocumentsThatItIsADeterrent(t *testing.T) {
 	js := string(devtoolsGuardJS)
 	if !strings.Contains(js, "DETERRENT, NOT A SECURITY BOUNDARY") {
 		t.Fatal("the asset must state plainly that it is not a security boundary")
+	}
+}
+
+// ── end to end, through the real proxy ────────────────────────────────────
+//
+// Everything above tests pieces. This drives a real HTTP round trip through
+// buildReverseProxy against a fake MinIO Console, so the whole chain is
+// exercised: isHTMLResponse decides to inject, injectHeartbeat buffers the
+// body, csp.go issues a nonce and rewrites the target's policy, and
+// pamScriptTags assembles the tags. A break anywhere in that chain fails here.
+//
+// The upstream deliberately ships MinIO Console's real Content-Security-Policy.
+// It carries no 'unsafe-inline' in script-src, which is exactly the condition
+// under which an injected script silently never runs: no console error, no
+// failed request, the page renders perfectly and the guard simply is not there.
+func TestGuardReachesTheBrowserThroughTheRealProxy(t *testing.T) {
+	const minioCSP = "default-src 'self' 'unsafe-eval' 'unsafe-inline'; " +
+		"script-src 'self' https://unpkg.com; connect-src 'self' https://unpkg.com"
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("Content-Security-Policy", minioCSP)
+		w.WriteHeader(http.StatusOK)
+		_, _ = io.WriteString(w, `<!doctype html><html><head><title>Object Browser</title></head>`+
+			`<body><div id="root">pam-agent</div></body></html>`)
+	}))
+	defer upstream.Close()
+
+	targetURL, _ := url.Parse(upstream.URL)
+	rs := &ResolvedSession{
+		Session: &models.WebProxySession{
+			ID:             "wps-1",
+			Subdomain:      "minio-dev-test-pam",
+			Username:       "d.okonkwo",
+			BlockClipboard: true, // the policy flag that marks this session protected
+		},
+		Upstream: &UpstreamState{Cookies: map[string]string{}},
+		Target:   targetURL,
+	}
+
+	h := NewHandler(testService(defaultTestConfig()), zap.NewNop())
+	req := httptest.NewRequest(http.MethodGet, "http://minio-dev-test-pam.pam.example.com/browser/pam-agent", nil)
+	rec := httptest.NewRecorder()
+	h.buildReverseProxy(rs).ServeHTTP(rec, req)
+
+	res := rec.Result()
+	body := rec.Body.String()
+
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("proxy returned %d", res.StatusCode)
+	}
+	// The target's own page must survive: the guard rides along, it does not
+	// replace the application.
+	if !strings.Contains(body, `<div id="root">pam-agent</div>`) {
+		t.Fatal("the target application's markup was lost")
+	}
+	if !strings.Contains(body, "__pam_devtools_block") {
+		t.Fatalf("the DevTools guard never reached the browser; body was:\n%.400s", body)
+	}
+	if !strings.Contains(body, "__PAM_DEVTOOLS_GUARD=") {
+		t.Fatal("the guard arrived without its configuration")
+	}
+
+	// Injected before </body> so the document still parses as one page.
+	if strings.Index(body, "__pam_devtools_block") > strings.Index(body, "</body>") {
+		t.Fatal("scripts were appended after </body>")
+	}
+
+	// The nonce is the difference between running and silently not running.
+	nonce := ""
+	if i := strings.Index(body, `<script nonce="`); i >= 0 {
+		rest := body[i+len(`<script nonce="`):]
+		nonce = rest[:strings.Index(rest, `"`)]
+	}
+	if nonce == "" {
+		t.Fatal("no nonce was issued, so MinIO's own CSP would refuse every injected script")
+	}
+	if csp := res.Header.Get("Content-Security-Policy"); !strings.Contains(csp, "nonce-"+nonce) {
+		t.Fatalf("the response CSP does not admit the nonce it issued: %s", csp)
+	}
+}
+
+// The mirror image: a session whose resource carries no data-protection policy
+// must be proxied untouched apart from the heartbeat. Injecting a DevTools
+// blocker onto a console nobody asked to protect is its own kind of outage.
+func TestUnprotectedSessionIsProxiedWithoutTheGuard(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = io.WriteString(w, `<!doctype html><html><body><div id="root">ok</div></body></html>`)
+	}))
+	defer upstream.Close()
+
+	targetURL, _ := url.Parse(upstream.URL)
+	rs := &ResolvedSession{
+		Session:  &models.WebProxySession{ID: "wps-2", Subdomain: "grafana"},
+		Upstream: &UpstreamState{Cookies: map[string]string{}},
+		Target:   targetURL,
+	}
+
+	h := NewHandler(testService(defaultTestConfig()), zap.NewNop())
+	req := httptest.NewRequest(http.MethodGet, "http://grafana.pam.example.com/", nil)
+	rec := httptest.NewRecorder()
+	h.buildReverseProxy(rs).ServeHTTP(rec, req)
+
+	body := rec.Body.String()
+	if strings.Contains(body, "__pam_devtools_block") {
+		t.Fatal("an unprotected session must not receive the DevTools guard")
+	}
+	if !strings.Contains(body, `<div id="root">ok</div>`) {
+		t.Fatal("the target page must still be served")
 	}
 }
