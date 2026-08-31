@@ -10,6 +10,7 @@ import {
   unreadNotificationCount,
 } from '../../api/notifications'
 import { categoryIcon, severityTone, timeAgo } from '../../lib/notificationDisplay'
+import { passesMutes, readMutes } from '../../lib/notificationPrefs'
 
 // ---------------------------------------------------------------------------
 // The bell
@@ -34,6 +35,10 @@ import { categoryIcon, severityTone, timeAgo } from '../../lib/notificationDispl
 //   EVERY ITEM GOES SOMEWHERE.                Each row is a link to the object
 //     it is about. A notification you cannot act on is an alert, and alerts
 //     nobody can act on train people to ignore the bell.
+//   THE PANEL RESPECTS MUTES, THE PAGE DOES NOT. Settings > Notifications lets
+//     somebody quiet a category here; /notifications still shows everything,
+//     because an archive with a hole in it is not one. CRITICAL and anything in
+//     the Security category ignore mutes entirely. See lib/notificationPrefs.
 
 const PREVIEW_COUNT = 6
 const COUNT_POLL_MS = 30000
@@ -93,7 +98,30 @@ export function NotificationsMenu() {
   const readOne = useMutation({ mutationFn: markNotificationRead, onSuccess: refresh })
   const readAll = useMutation({ mutationFn: markAllNotificationsRead, onSuccess: refresh })
 
-  const items = useMemo(() => listQuery.data?.items || [], [listQuery.data])
+  // Read once per open rather than on every render: the value only changes on
+  // another tab's Settings page, and re-reading localStorage inside a render
+  // is a synchronous disk-backed call in a hot path.
+  const [mutes, setMutes] = useState(() => readMutes())
+  useEffect(() => {
+    if (open) setMutes(readMutes())
+  }, [open])
+  // ...and when another tab changes them, so two open tabs do not disagree.
+  useEffect(() => {
+    const onStorage = (e) => {
+      if (e.key === 'pam_notification_mutes') setMutes(readMutes())
+    }
+    window.addEventListener('storage', onStorage)
+    return () => window.removeEventListener('storage', onStorage)
+  }, [])
+
+  const allItems = useMemo(() => listQuery.data?.items || [], [listQuery.data])
+  const items = useMemo(() => allItems.filter((i) => passesMutes(i, mutes)), [allItems, mutes])
+  const hiddenByMutes = allItems.length - items.length
+
+  // THE BADGE COUNTS WHAT THE SERVER HAS, NOT WHAT THIS PANEL SHOWS. Muting is
+  // a preference about interruption, not a claim that the item did not happen,
+  // and a badge that quietly stopped counting muted rows would leave "3 unread"
+  // beside a panel showing one and no way to reconcile them.
   const unread = countQuery.data ?? listQuery.data?.unread_total ?? 0
   const badge = unread > 9 ? '9+' : String(unread)
 
@@ -151,12 +179,24 @@ export function NotificationsMenu() {
           <div className="max-h-[26rem] overflow-y-auto">
             {listQuery.isLoading ? (
               <p className="px-4 py-8 text-center text-xs text-tertiary">Loading…</p>
+            ) : listQuery.isError ? (
+              <div className="px-4 py-10 text-center">
+                <Bell className="mx-auto h-6 w-6 text-tertiary" strokeWidth={1.5} />
+                <p className="mt-2 text-sm font-medium text-secondary">Notifications are unavailable</p>
+                <p className="mt-1 text-xs text-tertiary">
+                  The console could not reach the notification service. It will retry on its own.
+                </p>
+              </div>
             ) : items.length === 0 ? (
               <div className="px-4 py-10 text-center">
                 <Bell className="mx-auto h-6 w-6 text-tertiary" strokeWidth={1.5} />
-                <p className="mt-2 text-sm font-medium text-secondary">You are all caught up</p>
+                <p className="mt-2 text-sm font-medium text-secondary">
+                  {hiddenByMutes > 0 ? 'Nothing here right now' : 'You are all caught up'}
+                </p>
                 <p className="mt-1 text-xs text-tertiary">
-                  Approvals, access decisions and security events land here.
+                  {hiddenByMutes > 0
+                    ? 'Recent notifications are in categories you have muted. They are all on the notifications page.'
+                    : 'Approvals, access decisions and security events land here.'}
                 </p>
               </div>
             ) : (
@@ -214,6 +254,11 @@ export function NotificationsMenu() {
           </div>
 
           <div className="border-t border-line-soft px-4 py-2.5">
+            {hiddenByMutes > 0 && items.length > 0 && (
+              <p className="mb-1.5 text-center text-2xs text-tertiary">
+                {hiddenByMutes} more in muted categories
+              </p>
+            )}
             <button
               type="button"
               onClick={() => {

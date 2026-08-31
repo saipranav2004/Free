@@ -62,6 +62,32 @@ func (h *JITHandler) notifyUser(in services.NotifyInput, userID string) {
 	h.notify.Deliver(in, userID)
 }
 
+// refuseIfPrivileged closes the JIT request path to root and admin.
+//
+// The rule this enforces: an account that can approve its own access does not
+// ask for it. Root and admin reach every resource their policies permit
+// directly (see middleware.RequireActiveGrant, which now short-circuits for
+// them), so a request from one of those accounts is an approval queue entry
+// that nobody needs to work and that the requester could clear themselves.
+//
+// This is the SERVER half of the rule. The console also stops offering the
+// control, but hiding a button is presentation; this is the boundary, and it
+// holds for a hand-made call, a stale tab, or a replayed request.
+//
+// 403 with a machine-readable code rather than 400: the caller is
+// authenticated and the payload is well formed, they simply may not do this.
+func (h *JITHandler) refuseIfPrivileged(c *gin.Context) bool {
+	if !services.IsAdminOrRoot(rolesOf(c)) {
+		return false
+	}
+	c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
+		"success": false,
+		"error":   "Root and administrator accounts hold direct access and do not raise just-in-time requests",
+		"code":    "jit_not_applicable",
+	})
+	return true
+}
+
 // ──────────────────────────────────────────────────────────────────────────
 // REQUEST
 // ──────────────────────────────────────────────────────────────────────────
@@ -79,6 +105,10 @@ type createJITRequest struct {
 // Idempotency-Key header is honoured: replaying the same key returns the
 // original request instead of creating a duplicate.
 func (h *JITHandler) Create(c *gin.Context) {
+	if h.refuseIfPrivileged(c) {
+		return
+	}
+
 	var req createJITRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Error(c, http.StatusBadRequest, "Invalid request: "+err.Error())
@@ -106,6 +136,22 @@ func (h *JITHandler) Create(c *gin.Context) {
 		DedupeKey:  "jit.created." + created.ID,
 	})
 
+	// AND THE REQUESTER, which the first version of this left out. Somebody
+	// who has just submitted a request has exactly one question, "did that go
+	// through", and a bell that stays empty answers it wrongly. Every other
+	// state of this request already notifies them (partial, approved, denied,
+	// expired); submission is the one that opens the thread.
+	h.notifyUser(services.NotifyInput{
+		Category:   models.NotifyCategoryRequest,
+		Severity:   models.NotifySeverityInfo,
+		Title:      "Access request submitted",
+		Body:       "Your request for " + created.ResourceName + " is waiting on an approver",
+		Link:       "/jit/requests/" + created.ID,
+		EntityType: "jit_request",
+		EntityID:   created.ID,
+		DedupeKey:  "jit.submitted." + created.ID,
+	}, created.RequesterUserID)
+
 	response.Created(c, gin.H{
 		"request": created,
 		"next":    "Awaiting approver decision. Poll GET /api/v1/pam/jit/requests/" + created.ID,
@@ -117,6 +163,10 @@ func (h *JITHandler) Create(c *gin.Context) {
 // No approver is involved, but the grant does not activate until the mandatory
 // waiting period elapses, and the request raises a CRITICAL alert immediately.
 func (h *JITHandler) Breakglass(c *gin.Context) {
+	if h.refuseIfPrivileged(c) {
+		return
+	}
+
 	var req createJITRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Error(c, http.StatusBadRequest, "Invalid request: "+err.Error())
@@ -130,6 +180,31 @@ func (h *JITHandler) Breakglass(c *gin.Context) {
 		h.fail(c, err, "Failed to raise break-glass request")
 		return
 	}
+
+	// Break-glass has no approver, so the notification is not a queue entry,
+	// it is the intervention window. CRITICAL, and to every approver, because
+	// the whole point of the waiting period is that somebody can still stop it.
+	h.notifyApprovers(services.NotifyInput{
+		Category:   models.NotifyCategorySecurity,
+		Severity:   models.NotifySeverityCritical,
+		Title:      "Break-glass access raised",
+		Body:       created.RequesterUsername + " raised emergency access to " + created.ResourceName + ". Revoke it before the waiting period ends if this is not expected.",
+		Link:       "/admin/jit",
+		EntityType: "jit_request",
+		EntityID:   created.ID,
+		DedupeKey:  "jit.breakglass." + created.ID,
+	})
+
+	h.notifyUser(services.NotifyInput{
+		Category:   models.NotifyCategoryRequest,
+		Severity:   models.NotifySeverityWarning,
+		Title:      "Break-glass request raised",
+		Body:       "Emergency access to " + created.ResourceName + " activates after the waiting period and is fully recorded",
+		Link:       "/jit/requests/" + created.ID,
+		EntityType: "jit_request",
+		EntityID:   created.ID,
+		DedupeKey:  "jit.breakglass.self." + created.ID,
+	}, created.RequesterUserID)
 
 	cfg := h.svc.Config()
 	response.Created(c, gin.H{
@@ -205,6 +280,20 @@ func (h *JITHandler) Cancel(c *gin.Context) {
 		h.fail(c, err, "Failed to cancel access request")
 		return
 	}
+
+	// A withdrawn request is still an item in somebody's queue until they are
+	// told. Approval queues that keep resolved work in them stop being read.
+	h.notifyApprovers(services.NotifyInput{
+		Category:   models.NotifyCategoryApproval,
+		Severity:   models.NotifySeverityInfo,
+		Title:      "Access request withdrawn",
+		Body:       req.RequesterUsername + " cancelled the request for " + req.ResourceName,
+		Link:       "/admin/jit",
+		EntityType: "jit_request",
+		EntityID:   req.ID,
+		DedupeKey:  "jit.cancelled." + req.ID,
+	})
+
 	response.Success(c, gin.H{"request": req}, "Access request cancelled")
 }
 
@@ -391,6 +480,20 @@ func (h *JITHandler) RevokeGrant(c *gin.Context) {
 		h.fail(c, err, "Failed to revoke access grant")
 		return
 	}
+
+	// Access disappearing mid-task with no explanation is the single most
+	// confusing thing this system can do to somebody. Tell them, with the
+	// reason the revoker was required to give.
+	h.notifyUser(services.NotifyInput{
+		Category:   models.NotifyCategoryAccess,
+		Severity:   models.NotifySeverityWarning,
+		Title:      "Access revoked",
+		Body:       "Your access to " + grant.ResourceName + " was ended by an administrator. Reason: " + body.Reason,
+		Link:       "/jit",
+		EntityType: "access_grant",
+		EntityID:   grant.ID,
+		DedupeKey:  "grant.revoked." + grant.ID,
+	}, grant.UserID)
 
 	response.Success(c, gin.H{
 		"grant":           grant,

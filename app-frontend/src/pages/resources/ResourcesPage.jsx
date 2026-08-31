@@ -26,7 +26,10 @@ import { Button } from '../../components/common/Button'
 import { ConfirmDialog } from '../../components/common/ConfirmDialog'
 import { CreateResourceModal } from '../../components/resources/CreateResourceModal'
 import { CreateJitRequestModal } from '../../components/jit/CreateJitRequestModal'
-import { ResourceTable, RESOURCE_COLUMNS } from '../../components/resources/ResourceTable'
+import { ResourceTable, resourceColumnsFor } from '../../components/resources/ResourceTable'
+import { ConnectCliDialog } from '../../components/resources/ConnectCliDialog'
+import { listMyGrants, listMyJitRequests } from '../../api/jit'
+import { JIT_STATUS } from '../../config/constants'
 import { resourceTypeLabel } from '../../components/resources/ResourceCard'
 import { exportRowsToCsv, exportRowsToJson } from '../../lib/exportRows'
 import { normalizeApiError } from '../../lib/apiError'
@@ -72,6 +75,64 @@ const CSV_COLUMNS = [
   { key: 'is_active', label: 'Active' },
 ]
 
+// An export is a copy of the table, so it carries the same columns the viewer
+// is allowed to see. Exporting a field that was deliberately withheld from the
+// screen would make the download the way around the rule.
+function csvColumnsFor(isAdmin) {
+  if (isAdmin) return CSV_COLUMNS
+  return CSV_COLUMNS.filter((c) => c.key !== 'port')
+}
+
+// ---------------------------------------------------------------------------
+// Where each resource stands for THIS user
+// ---------------------------------------------------------------------------
+// The row action has four possible truths and only one of them is "Request
+// access". Deciding between them needs the caller's own requests and grants,
+// which are two calls for the whole page rather than one per row.
+//
+// Statuses come from the backend's models.JITStatus*: PENDING, PARTIALLY_
+// APPROVED, APPROVED, DENIED, EXPIRED, CANCELLED, WAITING (break-glass).
+// Anything already decided leaves no trace here, which is correct: a denied
+// request from last week must not stop somebody asking again today.
+const OPEN_STATUSES = new Set([JIT_STATUS.PENDING, JIT_STATUS.WAITING])
+
+function buildAccessIndex({ requests, grants }) {
+  const byResource = new Map()
+
+  for (const g of grants || []) {
+    if (!g?.resource_id) continue
+    byResource.set(g.resource_id, {
+      state: 'granted',
+      canConnect: true,
+      title: g.expires_at ? `Access is active until ${new Date(g.expires_at).toLocaleString()}` : 'Access is active',
+    })
+  }
+
+  for (const r of requests || []) {
+    if (!r?.resource_id) continue
+    // A live grant outranks a request record: the grant is the thing that
+    // decides whether Connect works.
+    if (byResource.get(r.resource_id)?.canConnect) continue
+    if (OPEN_STATUSES.has(r.status)) {
+      byResource.set(r.resource_id, {
+        state: 'pending',
+        canConnect: false,
+        requestId: r.id,
+        title: 'Submitted and waiting on an approver',
+      })
+    } else if (r.status === JIT_STATUS.PARTIALLY_APPROVED) {
+      byResource.set(r.resource_id, {
+        state: 'partial',
+        canConnect: false,
+        requestId: r.id,
+        title: 'One approval recorded, waiting on a second, different approver',
+      })
+    }
+  }
+
+  return byResource
+}
+
 function Select({ label, value, onChange, options }) {
   return (
     <label className="flex min-w-0 flex-none items-center gap-2">
@@ -98,12 +159,42 @@ export default function ResourcesPage() {
 
   const [createOpen, setCreateOpen] = useState(false)
   const [jitTarget, setJitTarget] = useState(null)
+  const [cliTarget, setCliTarget] = useState(null)
   const [deleteTarget, setDeleteTarget] = useState(null)
 
   const groupsQuery = useQuery({
     queryKey: ['resources', 'groups'],
     queryFn: ({ signal }) => listResourceGroups(signal),
   })
+
+  // Only a standard user has a JIT ladder to be on. Root and admin are not
+  // gated by grants at all, so fetching their requests here would be two calls
+  // whose answer can never change what the row shows.
+  const myRequestsQuery = useQuery({
+    queryKey: ['jit', 'requests', 'mine', { forResources: true }],
+    queryFn: ({ signal }) => listMyJitRequests({ pageSize: 100, signal }),
+    enabled: !isAdmin,
+    retry: false,
+  })
+  const myGrantsQuery = useQuery({
+    queryKey: ['jit', 'grants', 'mine', { forResources: true }],
+    queryFn: ({ signal }) => listMyGrants({ activeOnly: true, pageSize: 100, signal }),
+    enabled: !isAdmin,
+    retry: false,
+  })
+
+  const accessIndex = useMemo(
+    () =>
+      buildAccessIndex({
+        requests: myRequestsQuery.data?.requests,
+        grants: myGrantsQuery.data?.grants,
+      }),
+    [myRequestsQuery.data, myGrantsQuery.data]
+  )
+  const accessFor = useCallback(
+    (r) => (isAdmin ? { state: 'granted', canConnect: true } : accessIndex.get(r.id)),
+    [isAdmin, accessIndex]
+  )
 
   // The endpoint nests resources under their platform group. Every view here
   // wants one flat list with the group carried along as a filterable field.
@@ -126,8 +217,11 @@ export default function ResourcesPage() {
     initialPageSize: 25,
     initialFilters: INITIAL_FILTERS,
     // Port is off by default: it is folded into the host cell, and a separate
-    // column for it cost the resource name 80px it needed more.
-    initialColumns: RESOURCE_COLUMNS.filter((c) => !c.defaultHidden).map((c) => c.key),
+    // column for it cost the resource name 80px it needed more. For a standard
+    // user it is not in the set at all, along with Credential.
+    initialColumns: resourceColumnsFor(isAdmin)
+      .filter((c) => !c.defaultHidden)
+      .map((c) => c.key),
     // Database and group are not columns any more, but they are still matched
     // by search: dropping a column must never make a system unfindable by the
     // one fact somebody happens to remember about it.
@@ -182,6 +276,11 @@ export default function ResourcesPage() {
   // A whole page is also the only surface with room for the Edit dialog's Data
   // protection section, which is where an administrator turns these controls on
   // per resource.
+  //
+  // FOR A STANDARD USER THESE NEVER FIRE. /resources/:id redirects them
+  // straight back here, so sending them there is a click that visibly does
+  // nothing: the reported "the resource page does not open". Their Connect is
+  // a dropdown on the row itself, built from connect-info; see ResourceTable.
   const onOpen = useCallback((r) => navigate(`/resources/${r.id}`), [navigate])
   const onConnect = onOpen
   const onRequestAccess = useCallback((r) => setJitTarget(r), [])
@@ -229,7 +328,7 @@ export default function ResourcesPage() {
   }
 
   const err = groupsQuery.isError ? normalizeApiError(groupsQuery.error) : null
-  const colSpan = RESOURCE_COLUMNS.length + 1
+  const colSpan = resourceColumnsFor(isAdmin).length + 1
 
   return (
     <Stack gap="lg">
@@ -257,8 +356,8 @@ export default function ResourcesPage() {
           <ExportMenu
             count={table.filteredRows.length}
             disabled={table.filteredRows.length === 0}
-            onExportCsv={() => exportRowsToCsv(table.filteredRows, CSV_COLUMNS, 'resources')}
-            onExportJson={() => exportRowsToJson(table.filteredRows, CSV_COLUMNS, 'resources')}
+            onExportCsv={() => exportRowsToCsv(table.filteredRows, csvColumnsFor(isAdmin), 'resources')}
+            onExportJson={() => exportRowsToJson(table.filteredRows, csvColumnsFor(isAdmin), 'resources')}
           />
           <RefreshControl
             onRefresh={() => groupsQuery.refetch()}
@@ -266,7 +365,7 @@ export default function ResourcesPage() {
             updatedAt={groupsQuery.dataUpdatedAt}
           />
           <PreferencesMenu
-            columns={RESOURCE_COLUMNS}
+            columns={resourceColumnsFor(isAdmin)}
             visible={table.visibleColumns}
             onVisibleChange={table.setVisibleColumns}
             pageSize={table.pageSize}
@@ -375,8 +474,10 @@ export default function ResourcesPage() {
               onConnect={onConnect}
               onRequestAccess={onRequestAccess}
               onStoreCredential={onStoreCredential}
+              onOpenCli={setCliTarget}
               onDelete={setDeleteTarget}
               isAdmin={isAdmin}
+              accessFor={accessFor}
             />
             <Pagination
               page={table.page}
@@ -390,13 +491,18 @@ export default function ResourcesPage() {
         )}
       </Container>
 
-      {jitTarget && (
+      {/* Admins are refused this path by the server (jit_not_applicable), so
+          the modal is not theirs to open. They reach every resource their
+          policies allow without a grant. */}
+      {!isAdmin && jitTarget && (
         <CreateJitRequestModal
           open={!!jitTarget}
           onClose={() => setJitTarget(null)}
           defaultResourceId={jitTarget.id}
         />
       )}
+
+      {cliTarget && <ConnectCliDialog target={cliTarget} onClose={() => setCliTarget(null)} />}
 
       {isAdmin && <CreateResourceModal open={createOpen} onClose={() => setCreateOpen(false)} />}
 

@@ -1319,6 +1319,10 @@ function GrantsTab() {
       )
       setRevokeTarget(null)
       queryClient.invalidateQueries({ queryKey: ['admin', 'grants'] })
+      // Revoking notifies the person losing the access. That is somebody
+      // else's bell, but this admin's own copy of the queue counts too, and
+      // the notifications key is what both read.
+      queryClient.invalidateQueries({ queryKey: ['notifications'] })
     },
     onError: (err) => {
       toast.error(apiErrorMessage(err))

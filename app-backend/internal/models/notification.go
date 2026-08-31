@@ -41,9 +41,29 @@ const (
 	NotifyCategoryApproval = "APPROVAL" // something is waiting on YOU to decide
 	NotifyCategoryRequest  = "REQUEST"  // the state of something YOU asked for
 	NotifyCategoryAccess   = "ACCESS"   // grants starting, expiring, revoked
-	NotifySecurity         = "SECURITY" // posture and enforcement events
-	NotifySystem           = "SYSTEM"   // everything else
+	NotifyCategorySecurity = "SECURITY" // posture and enforcement events
+	NotifyCategorySystem   = "SYSTEM"   // everything else
 )
+
+// The two names below were the original spelling of the last two categories.
+// They are kept so an out-of-tree caller keeps compiling, but every call site
+// in this repository uses the NotifyCategory* form: five constants naming one
+// set should not be spelled two ways.
+const (
+	NotifySecurity = NotifyCategorySecurity
+	NotifySystem   = NotifyCategorySystem
+)
+
+// NotifyCategories is the full set, in the order a filter should offer them.
+// Exported so a handler can validate a category parameter against the real
+// list instead of accepting any string and returning an empty page.
+var NotifyCategories = []string{
+	NotifyCategoryApproval,
+	NotifyCategoryRequest,
+	NotifyCategoryAccess,
+	NotifyCategorySecurity,
+	NotifyCategorySystem,
+}
 
 // Severity drives the colour and the ordering, nothing else.
 const (
@@ -102,7 +122,7 @@ func (n *Notification) BeforeCreate(tx *gorm.DB) error {
 		n.Severity = NotifySeverityInfo
 	}
 	if n.Category == "" {
-		n.Category = NotifySystem
+		n.Category = NotifyCategorySystem
 	}
 	return nil
 }

@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { toast } from 'sonner'
 import {
   KeyRound,
   ShieldAlert,
@@ -26,14 +25,7 @@ import { useAuthStore } from '../store/authStore'
 // the dashboard masthead and lives on Admin Center > Audit & Compliance, which
 // already owns a full Chain tab for it. Left in the comment so nobody assumes
 // the call disappeared from the product.
-import { auditStats,
-  getStats,
-  listJitRequests,
-  listAudit,
-  listGrants,
-  /* verifyAudit, */ approveJitRequest,
-  denyJitRequest,
-} from '../api/admin'
+import { auditStats, getStats, listAudit, listGrants /* verifyAudit */ } from '../api/admin'
 import { listUsers } from '../api/identity'
 import { getCriticalitySummary } from '../api/criticality'
 import { listMyGrants, listMyJitRequests } from '../api/jit'
@@ -41,12 +33,9 @@ import { listMySessions } from '../api/sessions'
 import { myAuditStats, searchAudit } from '../api/audit'
 import { Card, CardHeader, CardTitle, CardFooter, EmptyState } from '../components/common/Layout'
 import { PageTitle } from '../components/ui/layout'
-import { QueryState } from '../components/common/QueryState'
 import { Badge, MetaTag } from '../components/common/Badge'
-import { Button } from '../components/common/Button'
 import { Spinner } from '../components/common/Spinner'
 import { SegmentedControl } from '../components/common/SegmentedControl'
-import { ConfirmDialog } from '../components/common/ConfirmDialog'
 import { ColumnChart, ActivityHeatmap } from '../components/charts/Charts'
 import {
   bucketByTime,
@@ -62,17 +51,8 @@ import {
 } from '../lib/dashboardMetrics'
 import { eventActor, eventTarget, isFailure } from '../components/audit/auditFields'
 import { formatDateTime, formatRelativeToNow } from '../lib/format'
-import { apiErrorMessage } from '../lib/apiError'
 import { JIT_STATUS, JIT_STATUS_BADGE, JIT_STATUS_LABELS, AUDIT_OUTCOME_BADGE } from '../config/constants'
-import {
-  approveBlockedReason,
-  approveButtonLabel,
-  approveConsequence,
-  readApproveResult,
-  approveResultMessage,
-  approvalErrorMessage,
-  isStaleStateError,
-  viewerIdOf, userFacingNext } from '../lib/fourEyes'
+import { viewerIdOf } from '../lib/fourEyes'
 import { ApprovalProgress } from '../components/jit/ApprovalTrail'
 
 // ---------------------------------------------------------------------------
@@ -894,7 +874,7 @@ function ActivityAnalysis({ events, stats, loading, range, scopeNote, auditHref,
   )
 }
 
-function DeniedList({ events, href }) {
+function DeniedList({ events, href, scanned }) {
   const denied = (events || []).filter(isFailure).slice(0, 5)
 
   return (
@@ -910,6 +890,11 @@ function DeniedList({ events, href }) {
           </span>
         )}
       </CardHeader>
+      {denied.length === 0 && (
+        <p className="px-4 py-6 text-sm text-ink-500">
+          Nothing was denied or failed in the entries checked.
+        </p>
+      )}
       <ul className="divide-y divide-surface-800">
         {denied.map((e, i) => (
           <li key={e?.id ?? i} className="relative px-4 py-3 pl-5">
@@ -934,6 +919,20 @@ function DeniedList({ events, href }) {
           </li>
         ))}
       </ul>
+      {/* THE CHARTS AND THIS CARD DO NOT READ THE SAME THING, and saying so is
+          the difference between a footnote and a lie. The charts above are
+          computed in the database over the whole window; this card lists actual
+          entries, which means walking rows, which is capped. Without this line
+          a reader compares "1,284 events" beside "no refusals" and concludes
+          there were none. */}
+      {scanned > 0 && (
+        <CardFooter>
+          <p className="text-2xs leading-relaxed text-ink-500">
+            The five most recent refusals in the last {scanned.toLocaleString()} entries. Open the full
+            trail to search the rest.
+          </p>
+        </CardFooter>
+      )}
     </Card>
   )
 }
@@ -942,20 +941,30 @@ function DeniedList({ events, href }) {
 // Admin
 // ---------------------------------------------------------------------------
 
-function AdminDashboard({ user }) {
-  const queryClient = useQueryClient()
+function AdminDashboard() {
   const [range, setRange] = useState('24h')
   // Scoped to this view. The self-service dashboard below keeps its own,
   // because "how much of my own trail" and "how much of the org's trail" are
   // different questions with different costs.
   const [limitKey, setLimitKey] = useState(DEFAULT_EVENT_LIMIT)
   const sample = resolveLimit(limitKey)
-  const [approveTarget, setApproveTarget] = useState(null)
-  const [denyTarget, setDenyTarget] = useState(null)
-
-  // Root's approval is final on its own, which changes what the Approve
-  // button here promises, so the button has to know.
-  const isRootUser = useAuthStore((st) => st.isRoot())
+  // ── THE APPROVAL QUEUE IS NOT ON THIS DASHBOARD ANY MORE ────────────────
+  //
+  // It used to lead the page: five requests with Approve and Deny on each row,
+  // plus the two confirmation dialogs and the four-eyes logic behind them:
+  // a second, smaller copy of the Admin Center's JIT page, kept in step with
+  // it by hand.
+  //
+  // It has a better home now. A request arriving notifies every approver the
+  // moment it is raised (jit_handler.go's fan-out), the bell carries the
+  // count, and the notification links straight to the queue. A dashboard panel
+  // that only shows the first five, only refreshes when the page does, and
+  // duplicates the decision UI adds a place to miss things rather than a place
+  // to find them.
+  //
+  // What is left in "Needs your attention" is what nothing else is watching:
+  // actions that were DENIED or FAILED. Nobody is notified about those, and
+  // they are the ones that mean something is misconfigured.
 
   const statsQuery = useQuery({ queryKey: ['admin', 'stats'], queryFn: ({ signal }) => getStats(signal) })
 
@@ -987,16 +996,6 @@ function AdminDashboard({ user }) {
     retry: false,
   })
 
-  const pendingQuery = useQuery({
-    queryKey: ['admin', 'jit-requests', 'pending-list'],
-    queryFn: ({ signal }) => listJitRequests({ page: 1, page_size: 5, status: 'PENDING' }, signal),
-  })
-
-  // FOUR-EYES. A request with one of its two approvals is NOT waiting on
-  // nobody, it is waiting on a specific second person, and it is the fastest
-  // thing in the queue to clear. Filtering the queue to PENDING alone would
-  // hide exactly those. The endpoint takes one status at a time, so this is a
-  // second call rather than a widened filter.
   // THREE MORE READS, AND EACH ONE BUYS A FINDING.
   //
   // The dashboard used to fetch stats and an audit sample and compute six
@@ -1026,54 +1025,6 @@ function AdminDashboard({ user }) {
     retry: false,
   })
 
-  const partialQuery = useQuery({
-    queryKey: ['admin', 'jit-requests', 'partial-list'],
-    queryFn: ({ signal }) =>
-      listJitRequests({ page: 1, page_size: 5, status: JIT_STATUS.PARTIALLY_APPROVED }, signal),
-    retry: false,
-  })
-
-  const invalidatePending = () => {
-    queryClient.invalidateQueries({ queryKey: ['admin', 'jit-requests'] })
-    queryClient.invalidateQueries({ queryKey: ['admin', 'stats'] })
-  }
-
-  const approveMutation = useMutation({
-    mutationFn: ({ id, reason }) => approveJitRequest(id, reason),
-    // The response says which of the two things just happened. "Request
-    // approved" on a first approval would promise access that does not exist.
-    onSuccess: (data) => {
-      const result = readApproveResult(data)
-      toast.success(approveResultMessage(result), {
-        description: result.partial
-          ? userFacingNext(result.next) ||
-            'A second, different admin, or root, must approve to issue the grant.'
-          : undefined,
-      })
-      setApproveTarget(null)
-      invalidatePending()
-    },
-    onError: (err) => {
-      toast.error(approvalErrorMessage(err, apiErrorMessage(err)))
-      setApproveTarget(null)
-      if (isStaleStateError(err)) invalidatePending()
-    },
-  })
-
-  const denyMutation = useMutation({
-    mutationFn: ({ id, reason }) => denyJitRequest(id, reason),
-    onSuccess: () => {
-      toast.success('Request denied')
-      setDenyTarget(null)
-      invalidatePending()
-    },
-    onError: (err) => {
-      toast.error(approvalErrorMessage(err, apiErrorMessage(err)))
-      setDenyTarget(null)
-      if (isStaleStateError(err)) invalidatePending()
-    },
-  })
-
   const s = statsQuery.data
   const events = useMemo(() => auditQuery.data?.events || [], [auditQuery.data])
 
@@ -1090,27 +1041,9 @@ function AdminDashboard({ user }) {
   const findingsLoading =
     usersQuery.isLoading || criticalityQuery.isLoading || grantsQuery.isLoading || statsQuery.isLoading
 
-  // One queue, oldest first, with the half-approved ones in it. Capped at the
-  // same five rows the card was always sized for, this is a pointer to the
-  // real queue, not the queue.
-  const pending = useMemo(() => {
-    const first = pendingQuery.data?.requests || []
-    const second = partialQuery.data?.requests || []
-    return [...first, ...second]
-      .sort(
-        (a, b) =>
-          new Date(a?.requested_at || a?.created_at || 0).getTime() -
-          new Date(b?.requested_at || b?.created_at || 0).getTime()
-      )
-      .slice(0, 5)
-  }, [pendingQuery.data, partialQuery.data])
-
-  const viewer = useMemo(() => ({ id: viewerIdOf(user), isRoot: isRootUser }), [user, isRootUser])
+  // Denied and failed, which is the whole of "needs your attention" now.
   const denied = useMemo(() => events.filter(isFailure), [events])
-  const isMutatingJit = approveMutation.isPending || denyMutation.isPending
-
-  const nothingWaiting =
-    !pendingQuery.isLoading && !auditQuery.isLoading && pending.length === 0 && denied.length === 0
+  const nothingWaiting = !auditQuery.isLoading && denied.length === 0
 
   return (
     <div>
@@ -1171,93 +1104,35 @@ function AdminDashboard({ user }) {
         ]}
       />
 
-      {/* Good news is small. Two large empty cards saying "nothing here" used
- to eat half the fold; this is the same information, proportionate. */}
-      {nothingWaiting ? (
-        <div className="mt-8">
-          <AllClearStrip>
-            Nothing is waiting on you. The approval queue is clear and no action has been denied recently.
-          </AllClearStrip>
-        </div>
-      ) : (
-        <PrimarySection title="Needs your attention" count={pending.length}>
-          <div className={clsx('grid gap-4', pending.length > 0 && denied.length > 0 && 'lg:grid-cols-2')}>
-            {pending.length > 0 && (
-              <Card className="overflow-hidden">
-                <CardHeader>
-                  <CardTitle icon={KeyRound}>Approval queue</CardTitle>
-                  <span className="ml-auto">
-                    <SectionLink to="/admin/jit">View all</SectionLink>
-                  </span>
-                </CardHeader>
-                <QueryState
-                  query={pendingQuery}
-                  empty={(d) => !d?.requests || d.requests.length === 0}
-                  emptyTitle="Queue clear"
-                  emptyMessage="No JIT or break-glass requests are waiting on a decision."
-                  skeletonRows={3}
-                >
-                  {() => (
-                    <ul className="divide-y divide-surface-800">
-                      {pending.map((r) => (
-                        <li
-                          key={r.id}
-                          className="flex flex-col gap-2.5 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
-                        >
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-medium text-ink-100">
-                              {r?.resource_name || r?.resource_id || 'Unnamed resource'}
-                              <span className="ml-2 text-xs font-normal text-ink-500">
-                                by{' '}
-                                {r?.requester_username ||
-                                  r?.username ||
-                                  r?.requested_by ||
-                                  r?.user_id ||
-                                  'unknown requester'}
-                              </span>
-                            </p>
-                            <p className="mt-0.5 truncate text-xs text-ink-500">
-                              {formatRelativeToNow(r?.created_at)}
-                              {r?.justification || r?.reason ? ` · ${r.justification || r.reason}` : ''}
-                            </p>
-                          </div>
-                          <div className="flex flex-none items-center gap-2">
-                            {/* No trail on a list response, so this counts
- from status alone, "1 of 2", never who. */}
-                            <ApprovalProgress request={r} approvals={null} showLabel={false} />
-                            {/* <Badge className={JIT_STATUS_BADGE[r?.status]}>
-                              {JIT_STATUS_LABELS[r?.status] || r?.status || 'Unknown'}
-                            </Badge> */}
-                            <Button
-                              size="xs"
-                              variant="primary"
-                              disabled={isMutatingJit || !!approveBlockedReason(r, null, viewer)}
-                              title={approveBlockedReason(r, null, viewer) || undefined}
-                              onClick={() => setApproveTarget(r)}
-                            >
-                              {approveButtonLabel(r, null, viewer)}
-                            </Button>
-                            <Button
-                              size="xs"
-                              variant="dangerGhost"
-                              disabled={isMutatingJit}
-                              onClick={() => setDenyTarget(r)}
-                            >
-                              Deny
-                            </Button>
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </QueryState>
-              </Card>
-            )}
 
-            {denied.length > 0 && <DeniedList events={events} href="/admin/audit" />}
-          </div>
-        </PrimarySection>
-      )}
+
+      {/* ---- ACTIVITY -----------------------------------------------------
+          Two charts, and only two. This band used to carry five cards, three
+          of which ranked things by event count: most frequent actions, most
+          active accounts, by category. They were the log talking about itself.
+          What survives answers two questions an operator actually has, how
+          much is happening and when it happens. */}
+      <QuietSection
+        label="Activity"
+        action={
+          <ActivityToolbar
+            range={range}
+            onRangeChange={setRange}
+            limitKey={limitKey}
+            onLimitChange={setLimitKey}
+            idSuffix="admin"
+            fetching={auditQuery.isFetching}
+          />
+        }
+      >
+        <ActivityAnalysis
+          events={events}
+          stats={sample.value === null ? auditStatsQuery.data : null}
+          loading={auditQuery.isLoading || (sample.value === null && auditStatsQuery.isLoading)}
+          range={range}
+          auditHref="/admin/audit"
+        />
+      </QuietSection>
 
       {/* ---- POSTURE ------------------------------------------------------
           The band this dashboard did not have, and the one every product in
@@ -1290,33 +1165,23 @@ function AdminDashboard({ user }) {
         </Card>
       </QuietSection>
 
-      {/* ---- ACTIVITY -----------------------------------------------------
-          Two charts, and only two. This band used to carry five cards, three
-          of which ranked things by event count: most frequent actions, most
-          active accounts, by category. They were the log talking about itself.
-          What survives answers two questions an operator actually has, how
-          much is happening and when it happens. */}
-      <QuietSection
-        label="Activity"
-        action={
-          <ActivityToolbar
-            range={range}
-            onRangeChange={setRange}
-            limitKey={limitKey}
-            onLimitChange={setLimitKey}
-            idSuffix="admin"
-            fetching={auditQuery.isFetching}
-          />
-        }
-      >
-        <ActivityAnalysis
-          events={events}
-          stats={sample.value === null ? auditStatsQuery.data : null}
-          loading={auditQuery.isLoading || (sample.value === null && auditStatsQuery.isLoading)}
-          range={range}
-          auditHref="/admin/audit"
-        />
-      </QuietSection>
+      {/* ---- NEEDS YOUR ATTENTION -----------------------------------------
+          Denied and failed only. Approvals are not here: a request arriving
+          notifies every approver directly and the bell carries the count, so
+          repeating the queue on the dashboard adds a second place to look
+          without adding anything to see. A refusal notifies nobody, which is
+          exactly why it belongs on the page you land on. */}
+      {nothingWaiting ? (
+        <div className="mt-8">
+          <AllClearStrip>
+            Nothing needs a decision from you. No action has been denied or failed in this sample.
+          </AllClearStrip>
+        </div>
+      ) : (
+        <PrimarySection title="Needs your attention" count={denied.length}>
+          <DeniedList events={events} href="/admin/audit" scanned={events.length} />
+        </PrimarySection>
+      )}
 
       <QuietSection
         label="Administration"
@@ -1325,29 +1190,6 @@ function AdminDashboard({ user }) {
         <AdminShortcuts />
       </QuietSection>
 
-      <ConfirmDialog
-        open={!!approveTarget}
-        title={`Approve request for "${approveTarget?.resource_name || approveTarget?.resource_id || 'this resource'}"?`}
-        description={approveConsequence(approveTarget, null, viewer)}
-        confirmLabel={approveButtonLabel(approveTarget, null, viewer)}
-        reasonLabel="Reason (optional)"
-        isLoading={approveMutation.isPending}
-        onConfirm={(reason) => approveMutation.mutate({ id: approveTarget.id, reason })}
-        onCancel={() => setApproveTarget(null)}
-      />
-
-      <ConfirmDialog
-        open={!!denyTarget}
-        title={`Deny request for "${denyTarget?.resource_name || denyTarget?.resource_id || 'this resource'}"?`}
-        description="One denial ends this request, unlike approval, it does not wait for a second person. The requester will need to submit a new one if access is still needed."
-        confirmLabel="Deny"
-        destructive
-        requireReason
-        reasonLabel="Reason for denial (required for the audit record)"
-        isLoading={denyMutation.isPending}
-        onConfirm={(reason) => denyMutation.mutate({ id: denyTarget.id, reason })}
-        onCancel={() => setDenyTarget(null)}
-      />
     </div>
   )
 }
@@ -1611,9 +1453,9 @@ function UserDashboard({ user }) {
           stats={sample.value === null ? auditStatsQuery.data : null}
           loading={auditQuery.isLoading || (sample.value === null && auditStatsQuery.isLoading)}
           range={range}
-          auditHref="/audit"
+          auditHref="/activity"
           scopeNote={`Your own trail, computed from ${sample.scope}.`}
-          extra={<DeniedList events={events} />}
+          extra={<DeniedList events={events} href="/activity" scanned={events.length} />}
         />
       </QuietSection>
     </div>
@@ -1628,5 +1470,5 @@ function withoutKey(item) {
 export default function DashboardPage() {
   const user = useAuthStore((s) => s.user)
   const isAdmin = useAuthStore((s) => s.isAdmin())
-  return isAdmin ? <AdminDashboard user={user} /> : <UserDashboard user={user} />
+  return isAdmin ? <AdminDashboard /> : <UserDashboard user={user} />
 }

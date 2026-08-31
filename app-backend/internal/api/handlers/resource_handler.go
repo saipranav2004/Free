@@ -31,6 +31,77 @@ func NewResourceHandler(svc *services.ResourceService, agent *services.AgentServ
 	return &ResourceHandler{svc: svc, agent: agent, engine: engine, webProxyEnabled: webProxyEnabled, logger: logger}
 }
 
+// ─── Catalogue projection for non-administrators ──────────────────────────
+//
+// The resource row is a CONFIGURATION RECORD. It carries the vault entry that
+// holds the account's secret, the exact port the service listens on, who
+// registered it, and the unbrokered console URL that bypasses PAM entirely.
+// None of that is needed to pick a machine off a list and connect to it, and
+// all of it is estate reconnaissance for anybody who should not have it.
+//
+// This is the server half of "the Resources table must not show Credentials or
+// Port to a standard user". Dropping the columns in the console is
+// presentation; a console that stops rendering two fields the API still sent
+// is one devtools Network tab away from telling you everything it was asked to
+// hide. So the fields do not leave the server.
+//
+// WHAT SURVIVES is what the catalogue is for: identity (id, name, description,
+// type), where it lives (host, and the database name, both of which the user
+// needs to recognise the thing and are already on their own connection
+// details), the controls that change how they must approach it (requires_jit,
+// always_record), which ways in are permitted, and whether it is usable at all.
+//
+// Administrators get the record unchanged. The object is theirs to configure,
+// and the detail page is built on exactly these fields.
+type catalogResource struct {
+	ID           string `json:"id"`
+	Name         string `json:"name"`
+	Description  string `json:"description"`
+	ResourceType string `json:"resource_type"`
+	Host         string `json:"host"`
+	DatabaseName string `json:"database_name,omitempty"`
+
+	RequiresJIT  bool `json:"requires_jit"`
+	AlwaysRecord bool `json:"always_record"`
+
+	AllowedConnectMethods string `json:"allowed_connect_methods,omitempty"`
+	ConnectMode           string `json:"connect_mode"`
+
+	IsActive bool `json:"is_active"`
+}
+
+func projectForCatalog(r models.PAMResource) catalogResource {
+	return catalogResource{
+		ID:                    r.ID,
+		Name:                  r.Name,
+		Description:           r.Description,
+		ResourceType:          r.ResourceType,
+		Host:                  r.Host,
+		DatabaseName:          r.DatabaseName,
+		RequiresJIT:           r.RequiresJIT,
+		AlwaysRecord:          r.AlwaysRecord,
+		AllowedConnectMethods: r.AllowedConnectMethods,
+		ConnectMode:           r.ConnectMode,
+		IsActive:              r.IsActive,
+	}
+}
+
+func projectAllForCatalog(rows []models.PAMResource) []catalogResource {
+	out := make([]catalogResource, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, projectForCatalog(r))
+	}
+	return out
+}
+
+// privilegedViewer reports whether this caller gets the full configuration
+// record rather than the catalogue projection.
+func privilegedViewer(c *gin.Context) bool {
+	rolesRaw, _ := c.Get("roles")
+	roles, _ := rolesRaw.([]string)
+	return services.IsAdminOrRoot(roles)
+}
+
 // canSeeResourceInCatalog reports whether resourceID should appear at all in
 // ListGroups/List — the visibility tier of the three-tier per-resource model
 // (List < Read < Connect, see opa/policies/default_bundle.json's comment on
@@ -74,7 +145,16 @@ func (h *ResourceHandler) ListGroups(c *gin.Context) {
 		return
 	}
 
+	full := privilegedViewer(c)
+
+	type catalogGroup struct {
+		Name      string            `json:"name"`
+		Icon      string            `json:"icon"`
+		Resources []catalogResource `json:"resources"`
+	}
+
 	filtered := make([]models.ResourceGroup, 0, len(groups))
+	projected := make([]catalogGroup, 0, len(groups))
 	for _, g := range groups {
 		visible := make([]models.PAMResource, 0, len(g.Resources))
 		for _, r := range g.Resources {
@@ -82,12 +162,24 @@ func (h *ResourceHandler) ListGroups(c *gin.Context) {
 				visible = append(visible, r)
 			}
 		}
-		if len(visible) > 0 {
+		if len(visible) == 0 {
+			continue
+		}
+		if full {
 			g.Resources = visible
 			filtered = append(filtered, g)
+			continue
 		}
+		projected = append(projected, catalogGroup{
+			Name: g.Name, Icon: g.Icon, Resources: projectAllForCatalog(visible),
+		})
 	}
-	response.Success(c, gin.H{"groups": filtered}, "Resources fetched")
+
+	if full {
+		response.Success(c, gin.H{"groups": filtered}, "Resources fetched")
+		return
+	}
+	response.Success(c, gin.H{"groups": projected}, "Resources fetched")
 }
 
 // ── LIST (flat, optional filter by type) ───────────────────────────────────
@@ -116,6 +208,12 @@ func (h *ResourceHandler) List(c *gin.Context) {
 			visible = append(visible, r)
 		}
 	}
+
+	if !privilegedViewer(c) {
+		projected := projectAllForCatalog(visible)
+		response.Success(c, gin.H{"resources": projected, "count": len(projected)}, "Resources fetched")
+		return
+	}
 	response.Success(c, gin.H{"resources": visible, "count": len(visible)}, "Resources fetched")
 }
 
@@ -125,6 +223,13 @@ func (h *ResourceHandler) Get(c *gin.Context) {
 	r, err := h.svc.GetResource(c.Param("id"))
 	if err != nil {
 		response.Error(c, 404, "Resource not found")
+		return
+	}
+	// Same projection as the catalogue. This route is the one a typed URL
+	// reaches, so it is exactly where hiding a page in the router would have
+	// bought nothing.
+	if !privilegedViewer(c) {
+		response.Success(c, gin.H{"resource": projectForCatalog(*r)}, "Resource fetched")
 		return
 	}
 	response.Success(c, gin.H{"resource": r}, "Resource fetched")

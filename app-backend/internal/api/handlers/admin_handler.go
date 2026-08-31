@@ -307,6 +307,7 @@ func (h *AdminHandler) GetRecordingCommands(c *gin.Context) {
 // Query: actor_user_id, action, outcome, severity, resource_id, grant_id,
 //
 //	request_id, session_id, from, to, q, page, page_size
+//
 // AuditStats handles GET /api/v1/pam/admin/audit/stats
 //
 // The dashboard's charts as counts instead of rows. Takes the same filters as
@@ -542,6 +543,19 @@ func (h *AdminHandler) KillSession(c *gin.Context) {
 			"target_user": session.Username,
 		},
 	})
+
+	// The person whose terminal just closed is the one who most needs to know
+	// why, and they are not looking at the Admin Center.
+	h.jit.Notify(services.NotifyInput{
+		Category:   models.NotifyCategorySecurity,
+		Severity:   models.NotifySeverityWarning,
+		Title:      "Your session was terminated",
+		Body:       "An administrator ended your session on " + session.ResourceName + ". Reason: " + body.Reason,
+		Link:       "/sessions",
+		EntityType: "session",
+		EntityID:   session.ID,
+		DedupeKey:  "session.killed." + session.ID,
+	}, session.UserID)
 
 	response.Success(c, gin.H{"session_id": sessionID}, "Session terminated")
 }

@@ -111,15 +111,22 @@ func (s *IdentityService) RoleNamesForUser(userID string) ([]string, error) {
 // Active accounts holding root or admin. Filtering by status here rather than
 // at the call site matters: notifying a disabled account puts work in a queue
 // nobody is watching, and the request then looks attended to when it is not.
+// THE PRIMARY KEY OF pam_users IS user_id, NOT id. The first version of this
+// query joined and plucked "pam_users.id", which Postgres answered with
+// `column pam_users.id does not exist`. notifyApprovers swallows the error by
+// design, so nothing surfaced: every JIT request was created successfully and
+// the approval queue was simply never told. That is what "notifications are
+// not working" was. See models.User's `column:user_id` tag.
 func (s *IdentityService) ApproverUserIDs() ([]string, error) {
 	var ids []string
 	err := s.db.Model(&models.User{}).
-		Joins("JOIN pam_user_roles ON pam_user_roles.user_id = pam_users.id").
+		Joins("JOIN pam_user_roles ON pam_user_roles.user_id = pam_users.user_id").
 		Joins("JOIN pam_roles ON pam_roles.id = pam_user_roles.role_id").
 		Where("pam_users.status = ?", "ACTIVE").
+		Where("pam_users.deleted_at IS NULL").
 		Where("LOWER(pam_roles.name) IN (?)", []string{"root", "admin"}).
 		Distinct().
-		Pluck("pam_users.id", &ids).Error
+		Pluck("pam_users.user_id", &ids).Error
 	if err != nil {
 		return nil, err
 	}
@@ -128,8 +135,12 @@ func (s *IdentityService) ApproverUserIDs() ([]string, error) {
 
 func (s *IdentityService) AccountStatusForUser(userID string) (string, error) {
 	var status string
+	// Same column correction as ApproverUserIDs above. LiveAccountStatus fails
+	// OPEN on a lookup error, so this typo meant the middleware never actually
+	// refused a suspended account: every request errored and every request was
+	// then let through.
 	err := s.db.Model(&models.User{}).
-		Where("id = ?", userID).
+		Where("user_id = ?", userID).
 		Limit(1).
 		Pluck("status", &status).Error
 	if err != nil {

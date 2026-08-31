@@ -24,6 +24,48 @@ func NewAuditHandler(q *services.AuditQueryService, r *services.ReportService, a
 	return &AuditHandler{queries: q, reports: r, audit: a, log: log}
 }
 
+// ─── Caller scope ─────────────────────────────────────────────────────────
+//
+// EVERY ROUTE IN THIS FILE IS SELF-SERVICE. The org-wide trail lives under
+// /api/v1/pam/admin/audit, behind RequireAdmin.
+//
+// That distinction was not being enforced. These routes are guarded by the
+// pam:audit:Read permission, and the seeded standard-user-access policy grants
+// exactly that on resources ["*"], as it has to, or a user could not read
+// their own trail at all. So the permission check passed for everybody, and then
+// Search filtered on a `user_id` QUERY PARAMETER supplied by the caller.
+// Omitting it returned the whole organisation's audit log; setting it to
+// somebody else's id returned theirs. Same for /audit/user/:user_id, which
+// took the id straight from the path.
+//
+// callerScope answers "whose trail may this request see": the empty string for
+// root and admin, meaning no restriction, and the caller's own id for everyone
+// else. The scope is read from the token, never from the request, so there is
+// no parameter to tamper with.
+func callerScope(c *gin.Context) (userID string, unrestricted bool) {
+	raw, _ := c.Get("user_id")
+	uid, _ := raw.(string)
+	rolesRaw, _ := c.Get("roles")
+	roles, _ := rolesRaw.([]string)
+	if services.IsAdminOrRoot(roles) {
+		return uid, true
+	}
+	return uid, false
+}
+
+// ownRowsOnly drops entries that are not the caller's. Used by the lookups
+// that take an identifier rather than a filter set, where narrowing the query
+// itself would change what the identifier means.
+func ownRowsOnly(rows []models.AuditLog, userID string) []models.AuditLog {
+	out := make([]models.AuditLog, 0, len(rows))
+	for _, r := range rows {
+		if r.UserID == userID {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
 // ─── Search (Feature 107) ─────────────────────────────────────────────
 
 // Search handles GET /api/v1/pam/audit
@@ -72,6 +114,16 @@ func (h *AuditHandler) Search(c *gin.Context) {
 		if t, err := time.Parse(time.RFC3339, v); err == nil {
 			f.ToTime = &t
 		}
+	}
+
+	// The scope is imposed AFTER the query string is parsed, so it overwrites
+	// whatever the caller asked for rather than merging with it. Username and
+	// OrgID go too: either one alone would reopen the same hole that scoping
+	// UserID closes.
+	if uid, unrestricted := callerScope(c); !unrestricted {
+		f.UserID = uid
+		f.Username = ""
+		f.OrgID = ""
 	}
 
 	res, err := h.queries.Search(c.Request.Context(), f)
@@ -129,6 +181,12 @@ func (h *AuditHandler) ByRequest(c *gin.Context) {
 		response.Error(c, 500, "Lookup failed")
 		return
 	}
+	// A request trace spans everyone who touched it, approvers included. A
+	// standard user gets their own half of it; the full trace is an
+	// administrative view and lives in the Admin Center.
+	if uid, unrestricted := callerScope(c); !unrestricted {
+		rows = ownRowsOnly(rows, uid)
+	}
 	response.Success(c, rows, "Request trace")
 }
 
@@ -136,6 +194,14 @@ func (h *AuditHandler) ByRequest(c *gin.Context) {
 func (h *AuditHandler) ByUser(c *gin.Context) {
 	uid := c.Param("user_id")
 	limit, _ := strconv.Atoi(c.Query("limit"))
+
+	// Refused rather than silently rewritten to the caller's own id: asking
+	// for somebody else's trail here is not a filter the server may quietly
+	// correct, it is a request that must not succeed.
+	if caller, unrestricted := callerScope(c); !unrestricted && uid != caller {
+		response.Error(c, http.StatusForbidden, "You may only read your own activity")
+		return
+	}
 	rows, err := h.queries.ByUser(c.Request.Context(), uid, limit)
 	if err != nil {
 		h.log.Error("audit.byuser.fail", zap.Error(err))
@@ -154,6 +220,10 @@ func (h *AuditHandler) ByResource(c *gin.Context) {
 		h.log.Error("audit.byresource.fail", zap.Error(err))
 		response.Error(c, 500, "Lookup failed")
 		return
+	}
+	// "Who else has been on this box" is an administrative question.
+	if uid, unrestricted := callerScope(c); !unrestricted {
+		rows = ownRowsOnly(rows, uid)
 	}
 	response.Success(c, rows, "Resource activity")
 }

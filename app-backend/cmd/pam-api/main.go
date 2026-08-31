@@ -450,6 +450,12 @@ func main() {
 	vaultHandler := handlers.NewVaultHandler(vaultService, rotationService, logger)
 	auditHandler := handlers.NewAuditHandler(auditQuery, reportSvc, auditService, logger)
 	notificationService := services.NewNotificationService(db, logger)
+	// Attached after construction because JITService is built long before this
+	// point (it is a dependency of the middleware wired above) and neither
+	// service may take the other in its constructor. The sweeper's expiry and
+	// timeout notifications go through this; without it they are silently
+	// skipped rather than failing.
+	jitService.SetNotifier(notificationService)
 	notificationHandler := handlers.NewNotificationHandler(notificationService, logger)
 	jitHandler := handlers.NewJITHandler(jitService, notificationService, identityService.ApproverUserIDs, logger)
 	sessionHandler := handlers.NewSessionHandler(resourceService, auditService, logger)
