@@ -476,6 +476,57 @@ func (s *AuthService) RecoverWithBackupCode(challengeToken, code, clientIP strin
 	return loginResult, nil
 }
 
+// RegenerateBackupCodes issues a fresh batch of backup codes for the caller's
+// enrolled authenticator and invalidates every previous one.
+//
+// The console had a "New backup codes" button calling an endpoint that did not
+// exist, so it answered 404 for everybody. This is that endpoint's service
+// half.
+//
+// ALL-OR-NOTHING, IN ONE TRANSACTION. The delete and the insert must not be
+// separable: a failure between them would leave an account with an enrolled
+// device and zero usable recovery codes, which is a lockout waiting for the
+// next lost phone. The old codes are hard-deleted (Unscoped) for the same
+// reason SetupMFAVerify does it — a soft-deleted hash is still a row, and a
+// recovery lookup that forgets the deleted_at filter would accept a code the
+// operator believes they have revoked.
+//
+// Requires an ACTIVE device. Regenerating codes for a PENDING enrolment would
+// hand out recovery for a factor that was never proven.
+func (s *AuthService) RegenerateBackupCodes(userID string) ([]string, error) {
+	var device models.PAMMFA
+	if err := s.db.Where("user_id = ? AND status = ?", userID, "ACTIVE").First(&device).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrMFANotSetup
+		}
+		return nil, err
+	}
+
+	codes, err := pamtotp.GenerateBackupCodes()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate backup codes: %w", err)
+	}
+
+	err = s.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Unscoped().Where("mfa_id = ?", device.ID).
+			Delete(&models.PAMMFABackupCode{}).Error; err != nil {
+			return err
+		}
+		rows := make([]models.PAMMFABackupCode, len(codes))
+		for i, code := range codes {
+			rows[i] = models.PAMMFABackupCode{MFAID: device.ID, CodeHash: hashBackupCode(code)}
+		}
+		return tx.Create(&rows).Error
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to store backup codes: %w", err)
+	}
+
+	s.logger.Info("mfa.backup_codes.regenerated",
+		zap.String("user_id", userID), zap.Int("count", len(codes)))
+	return codes, nil
+}
+
 // hashBackupCode normalizes (trim + lowercase — GenerateBackupCodes emits
 // lowercase hex, but an operator retyping one from a saved copy may enter it
 // with different casing or surrounding whitespace) and SHA-256 hashes a

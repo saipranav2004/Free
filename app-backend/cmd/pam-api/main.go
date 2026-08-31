@@ -679,6 +679,11 @@ func main() {
 	// open and, worse, a revocation never reaches one either.
 	liveRoles := middleware.LiveRoles(identityService.RoleNamesForUser, logger)
 
+	// Account status is resolved live for the same reason roles are: deleting
+	// or disabling an account must end its open sessions now, not when the
+	// token expires or the holder happens to sign out.
+	liveStatus := middleware.LiveAccountStatus(identityService.AccountStatusForUser, logger)
+
 	// The enrolment gate is recomputed live for the same reason. Attaching an
 	// MFA policy to a role has to reach the people already holding that role,
 	// not just the next person to sign in.
@@ -695,7 +700,7 @@ func main() {
 	// Protected (require PAM JWT)
 	authed := r.Group("/api/v1/auth")
 	authed.Use(middleware.PAMAuth(jwtIssuer, logger))
-	authed.Use(liveRoles)
+	authed.Use(liveRoles, liveStatus)
 	authed.Use(liveEnrolment)
 	authed.Use(middleware.AuditMiddleware(auditService, logger))
 	// Role-gated MFA: a session issued to an account that must hold a second
@@ -712,6 +717,11 @@ func main() {
 		// MFA setup (requires login first, then enroll TOTP)
 		authed.POST("/mfa/setup/initiate", authHandler.MFASetupInitiate)
 		authed.POST("/mfa/setup/verify", authHandler.MFASetupVerify)
+		// Fresh backup codes for an already-enrolled device. MFA-gated: issuing
+		// new recovery codes from a session that never proved the factor would
+		// make the factor optional.
+		authed.POST("/mfa/backup-codes/regenerate", middleware.RequireMFA(),
+			authHandler.MFABackupCodesRegenerate)
 	}
 
 	// ═════════════════════════════════════════════════════════════
@@ -735,7 +745,7 @@ func main() {
 	// ═════════════════════════════════════════════════════════════
 	res := r.Group("/api/v1/pam")
 	res.Use(middleware.PAMAuth(jwtIssuer, logger))
-	res.Use(liveRoles)
+	res.Use(liveRoles, liveStatus)
 	res.Use(liveEnrolment)
 	res.Use(middleware.AuditMiddleware(auditService, logger))
 	// Role-gated MFA: a session issued to an account that must hold a second
@@ -1011,7 +1021,7 @@ func main() {
 	// ═════════════════════════════════════════════════════════════
 	admin := r.Group("/api/v1/pam/admin")
 	admin.Use(middleware.PAMAuth(jwtIssuer, logger))
-	admin.Use(liveRoles)
+	admin.Use(liveRoles, liveStatus)
 	admin.Use(liveEnrolment)
 	admin.Use(middleware.AuditMiddleware(auditService, logger))
 	// Role-gated MFA: a session issued to an account that must hold a second
@@ -1130,6 +1140,9 @@ func main() {
 		admin.GET("/recordings/:id/commands", adminHandler.GetRecordingCommands)
 		admin.GET("/recordings/:id/transcript", adminHandler.GetRecordingTranscript)
 		admin.GET("/audit", adminHandler.ListAudit)
+		// Counts rather than rows, so the dashboard charts describe every event
+		// in range instead of the last few thousand the browser could carry.
+		admin.GET("/audit/stats", adminHandler.AuditStats)
 		admin.GET("/audit/verify", adminHandler.VerifyAudit)
 		admin.GET("/stats", adminHandler.Stats)
 

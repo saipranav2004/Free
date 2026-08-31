@@ -2,6 +2,7 @@
 package middleware
 
 import (
+	"net/http"
 	"strings"
 	"sync"
 	"time"
@@ -127,6 +128,117 @@ func LiveRoles(resolve RoleResolver, log *zap.Logger) gin.HandlerFunc {
 		c.Set("roles_live", true)
 		c.Next()
 	}
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// LIVE ACCOUNT STATUS
+// ──────────────────────────────────────────────────────────────────────────
+
+// StatusResolver answers "what is this account's status right now".
+// Implemented by *IdentityService.AccountStatusForUser.
+type StatusResolver func(userID string) (string, error)
+
+// LiveAccountStatus refuses a request from an account that is no longer
+// active, whatever the token says.
+//
+// THE BUG THIS FIXES. A JWT is a snapshot of sign-in, so deleting, disabling
+// or locking an account did nothing to the sessions that account already had
+// open: the holder kept working until their token expired, and the console
+// only caught up when they signed out and back in. For a privileged-access
+// product that is the wrong way round — revoking access is exactly the moment
+// it has to take effect immediately.
+//
+// LiveRoles already fixed the same staleness for role membership. This is the
+// other half: roles decide what an account may do, status decides whether it
+// may do anything at all.
+//
+// Cached for the same short TTL and for the same reason: one lookup per user
+// per few seconds instead of one per request, small enough that a revocation
+// is felt within seconds rather than at the next sign-in.
+//
+// FAIL OPEN ON A LOOKUP ERROR, deliberately. A database blip must not sign out
+// every operator at once, which would turn a transient fault into a total
+// outage at the moment people most need the console. The token has already
+// been verified and its TTL is short; PAMAuth remains the authority on whether
+// the caller is authenticated at all.
+func LiveAccountStatus(resolve StatusResolver, log *zap.Logger) gin.HandlerFunc {
+	cache := &statusCache{m: make(map[string]statusCacheEntry, 256)}
+
+	return func(c *gin.Context) {
+		idRaw, ok := c.Get("user_id")
+		if !ok {
+			c.Next()
+			return
+		}
+		userID, _ := idRaw.(string)
+		if userID == "" {
+			c.Next()
+			return
+		}
+
+		status, cached := cache.get(userID)
+		if !cached {
+			resolved, err := resolve(userID)
+			if err != nil {
+				log.Warn("live_status.resolve.fail",
+					zap.String("user_id", userID), zap.Error(err))
+				c.Next()
+				return
+			}
+			status = resolved
+			cache.put(userID, status)
+		}
+
+		if !strings.EqualFold(status, "ACTIVE") {
+			log.Warn("live_status.refused",
+				zap.String("user_id", userID), zap.String("status", status))
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
+				"success": false,
+				"error": gin.H{
+					"code":    "ACCOUNT_NOT_ACTIVE",
+					"message": "This account is no longer active. Sign in again or contact an administrator.",
+				},
+			})
+			return
+		}
+
+		c.Next()
+	}
+}
+
+// statusTTL matches roleCacheTTL: a revocation should be felt in seconds, and
+// the lookup is one indexed row.
+const statusTTL = 5 * time.Second
+
+type statusCacheEntry struct {
+	status string
+	at     time.Time
+}
+
+type statusCache struct {
+	mu sync.RWMutex
+	m  map[string]statusCacheEntry
+}
+
+func (c *statusCache) get(userID string) (string, bool) {
+	c.mu.RLock()
+	e, ok := c.m[userID]
+	c.mu.RUnlock()
+	if !ok || time.Since(e.at) > statusTTL {
+		return "", false
+	}
+	return e.status, true
+}
+
+func (c *statusCache) put(userID, status string) {
+	c.mu.Lock()
+	// Bounded for the same reason roleCache is: the key is a user id, and an
+	// unbounded map keyed by anything a caller influences is a slow leak.
+	if len(c.m) > 4096 {
+		c.m = make(map[string]statusCacheEntry, 256)
+	}
+	c.m[userID] = statusCacheEntry{status: status, at: time.Now()}
+	c.mu.Unlock()
 }
 
 // RolesChanged reports whether two role sets differ, ignoring order and case.

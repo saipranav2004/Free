@@ -158,6 +158,36 @@ type mfaSetupVerifyRequest struct {
 	Code        string `json:"code" binding:"required"`
 }
 
+// MFABackupCodesRegenerate handles POST /api/v1/auth/mfa/backup-codes/regenerate
+//
+// The console's "New backup codes" button called this path and got 404,
+// because the route never existed. Returns the plaintext codes ONCE: they are
+// stored only as hashes, so this response is the single opportunity to record
+// them and the UI must say so.
+func (h *AuthHandler) MFABackupCodesRegenerate(c *gin.Context) {
+	userID, ok := c.Get("user_id")
+	if !ok {
+		response.Error(c, 401, "Not authenticated")
+		return
+	}
+
+	codes, err := h.auth.RegenerateBackupCodes(userID.(string))
+	if err != nil {
+		if errors.Is(err, services.ErrMFANotSetup) {
+			response.Error(c, 409, "Set up an authenticator app before generating backup codes")
+			return
+		}
+		h.log.Error("mfa.backup_codes.regenerate.fail", zap.Error(err))
+		response.Error(c, 500, "Could not generate new backup codes")
+		return
+	}
+
+	response.Success(c, gin.H{
+		"backup_codes": codes,
+		"count":        len(codes),
+	}, "New backup codes generated. Your previous codes no longer work.")
+}
+
 func (h *AuthHandler) MFASetupVerify(c *gin.Context) {
 	var req mfaSetupVerifyRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
