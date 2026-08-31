@@ -26,7 +26,7 @@ import { useAuthStore } from '../store/authStore'
 // the dashboard masthead and lives on Admin Center > Audit & Compliance, which
 // already owns a full Chain tab for it. Left in the comment so nobody assumes
 // the call disappeared from the product.
-import {
+import { auditStats,
   getStats,
   listJitRequests,
   listAudit,
@@ -38,7 +38,7 @@ import { listUsers } from '../api/identity'
 import { getCriticalitySummary } from '../api/criticality'
 import { listMyGrants, listMyJitRequests } from '../api/jit'
 import { listMySessions } from '../api/sessions'
-import { searchAudit } from '../api/audit'
+import { myAuditStats, searchAudit } from '../api/audit'
 import { Card, CardHeader, CardTitle, CardFooter, EmptyState } from '../components/common/Layout'
 import { PageTitle } from '../components/ui/layout'
 import { QueryState } from '../components/common/QueryState'
@@ -52,6 +52,10 @@ import {
   bucketByTime,
   postureFindings,
   heatmapCells,
+  bucketsFromStats,
+  countsFromStats,
+  offHoursFromStats,
+  heatFromStats,
   offHoursShare,
   attentionCounts,
   expiringGrants,
@@ -120,30 +124,34 @@ import { ApprovalProgress } from '../components/jit/ApprovalTrail'
 // and each dashboard view (admin and self-service) keeps its own choice.
 
 const EVENT_LIMITS = [
-  // LARGEST FIRST. The list reads as "how much history am I looking at", and a
-  // reader scanning for the widest view should find it at the top rather than
-  // at the bottom of an ascending list.
-  {
-    key: 'all',
-    label: 'Last 5,000 events',
-    // 5,000 is the ceiling for the ROW-WALKING path this control drives: past
-    // it the browser is computing charts from a payload measured in megabytes,
-    // over enough round trips that the user is waiting on it.
-    //
-    // The cap is not a limit on what the charts can describe. GET
-    // /admin/audit/stats counts every event in range server-side and returns a
-    // few hundred bytes, so a dashboard reading that has no ceiling at all.
-    // This control exists for the row-based views that still need the events
-    // themselves.
-    value: 5000,
-    scope: 'the 5,000 most recent audit entries, or every entry held if there are fewer',
-  },
+  // ALL FIRST, AND THE DEFAULT, because it is now the honest answer rather than
+  // an expensive one. GET .../audit/stats counts every event in range inside
+  // the database and returns a few hundred bytes, so "all" costs one small
+  // request whether the trail holds five events or five million.
+  //
+  // value: null marks the stats path. The numbered options below still walk
+  // rows, which is what the row-based cards on this page need, and they are
+  // capped at 5,000 because past that the browser is downloading megabytes to
+  // do arithmetic Postgres already did.
+  { key: 'all', label: 'All events', value: null, scope: 'every audit entry in the selected window' },
+  { key: '5000', label: 'Last 5,000 events', value: 5000, scope: 'the 5,000 most recent audit entries' },
   { key: '1000', label: 'Last 1,000 events', value: 1000, scope: 'the 1,000 most recent audit entries' },
   { key: '500', label: 'Last 500 events', value: 500, scope: 'the 500 most recent audit entries' },
   { key: '200', label: 'Last 200 events', value: 200, scope: 'the 200 most recent audit entries' },
 ]
 
-const DEFAULT_EVENT_LIMIT = '200'
+// Rows the row-based cards (Denied and failed) need regardless of which source
+// the charts are using. Small and fixed: those cards show five entries.
+const ROW_CARD_SAMPLE = 200
+
+// The server buckets by hour or by day; the range presets already decide which
+// makes sense. One lookup so the two cannot drift.
+function rangeSpan(rangeKey) {
+  const preset = RANGES.find((r) => r.key === rangeKey)
+  return preset?.span === 'day' ? 'day' : 'hour'
+}
+
+const DEFAULT_EVENT_LIMIT = 'all'
 
 function resolveLimit(key) {
   // Falls back to the DEFAULT, not to EVENT_LIMITS[0]. The list is ordered
@@ -732,16 +740,30 @@ function OutcomeMeter({ total, failed, rate }) {
   )
 }
 
-function ActivityAnalysis({ events, loading, range, scopeNote, auditHref, extra, personal = false }) {
+function ActivityAnalysis({ events, stats, loading, range, scopeNote, auditHref, extra, personal = false }) {
   const preset = RANGES.find((r) => r.key === range) || RANGES[0]
 
+  // TWO SOURCES, ONE SET OF SHAPES. `stats` is the database's own count of
+  // every event in range; `events` is the downloaded sample. The adapters in
+  // dashboardMetrics return identical shapes either way, so nothing below this
+  // line knows or cares which one it got.
   const series = useMemo(
-    () => bucketByTime(events, { buckets: preset.buckets, span: preset.span }),
-    [events, preset]
+    () =>
+      stats
+        ? bucketsFromStats(stats.buckets, { buckets: preset.buckets, span: preset.span })
+        : bucketByTime(events, { buckets: preset.buckets, span: preset.span }),
+    [stats, events, preset]
   )
-  const counts = useMemo(() => attentionCounts(events), [events])
-  const heat = useMemo(() => heatmapCells(events), [events])
-  const offHours = useMemo(() => offHoursShare(events), [events])
+  const counts = useMemo(() => (stats ? countsFromStats(stats) : attentionCounts(events)), [stats, events])
+  const heat = useMemo(() => (stats ? heatFromStats(stats) : heatmapCells(events)), [stats, events])
+  const offHours = useMemo(
+    () => (stats ? offHoursFromStats(stats) : offHoursShare(events)),
+    [stats, events]
+  )
+  // "sample" is only honest on the row-walking path. On the stats path these
+  // numbers are the whole trail, and calling that a sample understates what the
+  // reader is looking at.
+  const corpus = stats ? 'audit trail' : 'sample'
   const plotted = series.reduce((n, s) => n + s.value, 0)
   // Computed here because the Outcomes card is the only place this percentage
   // is shown, keeping the math next to its display means the chart and the
@@ -771,7 +793,7 @@ function ActivityAnalysis({ events, loading, range, scopeNote, auditHref, extra,
           </div>
           <CardFooter className="justify-between">
             <p className="text-2xs leading-relaxed text-ink-500">
-              {plotted.toLocaleString()} of the {counts.total.toLocaleString()} events in this sample fall
+              {plotted.toLocaleString()} of the {counts.total.toLocaleString()} events in this {corpus} fall
               inside the selected window. {scopeNote}
             </p>
             {/* Admin only. On a personal dashboard this pointed at the same
@@ -816,7 +838,7 @@ function ActivityAnalysis({ events, loading, range, scopeNote, auditHref, extra,
           </div>
           <CardFooter>
             <p className="text-2xs leading-relaxed text-ink-500">
-              Across the {counts.total.toLocaleString()} events in this sample. A denial is not necessarily an
+              Across the {counts.total.toLocaleString()} events in this {corpus}. A denial is not necessarily an
               incident: policy working is the common case.
             </p>
           </CardFooter>
@@ -853,7 +875,7 @@ function ActivityAnalysis({ events, loading, range, scopeNote, auditHref, extra,
             {loading ? (
               <div className="skeleton h-[168px] rounded-lg" />
             ) : (
-              <ActivityHeatmap cells={heat} emptyLabel="No events in this sample" />
+              <ActivityHeatmap cells={heat} emptyLabel={`No events in this ${corpus}`} />
             )}
           </div>
           <CardFooter>
@@ -942,9 +964,25 @@ function AdminDashboard({ user }) {
   // and placeholderData keeps the previous charts on screen while it does.
   // fetchAuditSample, not a bare listAudit: the endpoint caps one call at 200
   // rows, so anything larger has to be walked a page at a time.
+  // Rows, for the cards that show actual entries. When the charts are on the
+  // stats path there is no reason to walk thousands of rows for a five-row
+  // list, so this drops to a fixed small sample.
+  const rowTarget = sample.value ?? ROW_CARD_SAMPLE
   const auditQuery = useQuery({
-    queryKey: ['admin', 'audit', 'dashboard-sample', sample.value],
-    queryFn: ({ signal }) => fetchAuditSample(sample.value, signal),
+    queryKey: ['admin', 'audit', 'dashboard-sample', rowTarget],
+    queryFn: ({ signal }) => fetchAuditSample(rowTarget, signal),
+    placeholderData: (prev) => prev,
+    retry: false,
+  })
+
+  // Counts, for the charts. Only fetched on the "All events" option: the
+  // numbered options exist precisely to describe a bounded slice of recent
+  // history, and answering them from a whole-range aggregate would be a
+  // different question.
+  const auditStatsQuery = useQuery({
+    queryKey: ['admin', 'audit', 'stats', range],
+    queryFn: ({ signal }) => auditStats({ span: rangeSpan(range) }, signal),
+    enabled: sample.value === null,
     placeholderData: (prev) => prev,
     retry: false,
   })
@@ -1273,7 +1311,8 @@ function AdminDashboard({ user }) {
       >
         <ActivityAnalysis
           events={events}
-          loading={auditQuery.isLoading}
+          stats={sample.value === null ? auditStatsQuery.data : null}
+          loading={auditQuery.isLoading || (sample.value === null && auditStatsQuery.isLoading)}
           range={range}
           auditHref="/admin/audit"
         />
@@ -1346,10 +1385,22 @@ function UserDashboard({ user }) {
     queryFn: ({ signal }) => listMySessions({ activeOnly: true, pageSize: 5, signal }),
   })
   // Walked in pages of 500, the ceiling /audit/search enforces on limit.
+  const rowTarget = sample.value ?? ROW_CARD_SAMPLE
   const auditQuery = useQuery({
-    queryKey: ['audit', 'dashboard-sample', sample.value, selfId],
-    queryFn: ({ signal }) => fetchSelfAuditSample(sample.value, selfId, signal),
+    queryKey: ['audit', 'dashboard-sample', rowTarget, selfId],
+    queryFn: ({ signal }) => fetchSelfAuditSample(rowTarget, selfId, signal),
     enabled: !!selfId,
+    placeholderData: (prev) => prev,
+    retry: false,
+  })
+
+  // The self-scoped twin of the admin stats query, so "All events" means the
+  // same thing on both dashboards instead of quietly meaning "the last 200"
+  // here.
+  const auditStatsQuery = useQuery({
+    queryKey: ['audit', 'stats', range, selfId],
+    queryFn: ({ signal }) => myAuditStats({ span: rangeSpan(range) }, signal),
+    enabled: !!selfId && sample.value === null,
     placeholderData: (prev) => prev,
     retry: false,
   })
@@ -1557,7 +1608,8 @@ function UserDashboard({ user }) {
         <ActivityAnalysis
           personal
           events={events}
-          loading={auditQuery.isLoading}
+          stats={sample.value === null ? auditStatsQuery.data : null}
+          loading={auditQuery.isLoading || (sample.value === null && auditStatsQuery.isLoading)}
           range={range}
           auditHref="/audit"
           scopeNote={`Your own trail, computed from ${sample.scope}.`}

@@ -119,6 +119,7 @@ func main() {
 
 			// ── Resources & connection sessions ──
 			&models.PAMResource{},
+			&models.Notification{},
 			&models.ConnectionSession{},
 
 			// ── Brokered web-application gateway (internal/webproxy) ──
@@ -448,7 +449,9 @@ func main() {
 	resourceHandler := handlers.NewResourceHandler(resourceService, agentService, policyEngine, cfg.WebProxy.Enabled, logger)
 	vaultHandler := handlers.NewVaultHandler(vaultService, rotationService, logger)
 	auditHandler := handlers.NewAuditHandler(auditQuery, reportSvc, auditService, logger)
-	jitHandler := handlers.NewJITHandler(jitService, logger)
+	notificationService := services.NewNotificationService(db, logger)
+	notificationHandler := handlers.NewNotificationHandler(notificationService, logger)
+	jitHandler := handlers.NewJITHandler(jitService, notificationService, identityService.ApproverUserIDs, logger)
 	sessionHandler := handlers.NewSessionHandler(resourceService, auditService, logger)
 	adminHandler := handlers.NewAdminHandler(jitService, resourceService, auditService, recordingStorage, logger)
 	identityHandler := handlers.NewIdentityHandler(identityService, logger)
@@ -912,6 +915,20 @@ func main() {
 			vaultHandler.RequestRotation)
 
 		// ── Audit + Reporting — self-service (Features 105/106/107) ──
+		// Your own activity as counts. Same aggregates the admin endpoint
+		// returns, scoped to the caller, so "All events" is not capped here
+		// either.
+		// ── Notification centre ──
+		//
+		// Every route is scoped to the caller from the token; there is no user
+		// parameter, because a notification list is a record of what ONE person
+		// has and has not seen.
+		res.GET("/notifications", notificationHandler.List)
+		res.GET("/notifications/unread-count", notificationHandler.UnreadCount)
+		res.POST("/notifications/:id/read", notificationHandler.MarkRead)
+		res.POST("/notifications/read-all", notificationHandler.MarkAllRead)
+
+		res.GET("/audit/stats", auditHandler.MyStats)
 		res.GET("/audit",
 			middleware.RequirePermission(policyEngine, "pam:audit:Read",
 				func(c *gin.Context) string { return "pam:audit" }, logger),

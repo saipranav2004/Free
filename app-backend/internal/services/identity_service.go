@@ -105,6 +105,27 @@ func (s *IdentityService) RoleNamesForUser(userID string) ([]string, error) {
 // A missing row is reported as DELETED rather than as an error. A token whose
 // subject no longer exists is exactly the case this check is for, and treating
 // it as a lookup failure would fail open.
+// ApproverUserIDs returns the accounts that can decide a JIT request, for the
+// notification centre's fan-out.
+//
+// Active accounts holding root or admin. Filtering by status here rather than
+// at the call site matters: notifying a disabled account puts work in a queue
+// nobody is watching, and the request then looks attended to when it is not.
+func (s *IdentityService) ApproverUserIDs() ([]string, error) {
+	var ids []string
+	err := s.db.Model(&models.User{}).
+		Joins("JOIN pam_user_roles ON pam_user_roles.user_id = pam_users.id").
+		Joins("JOIN pam_roles ON pam_roles.id = pam_user_roles.role_id").
+		Where("pam_users.status = ?", "ACTIVE").
+		Where("LOWER(pam_roles.name) IN (?)", []string{"root", "admin"}).
+		Distinct().
+		Pluck("pam_users.id", &ids).Error
+	if err != nil {
+		return nil, err
+	}
+	return ids, nil
+}
+
 func (s *IdentityService) AccountStatusForUser(userID string) (string, error) {
 	var status string
 	err := s.db.Model(&models.User{}).

@@ -1,65 +1,52 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { Bell, CheckCheck } from 'lucide-react'
 import clsx from 'clsx'
-import { Bell, KeyRound, Clock, ShieldCheck, UsersRound } from 'lucide-react'
-import { listMyJitRequests, listMyGrants } from '../../api/jit'
-import { listJitRequests } from '../../api/admin'
-import { JIT_STATUS } from '../../config/constants'
+import {
+  listNotifications,
+  markAllNotificationsRead,
+  markNotificationRead,
+  unreadNotificationCount,
+} from '../../api/notifications'
+import { categoryIcon, severityTone, timeAgo } from '../../lib/notificationDisplay'
 
 // ---------------------------------------------------------------------------
-// Notifications
+// The bell
 // ---------------------------------------------------------------------------
-// Built from data the backend actually has, not from an invented
-// notifications feed: there is no notifications endpoint and no push channel,
-// so this derives the three things that are genuinely time-sensitive in a PAM
-// console from existing list endpoints ,
-//   1. JIT requests waiting on YOU to approve (admins/root only)
-//   1b. …and, since four-eyes, the ones that already have ONE approval and
-// need a second, different admin. These are separated because they are
-// the fastest to clear, one click from live access, and because a
-// combined count would tell an admin nothing about which is which.
-//   2. YOUR requests still waiting on an approver
-//   3. YOUR active grants about to expire
-// Polled on a slow interval (60s) for the same reason SESSIONS_POLL_MS
-// exists: no server push.
-const POLL_MS = 60000
-const EXPIRING_SOON_MS = 30 * 60 * 1000
+// REWRITTEN ONTO A REAL BACKEND. This used to run three JIT queries every 60
+// seconds and assemble a list on the client, which had three consequences that
+// all showed up as bug reports: nothing could be marked read, anything that
+// stopped being pending disappeared without trace, and the badge only agreed
+// with reality once a minute.
+//
+// The shape it settles on is the one AWS Console Notifications, Okta and
+// ServiceNow all converge on, for reasons that hold here too:
+//
+//   THE PANEL IS A PREVIEW, NOT THE ARCHIVE.  It shows the most recent few and
+//     sends you to the page for the rest. A panel that tries to be the archive
+//     is a scrolling box that is worse than the page at the same job.
+//   THE BADGE COUNTS UNREAD WORK.             Capped at 9+ because the
+//     difference between 40 and 60 changes nothing a person does next.
+//   OPENING IS NOT READING.                   Clicking an item marks it read,
+//     because that is the moment attention was actually paid. Opening the panel
+//     does not, or the badge would clear itself before anybody looked.
+//   EVERY ITEM GOES SOMEWHERE.                Each row is a link to the object
+//     it is about. A notification you cannot act on is an alert, and alerts
+//     nobody can act on train people to ignore the bell.
 
-function minutesUntil(iso, now) {
-  const t = new Date(iso).getTime()
-  if (Number.isNaN(t)) return null
-  // `now` is passed in rather than read from the clock here, so the caller
-  // decides which instant the countdown is measured against. That is what lets
-  // the ticking state below actually change the answer.
-  return Math.round((t - now) / 60000)
-}
+const PREVIEW_COUNT = 6
+const COUNT_POLL_MS = 30000
+const LIST_POLL_MS = 60000
 
-function relative(mins) {
-  if (mins === null) return ''
-  if (mins <= 0) return 'now'
-  if (mins < 60) return `in ${mins}m`
-  const h = Math.floor(mins / 60)
-  return `in ${h}h ${mins % 60}m`
-}
-
-export function NotificationsMenu({ isAdmin = false }) {
+export function NotificationsMenu() {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const [open, setOpen] = useState(false)
   const wrapRef = useRef(null)
 
-  // A CLOCK, NOT A POLL.
-  //
-  // Every countdown here is derived from an expiry timestamp against
-  // Date.now(), which means it was only ever correct at the instant React last
-  // rendered. The data refreshes on a 60s poll, so "in 4m" sat unchanged for a
-  // minute at a time and looked frozen; refreshing the page was the only way to
-  // see the real number, which is exactly what was reported.
-  //
-  // This tick changes no data and issues no request. It re-runs the memo below
-  // so the same timestamps are re-read against the current time. 30s is chosen
-  // to match the smallest unit shown: nothing here is finer than a minute, so a
-  // faster tick would re-render for no visible change.
+  // A clock, so "2m ago" becomes "3m ago" without a refresh. The data polls on
+  // its own schedule; this only re-reads the timestamps already held.
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 30000)
@@ -80,193 +67,163 @@ export function NotificationsMenu({ isAdmin = false }) {
     }
   }, [open])
 
-  // retry:false throughout, a topbar bell must never turn a permissions or
-  // network hiccup into a retry storm or a visible error; it just shows
-  // nothing.
-  const approvals = useQuery({
-    queryKey: ['notifications', 'admin-jit-pending'],
-    queryFn: ({ signal }) => listJitRequests({ status: 'PENDING', page: 1, page_size: 5 }, signal),
-    enabled: isAdmin,
-    refetchInterval: POLL_MS,
+  // The badge is its own query: it is asked for constantly and costs one
+  // indexed count, where the list costs a page of rows.
+  const countQuery = useQuery({
+    queryKey: ['notifications', 'unread-count'],
+    queryFn: ({ signal }) => unreadNotificationCount(signal),
+    refetchInterval: COUNT_POLL_MS,
+    refetchOnWindowFocus: true,
     retry: false,
   })
 
-  const secondApprovals = useQuery({
-    queryKey: ['notifications', 'admin-jit-partial'],
-    queryFn: ({ signal }) =>
-      listJitRequests({ status: JIT_STATUS.PARTIALLY_APPROVED, page: 1, page_size: 5 }, signal),
-    enabled: isAdmin,
-    refetchInterval: POLL_MS,
+  // The list is only fetched while the panel is open, plus a slow background
+  // refresh so opening it is instant rather than a spinner.
+  const listQuery = useQuery({
+    queryKey: ['notifications', 'preview'],
+    queryFn: ({ signal }) => listNotifications({ page: 1, page_size: PREVIEW_COUNT }, signal),
+    refetchInterval: open ? LIST_POLL_MS : false,
     retry: false,
   })
 
-  const myRequests = useQuery({
-    queryKey: ['notifications', 'my-jit-pending'],
-    queryFn: ({ signal }) => listMyJitRequests({ status: 'PENDING', pageSize: 5, signal }),
-    refetchInterval: POLL_MS,
-    retry: false,
-  })
+  const refresh = () => {
+    queryClient.invalidateQueries({ queryKey: ['notifications'] })
+  }
 
-  const myGrants = useQuery({
-    queryKey: ['notifications', 'my-grants-active'],
-    queryFn: ({ signal }) => listMyGrants({ activeOnly: true, pageSize: 25, signal }),
-    refetchInterval: POLL_MS,
-    retry: false,
-  })
+  const readOne = useMutation({ mutationFn: markNotificationRead, onSuccess: refresh })
+  const readAll = useMutation({ mutationFn: markAllNotificationsRead, onSuccess: refresh })
 
-  const items = useMemo(() => {
-    const out = []
+  const items = useMemo(() => listQuery.data?.items || [], [listQuery.data])
+  const unread = countQuery.data ?? listQuery.data?.unread_total ?? 0
+  const badge = unread > 9 ? '9+' : String(unread)
 
-    const pendingApprovals = approvals.data?.pagination?.total ?? approvals.data?.requests?.length ?? 0
-    if (isAdmin && pendingApprovals > 0) {
-      out.push({
-        id: 'approvals',
-        icon: KeyRound,
-        tone: 'amber',
-        title: `${pendingApprovals} JIT request${pendingApprovals === 1 ? '' : 's'} awaiting approval`,
-        meta: 'Admin Center · JIT Approvals',
-        to: '/admin/jit',
-      })
-    }
-
-    const needSecond = secondApprovals.data?.pagination?.total ?? secondApprovals.data?.requests?.length ?? 0
-    if (isAdmin && needSecond > 0) {
-      out.push({
-        id: 'second-approvals',
-        icon: UsersRound,
-        tone: 'blue',
-        title: `${needSecond} request${needSecond === 1 ? '' : 's'} need${needSecond === 1 ? 's' : ''} a second approval`,
-        meta: 'Four-eyes · one approval already given',
-        to: '/admin/jit',
-      })
-    }
-
-    const mine = myRequests.data?.pagination?.total ?? myRequests.data?.requests?.length ?? 0
-    if (mine > 0) {
-      out.push({
-        id: 'mine',
-        icon: Clock,
-        tone: 'blue',
-        title: `${mine} of your request${mine === 1 ? '' : 's'} pending approval`,
-        meta: 'JIT Access · My requests',
-        to: '/jit',
-      })
-    }
-
-    const grants = myGrants.data?.grants || []
-    const expiring = grants
-      .map((g) => ({ g, mins: minutesUntil(g.expires_at, now) }))
-      .filter(({ mins }) => mins !== null && mins * 60000 <= EXPIRING_SOON_MS && mins >= 0)
-      .sort((a, b) => a.mins - b.mins)
-    if (expiring.length > 0) {
-      const soonest = expiring[0]
-      out.push({
-        id: 'expiring',
-        icon: Clock,
-        tone: 'red',
-        title:
-          expiring.length === 1
-            ? `Access expires ${relative(soonest.mins)}`
-            : `${expiring.length} grants expire within 30 minutes`,
-        meta: soonest.g.resource_name || soonest.g.resource_id || 'JIT Access · Grants',
-        to: '/jit',
-      })
-    }
-
-    return out
-  }, [approvals.data, secondApprovals.data, myRequests.data, myGrants.data, isAdmin, now])
-
-  const count = items.length
+  const openItem = (item) => {
+    setOpen(false)
+    if (!item?.read_at) readOne.mutate(item.id)
+    if (item?.link) navigate(item.link)
+  }
 
   return (
     <div ref={wrapRef} className="relative flex-none">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        aria-haspopup="menu"
+        aria-label={unread > 0 ? `Notifications, ${unread} unread` : 'Notifications'}
         aria-expanded={open}
-        aria-label={count > 0 ? `Notifications (${count})` : 'Notifications'}
-        title="Notifications"
         className={clsx(
           'relative flex h-9 w-9 items-center justify-center rounded-lg transition-colors duration-150',
-          'outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40',
-          open ? 'bg-surface-800 text-ink-50' : 'text-ink-400 hover:bg-surface-800 hover:text-ink-50'
+          'text-chrome-muted hover:bg-chrome-hover hover:text-chrome-fg',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40'
         )}
       >
-        <Bell className="h-[1.05rem] w-[1.05rem]" strokeWidth={1.5} />
-        {count > 0 && (
-          <span
-            aria-hidden="true"
-            className="absolute right-1.5 top-1.5 flex h-2 w-2 rounded-full bg-amber-500 ring-2 ring-surface-900"
-          />
+        <Bell className="h-[18px] w-[18px]" strokeWidth={1.75} />
+        {unread > 0 && (
+          <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold leading-none text-white">
+            {badge}
+          </span>
         )}
       </button>
 
       {open && (
         <div
-          role="menu"
+          role="dialog"
           aria-label="Notifications"
-          className="animate-menu-in absolute right-0 z-50 mt-2 w-[20rem] overflow-hidden rounded-2xl border border-surface-700 bg-surface-900 shadow-overlay"
+          className="absolute right-0 z-50 mt-2 w-[22rem] overflow-hidden rounded-xl border border-line bg-surface shadow-pop sm:w-[24rem]"
         >
-          <div className="flex items-center justify-between border-b border-surface-800 px-4 py-3">
-            <p className="text-sm font-semibold text-ink-50">Notifications</p>
-            {count > 0 && (
-              <span className="rounded-md bg-amber-100 px-1.5 py-0.5 text-2xs font-semibold text-amber-700 ring-1 ring-inset ring-amber-600/20 dark:bg-amber-500/15 dark:text-amber-300 dark:ring-amber-500/30">
-                {count} to action
+          <div className="flex items-center gap-2 border-b border-line-soft px-4 py-3">
+            <p className="text-sm font-semibold text-primary">Notifications</p>
+            {unread > 0 && (
+              <span className="rounded-full bg-subtle px-1.5 py-0.5 text-2xs font-semibold text-secondary">
+                {unread} unread
               </span>
+            )}
+            <button
+              type="button"
+              onClick={() => readAll.mutate()}
+              disabled={unread === 0 || readAll.isPending}
+              className="ml-auto flex items-center gap-1 rounded-md px-1.5 py-1 text-xs font-medium text-accent transition-colors hover:bg-hover disabled:cursor-not-allowed disabled:text-tertiary disabled:hover:bg-transparent"
+            >
+              <CheckCheck className="h-3.5 w-3.5" strokeWidth={2} />
+              Mark all read
+            </button>
+          </div>
+
+          <div className="max-h-[26rem] overflow-y-auto">
+            {listQuery.isLoading ? (
+              <p className="px-4 py-8 text-center text-xs text-tertiary">Loading…</p>
+            ) : items.length === 0 ? (
+              <div className="px-4 py-10 text-center">
+                <Bell className="mx-auto h-6 w-6 text-tertiary" strokeWidth={1.5} />
+                <p className="mt-2 text-sm font-medium text-secondary">You are all caught up</p>
+                <p className="mt-1 text-xs text-tertiary">
+                  Approvals, access decisions and security events land here.
+                </p>
+              </div>
+            ) : (
+              <ul className="divide-y divide-line-soft">
+                {items.map((item) => {
+                  const Icon = categoryIcon(item.category)
+                  return (
+                    <li key={item.id}>
+                      <button
+                        type="button"
+                        onClick={() => openItem(item)}
+                        className={clsx(
+                          'flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-hover',
+                          !item.read_at && 'bg-accent-soft/40'
+                        )}
+                      >
+                        <span
+                          className={clsx(
+                            'mt-0.5 flex h-7 w-7 flex-none items-center justify-center rounded-lg',
+                            severityTone(item.severity)
+                          )}
+                        >
+                          <Icon className="h-4 w-4" strokeWidth={2} />
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="flex items-start gap-2">
+                            <span
+                              className={clsx(
+                                'block min-w-0 flex-1 text-sm leading-snug',
+                                item.read_at ? 'text-secondary' : 'font-semibold text-primary'
+                              )}
+                            >
+                              {item.title}
+                            </span>
+                            {!item.read_at && (
+                              <span
+                                aria-hidden="true"
+                                className="mt-1.5 h-1.5 w-1.5 flex-none rounded-full bg-accent"
+                              />
+                            )}
+                          </span>
+                          {item.body && (
+                            <span className="mt-0.5 block truncate text-xs text-tertiary">{item.body}</span>
+                          )}
+                          <span className="mt-1 block text-2xs text-tertiary">
+                            {timeAgo(item.created_at, now)}
+                          </span>
+                        </span>
+                      </button>
+                    </li>
+                  )
+                })}
+              </ul>
             )}
           </div>
 
-          {count === 0 ? (
-            <div className="flex flex-col items-center px-6 py-9 text-center">
-              <span className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl border border-surface-700 bg-surface-850 text-ink-400">
-                <ShieldCheck className="h-[1.15rem] w-[1.15rem]" strokeWidth={1.5} />
-              </span>
-              <p className="text-sm font-medium text-ink-100">Nothing needs you</p>
-              <p className="mt-1 text-xs leading-relaxed text-ink-500">
-                Pending approvals and expiring access appear here.
-              </p>
-            </div>
-          ) : (
-            <ul className="divide-y divide-surface-800">
-              {items.map((it) => (
-                <li key={it.id}>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => {
-                      setOpen(false)
-                      navigate(it.to)
-                    }}
-                    className="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors duration-150 hover:bg-surface-850"
-                  >
-                    <span
-                      className={clsx(
-                        'mt-0.5 flex h-7 w-7 flex-none items-center justify-center rounded-lg ring-1 ring-inset',
-                        it.tone === 'amber' &&
-                          'bg-amber-50 text-amber-600 ring-amber-600/15 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-500/25',
-                        it.tone === 'red' &&
-                          'bg-red-50 text-red-600 ring-red-600/15 dark:bg-red-500/10 dark:text-red-300 dark:ring-red-500/25',
-                        it.tone === 'blue' &&
-                          'bg-blue-50 text-blue-600 ring-blue-600/15 dark:bg-blue-500/10 dark:text-blue-300 dark:ring-blue-500/25'
-                      )}
-                    >
-                      <it.icon className="h-3.5 w-3.5" strokeWidth={1.75} />
-                    </span>
-                    <span className="min-w-0">
-                      <span className="block text-[0.8125rem] font-medium leading-snug text-ink-100">
-                        {it.title}
-                      </span>
-                      <span className="mt-0.5 block truncate text-xs text-ink-500">{it.meta}</span>
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-
-          <div className="border-t border-surface-800 bg-surface-850/60 px-4 py-2 text-2xs text-ink-500">
-            Derived from live JIT data · refreshed every minute
+          <div className="border-t border-line-soft px-4 py-2.5">
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false)
+                navigate('/notifications')
+              }}
+              className="w-full rounded-md py-1 text-center text-xs font-semibold text-accent transition-colors hover:bg-hover"
+            >
+              View all notifications
+            </button>
           </div>
         </div>
       )}
