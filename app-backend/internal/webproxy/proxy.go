@@ -621,13 +621,14 @@ func pamScriptTags(nonce string, recordingRequired bool, session *models.WebProx
 	if session != nil {
 		if session.BlockClipboard {
 			tags = append(tags, guardScriptTag(nonce)...)
-			// The DevTools deterrent rides the same policy flag. BlockClipboard
-			// is already what marks a session "protected": it is the switch an
-			// administrator sets to say this resource's page must not be freely
-			// copied out of, and shortcut suppression plus DevTools detection is
-			// the same intent one layer up. Giving it a separate flag would mean
-			// a schema change, a migration and an admin control for a setting
-			// nobody would ever want set differently from this one.
+		}
+		if session.BlockDevTools {
+			// Its own policy flag, set per resource in the Edit dialog's Data
+			// protection section, NOT folded into BlockClipboard. The two have
+			// different costs: clipboard blocking is invisible until somebody
+			// tries to copy, while this one blanks the page on a heuristic. An
+			// administrator has to be able to stop copying from a console their
+			// team uses all day without also accepting that risk on it.
 			tags = append(tags, devtoolsGuardScriptTag(nonce)...)
 		}
 		if session.Watermark {

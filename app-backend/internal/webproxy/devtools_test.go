@@ -25,10 +25,16 @@ func TestGuardInjectedOnlyOnProtectedSessions(t *testing.T) {
 		want    bool
 	}{
 		{"no session", nil, false},
-		{"unprotected", &models.WebProxySession{}, false},
-		{"protected", &models.WebProxySession{BlockClipboard: true}, true},
+		{"no protection at all", &models.WebProxySession{}, false},
+		{"devtools blocking on", &models.WebProxySession{BlockDevTools: true}, true},
+		// The two flags are independent on purpose. Clipboard blocking is
+		// invisible until somebody tries to copy; the DevTools guard blanks the
+		// page on a heuristic. An administrator must be able to stop copying
+		// from a console their team keeps open all day without also accepting
+		// that risk on it, so neither may imply the other.
+		{"clipboard only, no devtools", &models.WebProxySession{BlockClipboard: true}, false},
 		{"watermark only", &models.WebProxySession{Watermark: true, Username: "alice"}, false},
-		{"both", &models.WebProxySession{BlockClipboard: true, Watermark: true, Username: "alice"}, true},
+		{"all three", &models.WebProxySession{BlockClipboard: true, BlockDevTools: true, Watermark: true, Username: "alice"}, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -223,10 +229,10 @@ func TestGuardReachesTheBrowserThroughTheRealProxy(t *testing.T) {
 	targetURL, _ := url.Parse(upstream.URL)
 	rs := &ResolvedSession{
 		Session: &models.WebProxySession{
-			ID:             "wps-1",
-			Subdomain:      "minio-dev-test-pam",
-			Username:       "d.okonkwo",
-			BlockClipboard: true, // the policy flag that marks this session protected
+			ID:            "wps-1",
+			Subdomain:     "minio-dev-test-pam",
+			Username:      "d.okonkwo",
+			BlockDevTools: true, // set per resource in the Edit dialog's Data protection section
 		},
 		Upstream: &UpstreamState{Cookies: map[string]string{}},
 		Target:   targetURL,
