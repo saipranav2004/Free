@@ -52,6 +52,36 @@ func NewAdminHandler(
 	return &AdminHandler{jit: jit, res: res, audit: audit, storage: storage, logger: logger}
 }
 
+// scopeIDs is the caller's delegated resource scope, or nil when they are not
+// a scoped delegate. Every org-wide listing below passes it into its filter so
+// the confinement is applied in the query and the pager stays truthful.
+//
+// A delegation with no scope, which is every account until somebody uses
+// scope_resource_ids, returns nil and changes nothing.
+func scopeIDs(c *gin.Context) []string {
+	ids, scoped := middleware.DelegationScopeFromContext(c)
+	if !scoped {
+		return nil
+	}
+	return ids
+}
+
+// refuseOutOfScope aborts when the resource is outside the caller's delegated
+// scope. Used by the ACTION routes, where the resource is reached through a
+// request, grant or session rather than named in the path, so a middleware
+// could not have found it without loading the object first.
+func refuseOutOfScope(c *gin.Context, resourceID string) bool {
+	if middleware.ScopeAllows(c, resourceID) {
+		return false
+	}
+	c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
+		"success": false,
+		"error":   "Your administrator access is limited to specific resources, and this is not one of them",
+		"code":    "delegation_scope_denied",
+	})
+	return true
+}
+
 // ──────────────────────────────────────────────────────────────────────────
 // READ-ONLY
 // ──────────────────────────────────────────────────────────────────────────
@@ -68,6 +98,8 @@ func (h *AdminHandler) ListJITRequests(c *gin.Context) {
 		Search:          c.Query("q"),
 		Page:            page,
 		PageSize:        size,
+
+		ScopeResourceIDs: scopeIDs(c),
 	})
 	if err != nil {
 		h.logger.Error("admin.jit.list.fail", zap.Error(err))
@@ -111,6 +143,8 @@ func (h *AdminHandler) ListGrants(c *gin.Context) {
 		ActiveOnly:   c.Query("active") == "true",
 		Page:         page,
 		PageSize:     size,
+
+		ScopeResourceIDs: scopeIDs(c),
 	})
 	if err != nil {
 		h.logger.Error("admin.grants.list.fail", zap.Error(err))
@@ -138,6 +172,8 @@ func (h *AdminHandler) ListSessions(c *gin.Context) {
 		Search:       c.Query("q"),
 		Page:         page,
 		PageSize:     size,
+
+		ScopeResourceIDs: scopeIDs(c),
 	})
 	if err != nil {
 		h.logger.Error("admin.sessions.list.fail", zap.Error(err))
@@ -167,6 +203,8 @@ func (h *AdminHandler) ListRecordings(c *gin.Context) {
 		IsBreakglass: boolQuery(c, "breakglass"),
 		Page:         page,
 		PageSize:     size,
+
+		ScopeResourceIDs: scopeIDs(c),
 	})
 	if err != nil {
 		h.logger.Error("admin.recordings.list.fail", zap.Error(err))
@@ -514,6 +552,9 @@ func (h *AdminHandler) KillSession(c *gin.Context) {
 	session, err := h.res.GetSession(sessionID)
 	if err != nil {
 		response.Error(c, http.StatusNotFound, "Session not found")
+		return
+	}
+	if refuseOutOfScope(c, session.ResourceID) {
 		return
 	}
 	if err := h.res.KillSession(sessionID, actorID, body.Reason); err != nil {

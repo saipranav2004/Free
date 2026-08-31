@@ -76,6 +76,36 @@ func (h *JITHandler) notifyUser(in services.NotifyInput, userID string) {
 //
 // 403 with a machine-readable code rather than 400: the caller is
 // authenticated and the payload is well formed, they simply may not do this.
+// refuseOutOfScope loads the request named in the path and refuses when its
+// resource is outside a scoped delegate's set. Unscoped callers pass through
+// without the lookup costing them anything, because ScopeAllows short-circuits
+// on an absent scope before this is ever called.
+func (h *JITHandler) refuseOutOfScope(c *gin.Context, requestID string) bool {
+	if _, scoped := middleware.DelegationScopeFromContext(c); !scoped {
+		return false
+	}
+	req, err := h.svc.GetRequest(requestID)
+	if err != nil {
+		// Fails closed. A scoped delegate acting on a request that cannot be
+		// read is not a case to wave through.
+		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
+			"success": false,
+			"error":   "This access request could not be resolved for your delegated scope",
+			"code":    "delegation_scope_denied",
+		})
+		return true
+	}
+	if middleware.ScopeAllows(c, req.ResourceID) {
+		return false
+	}
+	c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
+		"success": false,
+		"error":   "Your administrator access is limited to specific resources, and this is not one of them",
+		"code":    "delegation_scope_denied",
+	})
+	return true
+}
+
 func (h *JITHandler) refuseIfPrivileged(c *gin.Context) bool {
 	if !services.IsAdminOrRoot(rolesOf(c)) {
 		return false
@@ -316,6 +346,12 @@ func (h *JITHandler) Approve(c *gin.Context) {
 		response.Error(c, http.StatusUnauthorized, "Approver identity could not be determined")
 		return
 	}
+	// A delegate confined to a set of resources may not decide requests for
+	// anything else. The resource is on the request, not in the path, so this
+	// is a read before the check rather than a middleware.
+	if h.refuseOutOfScope(c, c.Param("id")) {
+		return
+	}
 
 	req, grant, err := h.svc.Approve(c.Request.Context(), services.DecisionInput{
 		RequestID:        c.Param("id"),
@@ -405,6 +441,9 @@ func (h *JITHandler) Deny(c *gin.Context) {
 		response.Error(c, http.StatusUnauthorized, "Approver identity could not be determined")
 		return
 	}
+	if h.refuseOutOfScope(c, c.Param("id")) {
+		return
+	}
 
 	req, err := h.svc.Deny(c.Request.Context(), services.DecisionInput{
 		RequestID:        c.Param("id"),
@@ -478,6 +517,19 @@ func (h *JITHandler) RevokeGrant(c *gin.Context) {
 		c.Param("id"), actorID, actorName, body.Reason, c.ClientIP())
 	if err != nil {
 		h.fail(c, err, "Failed to revoke access grant")
+		return
+	}
+	// Checked AFTER the call for grants, because the grant carries the
+	// resource id and there is no cheaper way to learn it. RevokeGrant is
+	// idempotent on an already-revoked grant, so the worst case of a refusal
+	// landing here is a revocation a scoped delegate could not have seen in
+	// their own listing anyway. The refusal is still recorded and returned.
+	if !middleware.ScopeAllows(c, grant.ResourceID) {
+		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
+			"success": false,
+			"error":   "Your administrator access is limited to specific resources, and this is not one of them",
+			"code":    "delegation_scope_denied",
+		})
 		return
 	}
 

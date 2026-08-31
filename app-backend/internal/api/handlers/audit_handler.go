@@ -293,6 +293,24 @@ func (h *AuditHandler) Generate(c *gin.Context) {
 	userID, _ := c.Get("user_id")
 	uidStr, _ := userID.(string)
 
+	// THE REPORT IS A QUERY, SO IT IS SCOPED LIKE ONE. This route took UserID
+	// straight from the request body while the seeded standard-user policy
+	// holds pam:report:Generate on "*", so a standard user could ask for a
+	// signed compliance report over the whole organisation and get one: a
+	// downloadable file, formatted for auditors, containing everybody's
+	// sign-ins, reveals and connections.
+	//
+	// It is the same hole as the one closed on Search, ByUser, ByResource and
+	// ByRequest, on the one route in this file that does not read the log
+	// directly. A report is a harder failure than a listing, because the
+	// output leaves the console as a file.
+	scopedUserID := body.UserID
+	scopedUsername := body.Username
+	if caller, unrestricted := callerScope(c); !unrestricted {
+		scopedUserID = caller
+		scopedUsername = ""
+	}
+
 	req := services.ReportRequest{
 		OrgID:             "default",
 		FromTime:          from,
@@ -301,8 +319,8 @@ func (h *AuditHandler) Generate(c *gin.Context) {
 		GeneratedBy:       uidStr,
 		ReportTitle:       body.Title,
 		ControlFrameworks: body.Frameworks,
-		UserID:            body.UserID,
-		Username:          body.Username,
+		UserID:            scopedUserID,
+		Username:          scopedUsername,
 		Category:          models.AuditCategory(body.Category),
 		Action:            body.Action,
 		Outcome:           models.AuditOutcome(body.Outcome),

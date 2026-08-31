@@ -198,6 +198,13 @@ type RequestFilter struct {
 	Search          string
 	Page            int
 	PageSize        int
+
+	// ScopeResourceIDs confines the result to a set of resources, and is set
+	// from the caller's delegated admin scope rather than from any request
+	// parameter. Applied in the QUERY, never to the returned page: filtering a
+	// page after the fact leaves total and the pager describing rows the
+	// caller cannot see.
+	ScopeResourceIDs []string
 }
 
 // GrantFilter drives grant read queries.
@@ -209,6 +216,13 @@ type GrantFilter struct {
 	ActiveOnly   bool
 	Page         int
 	PageSize     int
+
+	// ScopeResourceIDs confines the result to a set of resources, and is set
+	// from the caller's delegated admin scope rather than from any request
+	// parameter. Applied in the QUERY, never to the returned page: filtering a
+	// page after the fact leaves total and the pager describing rows the
+	// caller cannot see.
+	ScopeResourceIDs []string
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -1291,6 +1305,9 @@ func (s *JITService) ListRequests(f RequestFilter) ([]models.JITRequest, int64, 
 	if f.ResourceID != "" {
 		q = q.Where("resource_id = ?", f.ResourceID)
 	}
+	if len(f.ScopeResourceIDs) > 0 {
+		q = q.Where("resource_id IN ?", f.ScopeResourceIDs)
+	}
 	if f.Search != "" {
 		like := "%" + strings.ToLower(f.Search) + "%"
 		q = q.Where("LOWER(requester_username) LIKE ? OR LOWER(resource_name) LIKE ? OR LOWER(reason) LIKE ? OR LOWER(ticket_ref) LIKE ?",
@@ -1325,6 +1342,9 @@ func (s *JITService) ListGrants(f GrantFilter) ([]models.AccessGrant, int64, err
 	}
 	if f.ActiveOnly {
 		q = q.Where("status = ? AND expires_at > ?", models.GrantStatusActive, time.Now().UTC())
+	}
+	if len(f.ScopeResourceIDs) > 0 {
+		q = q.Where("resource_id IN ?", f.ScopeResourceIDs)
 	}
 
 	var total int64

@@ -648,6 +648,18 @@ func (s *AuthService) issueTokens(user *models.User, mfaVerified, enrolmentOnly 
 	}
 	refreshToken := s.jwt.IssueRefreshToken()
 
+	// Persisted so it can actually be redeemed. Before this the token was
+	// minted, returned, and forgotten by the server on the same line.
+	s.recordRefreshToken(models.RefreshToken{
+		TokenHash:     hashRefreshToken(refreshToken),
+		UserID:        user.UserID,
+		SessionID:     sessionID,
+		MFAVerified:   mfaVerified,
+		EnrolmentOnly: enrolmentOnly,
+		ExpiresAt:     s.jwt.RefreshExpiry(),
+		CreatedIP:     clientIP,
+	})
+
 	// Record successful login on PAM's own local user row.
 	s.db.Model(&models.User{}).Where("user_id = ?", user.UserID).Updates(map[string]interface{}{
 		"last_login_at":         time.Now(),

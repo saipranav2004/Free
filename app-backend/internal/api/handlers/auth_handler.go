@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"errors"
+	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -26,14 +27,30 @@ type MFAPosture struct {
 // policy is stored.
 type MFAPostureFunc func(userID string, roles []string) (MFAPosture, error)
 
+// DelegationScopeFunc answers "is this administrator confined to a set of
+// resources". Optional: nil leaves the field off /auth/me entirely.
+type DelegationScopeFunc func(userID string) ([]string, bool, error)
+
 type AuthHandler struct {
 	auth    *services.AuthService
 	posture MFAPostureFunc
+	scope   DelegationScopeFunc
 	log     *zap.Logger
 }
 
 func NewAuthHandler(auth *services.AuthService, posture MFAPostureFunc, log *zap.Logger) *AuthHandler {
 	return &AuthHandler{auth: auth, posture: posture, log: log}
+}
+
+// WithDelegationScope attaches the resolver so /auth/me can tell the console
+// that this administrator's view is confined.
+//
+// A setter rather than a constructor argument because every existing caller
+// and test builds this handler with three arguments, and a scoped delegation
+// is an optional feature of an install, not a dependency of authentication.
+func (h *AuthHandler) WithDelegationScope(fn DelegationScopeFunc) *AuthHandler {
+	h.scope = fn
+	return h
 }
 
 // ─── LOGIN (step 1: password) ──────────────────────────────────────────────
@@ -280,6 +297,23 @@ func (h *AuthHandler) Me(c *gin.Context) {
 		}
 	}
 
+	// A SCOPED DELEGATE HAS TO BE TOLD, or the console is simply wrong at them.
+	// The server confines what they can list and act on, so without this an
+	// administrator opens the JIT queue, sees it empty, and concludes the queue
+	// is clear rather than that they are looking at one slice of it. Hiding the
+	// confinement is not a security measure, it is a way to make a correct
+	// refusal look like a bug.
+	if h.scope != nil {
+		if uid, _ := userID.(string); uid != "" {
+			if ids, scoped, err := h.scope(uid); err != nil {
+				h.log.Warn("auth.me.delegation_scope.fail", zap.Error(err))
+			} else if scoped {
+				body["delegation_scoped"] = true
+				body["delegation_scope_size"] = len(ids)
+			}
+		}
+	}
+
 	response.Success(c, body, "Identity retrieved")
 }
 
@@ -287,8 +321,56 @@ func (h *AuthHandler) Me(c *gin.Context) {
 
 func (h *AuthHandler) Logout(c *gin.Context) {
 	userID, _ := c.Get("user_id")
-	h.auth.Logout(userID.(string))
+	uid, _ := userID.(string)
+	h.auth.Logout(uid)
+	// Signing out must also end the session's ability to EXTEND itself.
+	// Without this the access token stops being used but its refresh token
+	// stays live for days, so anything holding a copy could resurrect the
+	// session after the operator believed they had signed out.
+	if sid, ok := c.Get("session_id"); ok {
+		if s, _ := sid.(string); s != "" {
+			h.auth.RevokeRefreshTokensForSession(s, "user signed out")
+		}
+	}
 	response.Success(c, nil, "Logged out")
+}
+
+// ─── REFRESH ───────────────────────────────────────────────────────────────
+
+type refreshRequest struct {
+	RefreshToken string `json:"refresh_token" binding:"required"`
+}
+
+// Refresh handles POST /api/v1/auth/refresh
+//
+// UNAUTHENTICATED BY DESIGN. The access token is expired by the time anyone
+// needs this, so requiring one would make the endpoint unreachable exactly
+// when it is needed. The refresh token IS the credential, which is why it is
+// single-use, hashed at rest, and rotated on every redemption.
+//
+// Every failure is the same 401 with the same body. Distinguishing "unknown"
+// from "expired" from "already used" would let a caller probe the token space.
+func (h *AuthHandler) Refresh(c *gin.Context) {
+	var req refreshRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, http.StatusBadRequest, "refresh_token is required")
+		return
+	}
+
+	result, err := h.auth.RefreshSession(req.RefreshToken, c.ClientIP())
+	if err != nil {
+		h.log.Info("auth.refresh.rejected", zap.String("ip", c.ClientIP()), zap.Error(err))
+		response.Error(c, http.StatusUnauthorized, "Your session has ended. Please sign in again.")
+		return
+	}
+
+	response.Success(c, gin.H{
+		"access_token":  result.AccessToken,
+		"refresh_token": result.RefreshToken,
+		"token_type":    result.TokenType,
+		"session_id":    result.SessionID,
+		"expires_at":    result.ExpiresAt,
+	}, "Session extended")
 }
 
 // ─── HEALTH ────────────────────────────────────────────────────────────────

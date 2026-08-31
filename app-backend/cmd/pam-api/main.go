@@ -120,6 +120,7 @@ func main() {
 			// ── Resources & connection sessions ──
 			&models.PAMResource{},
 			&models.Notification{},
+			&models.RefreshToken{},
 			&models.ConnectionSession{},
 
 			// ── Brokered web-application gateway (internal/webproxy) ──
@@ -381,6 +382,16 @@ func main() {
 	// policy cannot be evaluated without resolving the actor's roles first.
 	// It migrates its own rule table in the constructor.
 	mfaPolicyService := services.NewMFAPolicyService(db, policyEngine, logger)
+	// Seeded HERE, not beside the other seeders above: NewMFAPolicyService is
+	// what creates pam_mfa_policy_rules, so seeding earlier writes into a table
+	// that does not exist yet.
+	//
+	// Not fatal. A missing default leaves the install exactly as it was before
+	// this seeder existed, which is a weaker posture but a working server;
+	// refusing to boot over it would be the wrong trade.
+	if err := services.SeedMFAPolicyDefaults(db, logger); err != nil {
+		logger.Error("seed.mfa_policy.fail", zap.Error(err))
+	}
 
 	// Role-gated MFA is only a control once LOGIN consults it. Without this
 	// line the rules are stored, rendered in the console, and never enforced:
@@ -445,7 +456,8 @@ func main() {
 		}, nil
 	}
 
-	authHandler := handlers.NewAuthHandler(authService, mfaPostureFor, logger)
+	authHandler := handlers.NewAuthHandler(authService, mfaPostureFor, logger).
+		WithDelegationScope(identityService.DelegationScopeFor)
 	resourceHandler := handlers.NewResourceHandler(resourceService, agentService, policyEngine, cfg.WebProxy.Enabled, logger)
 	vaultHandler := handlers.NewVaultHandler(vaultService, rotationService, logger)
 	auditHandler := handlers.NewAuditHandler(auditQuery, reportSvc, auditService, logger)
@@ -679,6 +691,11 @@ func main() {
 	{
 		pub.POST("/login", authHandler.Login)
 		pub.POST("/mfa/verify", authHandler.MFAVerify)
+		// Public because the access token is expired by definition whenever
+		// this is called. The refresh token is the credential: single-use,
+		// hashed at rest, rotated on redemption, and killed for the whole
+		// session if a spent one comes back. See services/auth_refresh.go.
+		pub.POST("/refresh", authHandler.Refresh)
 		pub.POST("/mfa/recover", authHandler.MFARecover)
 	}
 
@@ -1054,6 +1071,12 @@ func main() {
 	// cannot act.
 	admin.Use(middleware.EnrolmentOnlyGate())
 	admin.Use(middleware.RequireAdmin())
+	// Layer 3. Reads the caller's delegated resource scope once per request
+	// and parks it in the context, so a route addressed at one resource can
+	// refuse it and a listing can filter itself. A pass-through for root, for
+	// seeded admins, and for any delegation created without a scope, which is
+	// every account until somebody uses scope_resource_ids.
+	admin.Use(middleware.ResolveDelegationScope(identityService.DelegationScopeFor, logger))
 	{
 		// ── 1. IDENTITY MANAGEMENT ──
 		identity := admin.Group("/identity")
@@ -1131,11 +1154,19 @@ func main() {
 		//      administrative action.
 		resources := admin.Group("/resources")
 		{
+			// Create is not guarded by scope: there is no resource id yet to
+			// be in or out of it. Everything addressed at an existing resource
+			// is, so a delegate scoped to three databases cannot rotate the
+			// credential on a fourth.
 			resources.POST("", resourceHandler.Create)
-			resources.PATCH("/:id", resourceHandler.Update)
-			resources.DELETE("/:id", resourceHandler.Delete)
-			resources.POST("/:id/credential", resourceHandler.StoreCredential)
-			resources.POST("/:id/rotate", resourceHandler.RotateCredential)
+
+			inScope := middleware.RequireResourceInScope(
+				func(c *gin.Context) string { return c.Param("id") }, logger)
+
+			resources.PATCH("/:id", inScope, resourceHandler.Update)
+			resources.DELETE("/:id", inScope, resourceHandler.Delete)
+			resources.POST("/:id/credential", inScope, resourceHandler.StoreCredential)
+			resources.POST("/:id/rotate", inScope, resourceHandler.RotateCredential)
 		}
 
 		// ── Whole-vault backup & restore — infra-level, admin-only ──
