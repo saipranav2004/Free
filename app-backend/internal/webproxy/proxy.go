@@ -566,6 +566,23 @@ func (h *Handler) injectHeartbeat(rs *ResolvedSession, resp *http.Response) {
 		nonce = n
 	}
 
+	// Say what was injected, so a page that behaves unexpectedly can be
+	// diagnosed from the response rather than by guessing at the server.
+	applied := appliedGuards(rs.Session, rs.RecordingRequired)
+	resp.Header.Set("X-PAM-Guards", strings.Join(applied, ","))
+	h.logger.Info("webproxy.inject",
+		zap.String("web_proxy_session_id", rs.Session.ID),
+		zap.String("path", func() string {
+			if resp.Request != nil {
+				return resp.Request.URL.Path
+			}
+			return ""
+		}()),
+		zap.Strings("guards", applied),
+		zap.Bool("block_clipboard", rs.Session.BlockClipboard),
+		zap.Bool("block_devtools", rs.Session.BlockDevTools),
+		zap.Bool("nonce_issued", nonce != ""))
+
 	injected := injectHeartbeatScript(buf, pamScriptTags(nonce, rs.RecordingRequired, rs.Session))
 	resp.Body = io.NopCloser(bytes.NewReader(injected))
 	resp.ContentLength = int64(len(injected))
@@ -597,6 +614,44 @@ func heartbeatScriptTagWithNonce(nonce string) []byte {
 		return heartbeatScriptTag
 	}
 	return []byte(`<script nonce="` + nonce + `">` + heartbeatScriptJS + `</script>`)
+}
+
+// appliedGuards names the controls injected into this page, in the order
+// pamScriptTags adds them.
+//
+// EXISTS TO END A CLASS OF UNANSWERABLE QUESTION. "The guard is not working"
+// has three completely different causes that look identical from a browser: the
+// running binary predates the feature, the resource's policy never asked for
+// it, or it was injected and something in the page defeated it. Each needs a
+// different fix and none of them is visible in the rendered page.
+//
+// The result is emitted as the X-PAM-Guards response header on every injected
+// document, so the answer is one click away in the Network panel:
+//
+//	header absent          the running build has no guard injection at all
+//	"heartbeat"            injected, but this session's policy asked for nothing
+//	"heartbeat,clipboard"  copy blocking on, developer-tools blocking off
+//	"...,devtools"         the guard is on the page; look at the page, not the server
+//
+// It reveals nothing an operator cannot already learn by pressing a key, and it
+// costs one header on documents only.
+func appliedGuards(session *models.WebProxySession, recordingRequired bool) []string {
+	out := []string{"heartbeat"}
+	if session != nil {
+		if session.BlockClipboard {
+			out = append(out, "clipboard")
+		}
+		if session.BlockDevTools {
+			out = append(out, "devtools")
+		}
+		if session.Watermark {
+			out = append(out, "watermark")
+		}
+	}
+	if recordingRequired {
+		out = append(out, "replay")
+	}
+	return out
 }
 
 // pamScriptTags is everything PAM adds to a proxied page: the inline
