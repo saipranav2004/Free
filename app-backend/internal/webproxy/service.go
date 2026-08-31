@@ -544,6 +544,31 @@ type ResolvedSession struct {
 // every time — never cached — so an admin kill, a JIT grant revoke, an
 // expiry, or an idle timeout takes effect on the very next request rather
 // than whenever some cache happens to lapse.
+// applyLiveProtection refreshes a resolved session's data-protection flags
+// from the resource's current policy.
+//
+// TIGHTEN ONLY, via MostRestrictive against the session's own snapshot, which
+// is the same one-way ratchet every other control here follows. Turning a
+// control ON reaches a live session immediately. Turning one OFF does not,
+// because the snapshot may carry a grant-level tightening that the resource
+// never knew about, and quietly loosening a session mid-flight because someone
+// edited the resource is not a change any of this should make. End the session
+// to drop a control.
+//
+// In memory only: the row is never written back, so the snapshot stays the
+// record of what the session was opened under.
+func applyLiveProtection(row *models.WebProxySession, resource *models.PAMResource) {
+	if row == nil || resource == nil {
+		return
+	}
+	live := models.MostRestrictive(resource.DataProtectionProfile(), row.DataProtection())
+	row.BlockClipboard = live.BlockClipboard
+	row.BlockDevTools = live.BlockDevTools
+	row.BlockDownload = live.BlockDownload
+	row.Watermark = live.Watermark
+	row.MaxEgressBytes = live.MaxEgressBytes
+}
+
 func (s *Service) Resolve(rawToken, subdomain string) (*ResolvedSession, error) {
 	if !s.cfg.Enabled {
 		return nil, ErrDisabled
@@ -579,6 +604,22 @@ func (s *Service) Resolve(rawToken, subdomain string) (*ResolvedSession, error) 
 	if !info.IsActive {
 		return nil, ErrSessionNotUsable
 	}
+
+	// The data-protection policy is re-read from the resource on EVERY request,
+	// not trusted from the snapshot taken when this session opened.
+	//
+	// THE BUG THIS FIXES. Those five flags were copied onto the session row at
+	// open time and never looked at again, so an administrator who turned a
+	// control on had to wait for every existing session to end before it did
+	// anything. In practice that meant ticking "Block browser developer tools"
+	// on a resource, reopening the still-live brokered session, and finding
+	// nothing had changed — with no way to tell a policy that had not taken
+	// effect from one that did not work.
+	//
+	// It also contradicted the promise this file already makes for kills and
+	// revokes: every request is re-authorized from the database, so a change
+	// takes effect on the very next one. Protection policy is now the same.
+	applyLiveProtection(&row, info)
 
 	stateJSON, err := crypto.Decrypt(row.UpstreamStateEnc, s.cryptoKey)
 	if err != nil {
