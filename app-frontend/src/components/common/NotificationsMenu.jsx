@@ -41,7 +41,12 @@ import { describeNotificationError } from '../../lib/notificationError'
 //     because an archive with a hole in it is not one. CRITICAL and anything in
 //     the Security category ignore mutes entirely. See lib/notificationPrefs.
 
-const PREVIEW_COUNT = 6
+// THREE. The panel is a glance, not a reading list: it answers "is there
+// anything I need to look at" and hands the rest to the page. Six rows made it
+// a scrolling box that grew every time something arrived, which is the thing
+// the archive already does better. AWS Console Notifications, Okta and
+// ServiceNow all cap their flyout in this range for the same reason.
+const PREVIEW_COUNT = 3
 const COUNT_POLL_MS = 30000
 const LIST_POLL_MS = 60000
 
@@ -91,6 +96,33 @@ export function NotificationsMenu() {
     refetchInterval: open ? LIST_POLL_MS : false,
     retry: false,
   })
+
+  // OPENING THE PANEL RE-READS BOTH. Without this the list is whatever was
+  // cached the last time the panel happened to be open, so a notification that
+  // arrived since then was counted by the badge and missing from the panel
+  // underneath it, and stayed missing until the poll came round a minute later
+  // or until a visit to /notifications invalidated the cache. That is the
+  // reported "the panel only updates after you open the notifications page".
+  //
+  // The count is refetched alongside it rather than left to its own 30s tick,
+  // because a fresh list beside a stale badge is its own contradiction: the
+  // panel would show an item the number above it had not counted yet.
+  const refetchList = listQuery.refetch
+  const refetchCount = countQuery.refetch
+  useEffect(() => {
+    if (!open) return
+    refetchList()
+    refetchCount()
+  }, [open, refetchList, refetchCount])
+
+  // ...and the badge is the cheap early warning. When the count the server
+  // reports changes, the preview beside it is known to be out of date, so it is
+  // re-read even if the panel is sitting open at the time.
+  const unreadCount = countQuery.data
+  useEffect(() => {
+    if (unreadCount === undefined) return
+    queryClient.invalidateQueries({ queryKey: ['notifications', 'preview'] })
+  }, [unreadCount, queryClient])
 
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: ['notifications'] })

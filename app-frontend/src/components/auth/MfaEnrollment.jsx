@@ -140,11 +140,17 @@ export function MfaEnrollment({ status, onEnrolled, onDisabled }) {
       // reissue failed, and in both cases the existing session is the right
       // one to keep.
       if (data?.access_token) {
+        //
+        // NO `user` KEY, deliberately. This is a token swap inside a session
+        // that already knows who is signed in, so passing null here (which is
+        // what it used to do) threw the profile away and left the navbar, the
+        // profile menu and the MFA chip showing "-" and "Checking MFA" until
+        // the page was reloaded by hand. See setSession in store/authStore.js:
+        // omitting the key keeps the account exactly as it was.
         setSession({
           accessToken: data.access_token,
           refreshToken: data.refresh_token,
           expiresAt: data.expires_at,
-          user: null,
           identifier: identity,
           viaMfaChallenge: true,
         })

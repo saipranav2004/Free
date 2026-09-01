@@ -100,11 +100,25 @@ export const useAuthStore = create((set, get) => ({
   // lib/mfaEvidence.js. A session issued with no challenge is the backend
   // telling us this account has no enrolled device; that is the only reliable
   // "MFA is off" signal this API provides.
+  //
+  // `user` HAS THREE MEANINGS AND THEY ARE NOT THE SAME.
+  //   a profile  - store it (nothing does this today, kept for completeness)
+  //   null       - a brand new sign-in, nobody is loaded yet, so clear it and
+  //                let the shell's /auth/me fetch fill it in
+  //   undefined  - the tokens changed but the account did not. Keep whoever is
+  //                already signed in.
+  // The third case is what mid-session token swaps need. Enrolling a second
+  // factor hands back a replacement token, and adopting it used to blank the
+  // profile: the navbar, the profile menu and the MFA chip all fell back to
+  // "-" and "Checking MFA" until the page was reloaded by hand. Nothing about
+  // the account changed, only the bearer token, so nothing about the account
+  // should be forgotten.
   setSession: ({ accessToken, refreshToken, expiresAt, user, identifier, viaMfaChallenge = false }) => {
-    const session = { accessToken, refreshToken, expiresAt, user }
+    const nextUser = user === undefined ? get().user ?? readPersisted()?.user ?? null : user
+    const session = { accessToken, refreshToken, expiresAt, user: nextUser }
     persist(session)
     if (identifier && !viaMfaChallenge) recordMfaNoChallenge(identifier)
-    set({ accessToken, refreshToken, expiresAt, user, mfaChallenge: null, signedOut: false })
+    set({ accessToken, refreshToken, expiresAt, user: nextUser, mfaChallenge: null, signedOut: false })
   },
 
   // Called by the refresh interceptor. Keeps `user` as it is: a refresh
