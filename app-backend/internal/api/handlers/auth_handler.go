@@ -15,8 +15,24 @@ import (
 // needs to read it. See Me below for why it has to travel on /auth/me and not
 // only on the login response.
 type MFAPosture struct {
-	Required          bool       `json:"mfa_required"`
-	Mode              string     `json:"mfa_policy_mode"`
+	Required bool   `json:"mfa_required"`
+	Mode     string `json:"mfa_policy_mode"`
+
+	// Enrolled is "this account holds an active second factor", which is a
+	// different question from every other field here and the only one the
+	// console cannot answer for itself.
+	//
+	// It used to be computed to feed the policy evaluation and then thrown
+	// away, so /auth/me described the requirement without ever saying whether
+	// the account already met it. The console's own reader has no fallback
+	// worth the name: it guesses from what it saw during this browser's last
+	// sign-in, kept in local storage, so a new browser, a cleared profile or
+	// a second device all read "no second factor" for an account that has
+	// had one for months, and the enrol banner follows the person around
+	// forever. The server knows. It now says so.
+	Enrolled   bool       `json:"mfa_enabled"`
+	EnrolledAt *time.Time `json:"mfa_enabled_at,omitempty"`
+
 	EnrolmentRequired bool       `json:"mfa_enrolment_required"`
 	PolicyRoles       []string   `json:"mfa_policy_roles,omitempty"`
 	GraceUntil        *time.Time `json:"mfa_grace_until,omitempty"`
@@ -302,7 +318,11 @@ func (h *AuthHandler) Me(c *gin.Context) {
 		} else {
 			body["mfa_required"] = p.Required
 			body["mfa_policy_mode"] = p.Mode
+			body["mfa_enabled"] = p.Enrolled
 			body["mfa_enrolment_required"] = p.EnrolmentRequired
+			if p.EnrolledAt != nil {
+				body["mfa_enabled_at"] = p.EnrolledAt
+			}
 			if len(p.PolicyRoles) > 0 {
 				body["mfa_policy_roles"] = p.PolicyRoles
 			}

@@ -520,13 +520,20 @@ func main() {
 		if err != nil {
 			return handlers.MFAPosture{}, err
 		}
-		return handlers.MFAPosture{
+		p := handlers.MFAPosture{
 			Required:          d.Required,
 			Mode:              d.Mode,
+			Enrolled:          enrolled,
 			EnrolmentRequired: d.Block,
 			PolicyRoles:       d.MatchedRoles,
 			GraceUntil:        d.GraceUntil,
-		}, nil
+		}
+		// The device row already carries when it went live, so the console can
+		// say "since 3 March" rather than only "on".
+		if enrolled {
+			p.EnrolledAt = mfa.ActivatedAt
+		}
+		return p, nil
 	}
 
 	authHandler := handlers.NewAuthHandler(authService, mfaPostureFor, logger).
