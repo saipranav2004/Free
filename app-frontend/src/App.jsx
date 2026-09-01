@@ -43,7 +43,6 @@ const IdentityDetailPage = lazy(() => import('./pages/admin/IdentityDetailPage')
 const RolesPage = lazy(() => import('./pages/admin/RolesPage'))
 const RoleDetailPage = lazy(() => import('./pages/admin/RoleDetailPage'))
 const IdentityGraphPage = lazy(() => import('./pages/admin/IdentityGraphPage'))
-const PrivilegePathsPage = lazy(() => import('./pages/admin/PrivilegePathsPage'))
 const MfaPolicyPage = lazy(() => import('./pages/admin/MfaPolicyPage'))
 const PoliciesPage = lazy(() => import('./pages/admin/PoliciesPage'))
 const AdminJitPage = lazy(() => import('./pages/admin/AdminJitPage'))
@@ -228,18 +227,6 @@ export default function App() {
                 element={
                   <SuspenseRoute>
                     <IdentityGraphPage />
-                  </SuspenseRoute>
-                }
-              />
-              {/* Admin only, and deliberately so: this page is a ranked map of
-                  the cheapest routes to superuser. The backend says the same
-                  thing at the top of privpath_handler.go, and mounts every one
-                  of these endpoints under RequireAdmin with auditing on. */}
-              <Route
-                path="privilege-paths"
-                element={
-                  <SuspenseRoute>
-                    <PrivilegePathsPage />
                   </SuspenseRoute>
                 }
               />

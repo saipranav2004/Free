@@ -13,7 +13,6 @@ import {
   ShieldCheck,
   Share2,
   ScrollText,
-  Route,
 } from 'lucide-react'
 
 // ---------------------------------------------------------------------------
@@ -82,10 +81,6 @@ export const ADMIN_NAV = [
   // list raises: this account holds these roles, so what does that actually
   // reach? Same subject, one level deeper.
   { to: '/admin/identity-graph', label: 'Identity Graph', icon: Share2 },
-  // Sits beside the graph because they answer adjacent questions and are built
-  // on the same snapshot: the graph shows what an account HAS, this shows what
-  // it can REACH, transitively, and what one cut would take away.
-  { to: '/admin/privilege-paths', label: 'Privilege Paths', icon: Route },
   { to: '/admin/roles', label: 'Roles', icon: Lock },
   // Role-gated MFA enforcement. Sits next to Roles because that is what it
   // gates, the rule targets a role, and membership of the role is the gate.
@@ -112,7 +107,6 @@ export const CRUMB_LABELS = {
   dashboard: 'Dashboard',
   roles: 'Roles',
   'identity-graph': 'Identity Graph',
-  'privilege-paths': 'Privilege Paths',
   policies: 'Policies',
   'vault-ops': 'Vault Operations',
   'mfa-policy': 'MFA Policy',
