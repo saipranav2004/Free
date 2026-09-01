@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { Boxes, Plus, RefreshCw } from 'lucide-react'
+import { Boxes, Plus } from 'lucide-react'
 import { listServiceIdentities } from '../../api/serviceIdentities'
 import { normalizeApiError } from '../../lib/apiError'
 import { Container, PageTitle, Stack } from '../../components/ui/layout'
@@ -9,8 +9,26 @@ import { DataTable, SkeletonGrid, Td, Th, Tr, Trunc } from '../../components/ui/
 import { EmptyState, ErrorState, OfflineState } from '../../components/ui/states'
 import { StatusDot } from '../../components/ui/bits'
 import { Button } from '../../components/common/Button'
+import { ExportMenu, RefreshControl } from '../../components/ui/chrome'
+import { exportRowsToCsv, exportRowsToJson } from '../../lib/exportRows'
 import { CreateServiceIdentityModal } from '../../components/services/CreateServiceIdentityModal'
 import { formatRelativeToNow } from '../../lib/format'
+
+// Metadata only. There is no secret on a service identity row to leak into a
+// file: tokens are shown once at mint time and never returned again.
+const CSV_COLUMNS = [
+  { key: 'name', label: 'Identity' },
+  { key: 'description', label: 'Description' },
+  { key: 'environment', label: 'Environment' },
+  { key: 'status', label: 'Status' },
+  {
+    key: 'max_secrets_per_minute',
+    label: 'Reads per minute',
+    value: (s) => (s.max_secrets_per_minute > 0 ? s.max_secrets_per_minute : 'Server default'),
+  },
+  { key: 'owner_id', label: 'Owner' },
+  { key: 'created_at', label: 'Created', value: (s) => s.created_at || '' },
+]
 
 // ---------------------------------------------------------------------------
 // Service identities
@@ -43,15 +61,19 @@ export default function ServiceIdentitiesPage() {
         description="Applications and jobs that read secrets without a console session. Each holds its own tokens and its own path grants."
         actions={
           <div className="flex items-center gap-2">
-            <Button
-              variant="secondary"
-              size="sm"
-              icon={RefreshCw}
-              loading={query.isFetching}
-              onClick={() => query.refetch()}
-            >
-              Refresh
-            </Button>
+            {/* Same toolbar as every other list: export what is on screen, and
+                a refresh that says when the data was last read. */}
+            <ExportMenu
+              count={identities.length}
+              disabled={identities.length === 0}
+              onExportCsv={() => exportRowsToCsv(identities, CSV_COLUMNS, 'service-identities')}
+              onExportJson={() => exportRowsToJson(identities, CSV_COLUMNS, 'service-identities')}
+            />
+            <RefreshControl
+              onRefresh={() => query.refetch()}
+              isFetching={query.isFetching}
+              updatedAt={query.dataUpdatedAt}
+            />
             <Button variant="primary" icon={Plus} onClick={() => setCreateOpen(true)}>
               Register identity
             </Button>

@@ -9,6 +9,7 @@ import { DataTable, SkeletonGrid, SortTh, Td, Th, Tr, Trunc } from '../../compon
 import { Meta } from '../../components/ui/bits'
 import {
   CommandBar,
+  ExportMenu,
   Pagination,
   PreferencesMenu,
   RefreshControl,
@@ -18,7 +19,17 @@ import { DeniedState, EmptyState, ErrorState, NoMatchState, OfflineState } from 
 import { Button } from '../../components/common/Button'
 import { CreateSafeModal } from '../../components/vault/CreateSafeModal'
 import { useTableState } from '../../hooks/useTableState'
+import { exportRowsToCsv, exportRowsToJson } from '../../lib/exportRows'
 import { formatDate, formatRelativeToNow } from '../../lib/format'
+
+const SAFE_CSV_COLUMNS = [
+  { key: 'name', label: 'Safe' },
+  { key: 'description', label: 'Description' },
+  { key: 'credential_count', label: 'Credentials', value: (s) => s.credential_count ?? 0 },
+  { key: 'retention_days', label: 'Retention (days)' },
+  { key: 'is_default', label: 'Default safe', value: (s) => (s.is_default ? 'Yes' : 'No') },
+  { key: 'created_at', label: 'Created', value: (s) => s.created_at || '' },
+]
 
 // ---------------------------------------------------------------------------
 // Vault, safes
@@ -93,6 +104,15 @@ export default function SafesListPage() {
               : undefined
           }
         >
+          {/* Every other list in the console exports, so this one does too.
+              An operator who learns the pattern on Resources should not find
+              two lists where it silently is not there. */}
+          <ExportMenu
+            count={table.total}
+            disabled={table.total === 0}
+            onExportCsv={() => exportRowsToCsv(table.filteredRows, SAFE_CSV_COLUMNS, 'safes')}
+            onExportJson={() => exportRowsToJson(table.filteredRows, SAFE_CSV_COLUMNS, 'safes')}
+          />
           <RefreshControl
             onRefresh={() => safesQuery.refetch()}
             isFetching={safesQuery.isFetching}
@@ -157,8 +177,12 @@ export default function SafesListPage() {
               <colgroup>
                 {show('name') && <col className="w-[16rem] min-w-[12rem]" />}
                 {show('description') && <col className="w-auto" />}
-                {show('credential_count') && <col className="w-[8rem]" />}
-                {show('retention_days') && <col className="w-[8rem]" />}
+                {/* Wide enough for the header word itself. At 8rem "Credentials"
+                    and "Retention" clipped to "Creden..." and "Retenti...", which
+                    leaves a reader unable to tell what the column is. Cell
+                    values may truncate; a column name may not. */}
+                {show('credential_count') && <col className="w-[10rem]" />}
+                {show('retention_days') && <col className="w-[9rem]" />}
                 {show('created_at') && <col className="w-[10rem]" />}
               </colgroup>
 
