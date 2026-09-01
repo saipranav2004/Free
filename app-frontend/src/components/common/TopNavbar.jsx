@@ -1,7 +1,6 @@
 import { NavLink } from 'react-router-dom'
 import { Menu } from 'lucide-react'
 import { useThemeStore } from '../../store/themeStore'
-import { ThemeToggle } from './ThemeToggle'
 import { GlobalSearch } from './GlobalSearch'
 import { NotificationsMenu } from './NotificationsMenu'
 import { UserMenu } from './UserMenu'
@@ -77,11 +76,19 @@ export function TopNavbar({
             the company mark, search, notifications, theme and profile. */}
         <span className="min-w-0 flex-1" aria-hidden="true" />
 
+        {/* THE THEME BUTTON IS GONE FROM HERE, and it is the only thing that
+            left. Appearance had two homes, a moon icon in this bar and a
+            segmented control in Settings > Appearance, so one preference was
+            being offered in the single most crowded strip of the page. It now
+            sits as a row in the profile menu, one click away, next to the
+            other things that belong to the signed-in account rather than to
+            the page. Settings keeps the full control.
+
+            The divider went with it: a rule separating two items from one is
+            an edge with nothing to separate. */}
         <div className="flex flex-none items-center gap-1 sm:gap-1.5">
           <GlobalSearch isAdmin={isAdmin} />
           <NotificationsMenu />
-          <ThemeToggle compact />
-          <span className="mx-0.5 hidden h-5 w-px bg-chrome-line sm:block" aria-hidden="true" />
           <UserMenu user={user} roles={roles} onLogout={onLogout} loading={meLoading} mfa={mfa} />
         </div>
       </div>
