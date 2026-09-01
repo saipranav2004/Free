@@ -334,6 +334,23 @@ type JWTConfig struct {
 // VaultConfig — AES-256-GCM master key management.
 type VaultConfig struct {
 	EncryptionKey string `mapstructure:"encryption_key"` // base64-encoded 32-byte key
+
+	// ServiceTokenPepper is the HMAC key that service-token hashes are
+	// computed under, and it is deliberately NOT the encryption key.
+	//
+	// The encryption key decrypts secrets; the pepper authenticates the
+	// machines asking for them. Compromising one should not hand over the
+	// other. Losing the pepper invalidates every issued service token, which
+	// then have to be re-minted; leaking it does not enable brute force (the
+	// token secrets are 256 bits of CSPRNG output) but it does let anyone
+	// holding the tokens table forge a hash for a token id of their choosing.
+	// Hence: mandatory, and at least 32 bytes, in production.
+	ServiceTokenPepper string `mapstructure:"service_token_pepper"`
+
+	// DefaultSecretTTLSec is the deployment-wide ceiling on how long a machine
+	// client may cache a secret, before the per-grant cap, the time remaining
+	// until rotation and the token's own lifetime narrow it further.
+	DefaultSecretTTLSec int `mapstructure:"default_secret_ttl_sec"`
 }
 
 // SecurityConfig — login security policies.
@@ -498,6 +515,11 @@ func Load() (*Config, error) {
 	v.SetDefault("jwt.refresh_ttl_days", 7)
 
 	v.SetDefault("vault.encryption_key", "")
+	// Registered here because viper's AutomaticEnv only binds keys that have a
+	// default: without these two lines PAM_VAULT_SERVICE_TOKEN_PEPPER and
+	// PAM_VAULT_DEFAULT_SECRET_TTL_SEC would be silently invisible.
+	v.SetDefault("vault.service_token_pepper", "")
+	v.SetDefault("vault.default_secret_ttl_sec", 300)
 
 	v.SetDefault("security.max_login_attempts", 5)
 	v.SetDefault("security.lockout_minutes", 30)
@@ -592,6 +614,17 @@ func (c *Config) validate() error {
 	}
 	if c.Vault.EncryptionKey == "" {
 		return fmt.Errorf("vault.encryption_key (PAM_VAULT_ENCRYPTION_KEY) is required")
+	}
+	// Same rule as the audit HMAC secret: optional in development, where
+	// main.go derives a deterministic stand-in and warns, and mandatory at full
+	// length in production.
+	if c.IsProduction() && len(c.Vault.ServiceTokenPepper) < 32 {
+		return fmt.Errorf("vault.service_token_pepper (PAM_VAULT_SERVICE_TOKEN_PEPPER) is required and must be at least 32 bytes in production")
+	}
+	if c.Vault.DefaultSecretTTLSec < 0 {
+		// 0 means "use the service default"; a negative value is a typo, not
+		// an instruction, so it is normalised rather than honoured.
+		c.Vault.DefaultSecretTTLSec = 0
 	}
 	// The audit HMAC secret is allowed to be empty so engineers can run
 	// without configuring it in development; main.go substitutes a

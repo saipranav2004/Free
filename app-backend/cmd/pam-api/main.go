@@ -29,6 +29,7 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"net/http"
@@ -121,6 +122,13 @@ func main() {
 			&models.PAMResource{},
 			&models.Notification{},
 			&models.RefreshToken{},
+			// Machine data plane. Without these the service identity, its
+			// tokens and its path grants have no tables, and every machine
+			// read fails at the database layer rather than at authorization,
+			// which is a confusing way to discover a missing migration.
+			&models.ServiceIdentity{},
+			&models.ServiceToken{},
+			&models.ServiceGrant{},
 			&models.ConnectionSession{},
 
 			// ── Brokered web-application gateway (internal/webproxy) ──
@@ -277,11 +285,46 @@ func main() {
 	}
 
 	// Hardened vault (envelope) — uses PAM_VAULT_ENCRYPTION_KEY via local-dev KMS.
-	vaultService, err := services.NewVaultService(db, logger)
+	vaultService, err := services.NewVaultService(db, cfg.Vault.EncryptionKey, logger)
 	if err != nil {
 		logger.Fatal("vault.init.fail", zap.Error(err))
 	}
 	rotationService := services.NewRotationService(db, vaultService, logger)
+
+	// ── MACHINE DATA PLANE ────────────────────────────────────────────────
+	//
+	// Applications never hold a human session. They authenticate as a service
+	// identity with a service token and read secrets through path-scoped
+	// grants, which is a different plane from the console's JWT + MFA + OPA
+	// path and shares nothing with it but the vault itself.
+	//
+	// THE PEPPER IS DERIVED, NOT DEFAULTED, in development. A literal fallback
+	// committed to the tree is how the vault encryption key ended up being a
+	// published constant; deriving it from the encryption key gives a dev run
+	// determinism (tokens minted in one run still verify in the next) without
+	// a usable secret existing in source. config.validate() refuses to start
+	// production without a real pepper, so this branch cannot be reached there.
+	tokenPepper := []byte(cfg.Vault.ServiceTokenPepper)
+	if len(tokenPepper) < 32 {
+		sum := sha256.Sum256([]byte("pam.service-token-pepper.dev|" + cfg.Vault.EncryptionKey))
+		tokenPepper = sum[:]
+		logger.Warn("service_token.pepper.using_dev_derivation",
+			zap.String("action", "set PAM_VAULT_SERVICE_TOKEN_PEPPER of at least 32 bytes before production"))
+	}
+
+	serviceIdentitySvc, err := services.NewServiceIdentityService(db, tokenPepper, auditService, logger)
+	if err != nil {
+		logger.Fatal("service_identity.init.fail", zap.Error(err))
+	}
+
+	secretAccessSvc := services.NewSecretAccessService(
+		db,
+		vaultService.KMS(),
+		serviceIdentitySvc,
+		auditService,
+		cfg.Vault.DefaultSecretTTLSec,
+		logger,
+	)
 
 	// Start Automated Rotation Background Scheduler (Cron)
 	_ = rotationService.StartCronScheduler(context.Background())
@@ -461,6 +504,8 @@ func main() {
 		WithIdleTimeout(cfg.JWT.IdleTimeoutMin)
 	resourceHandler := handlers.NewResourceHandler(resourceService, agentService, policyEngine, cfg.WebProxy.Enabled, logger)
 	vaultHandler := handlers.NewVaultHandler(vaultService, rotationService, cfg.S3, logger)
+	secretAccessHandler := handlers.NewSecretAccessHandler(secretAccessSvc, logger)
+	serviceIdentityHandler := handlers.NewServiceIdentityHandler(serviceIdentitySvc, logger)
 	auditHandler := handlers.NewAuditHandler(auditQuery, reportSvc, auditService, logger)
 	notificationService := services.NewNotificationService(db, logger)
 	// Attached after construction because JITService is built long before this
@@ -1061,6 +1106,31 @@ func main() {
 	r.POST("/api/v1/pam/agent/launch/:session_id/recording", agentHandler.UploadLaunchRecording)
 
 	// ═════════════════════════════════════════════════════════════
+	//  MACHINE DATA PLANE, applications reading their own secrets.
+	//
+	//  Its own group, carrying ONLY ServiceAuth. It never sees PAMAuth, and
+	//  the human groups never see ServiceAuth: these are two alternative
+	//  authentication schemes for two different kinds of caller, not two
+	//  layers of one. Mounting the service check on a human group would make
+	//  every console request demand a JWT and a service token at once.
+	//
+	//  Read-only by construction. Minting a token and widening a grant live
+	//  under /admin behind a human session and a second factor, so a leaked
+	//  service token cannot escalate itself, only spend what it already has.
+	//
+	//  A secret is addressed by its canonical path (safe/folder/name) rather
+	//  than by id, so a deployment config can name its secrets without
+	//  hardcoding UUIDs, and every read is audited under the resolved path
+	//  with the caller's stated purpose.
+	// ═════════════════════════════════════════════════════════════
+	svc := r.Group("/api/v1/pam/svc")
+	svc.Use(middleware.ServiceAuth(serviceIdentitySvc, logger))
+	{
+		svc.GET("/secrets/*path", secretAccessHandler.GetSecret)
+		svc.GET("/resources/:resource_id/secrets", secretAccessHandler.GetResourceSecrets)
+	}
+
+	// ═════════════════════════════════════════════════════════════
 	//  ADMIN CENTER — root/admin only (middleware.RequireAdmin reads the
 	//  "root"/"admin" role straight off the caller's own PAM JWT). This is
 	//  PAM's central control plane: Identity (RBAC/PBAC), resource
@@ -1178,6 +1248,37 @@ func main() {
 			resources.POST("/:id/credential", inScope, resourceHandler.StoreCredential)
 			resources.POST("/:id/rotate", inScope, resourceHandler.RotateCredential)
 		}
+
+		// ── Machine identities: provisioning the data plane ──────────────
+		//
+		// This is where a machine principal is created, given a token and
+		// granted a path scope. It sits inside the admin group, so it already
+		// carries live role resolution, the enrolment gate and the audit
+		// middleware; what is added per route is the extra weight the
+		// individual action deserves.
+		//
+		// MFA on exactly the two operations that WIDEN access. Minting a token
+		// hands out a new credential and granting a scope hands out new reach,
+		// so both re-check the second factor, the same rule JIT approval and
+		// agent pairing follow. Listing, disabling and revoking do not: taking
+		// access away is the fail-safe direction and must never be blocked by
+		// a lost authenticator during an incident.
+		svcAdmin := admin.Group("/services")
+		{
+			svcAdmin.POST("", serviceIdentityHandler.CreateIdentity)
+			svcAdmin.GET("", serviceIdentityHandler.ListIdentities)
+			svcAdmin.POST("/:service/tokens", middleware.RequireMFA(), serviceIdentityHandler.IssueToken)
+			svcAdmin.GET("/:service/tokens", serviceIdentityHandler.ListTokens)
+			svcAdmin.POST("/:service/grants", middleware.RequireMFA(), serviceIdentityHandler.GrantScope)
+			svcAdmin.GET("/:service/grants", serviceIdentityHandler.ListGrants)
+			svcAdmin.POST("/:service/disable", serviceIdentityHandler.DisableIdentity)
+		}
+		// Revocation is addressed flat rather than as /services/tokens/:id,
+		// which would sit a static segment as a sibling of the :service
+		// parameter. Gin resolves that, but the flat form needs no reasoning
+		// about router internals to verify.
+		admin.DELETE("/service-tokens/:token_id", serviceIdentityHandler.RevokeToken)
+		admin.DELETE("/service-grants/:grant_id", serviceIdentityHandler.RevokeGrant)
 
 		// ── Whole-vault backup & restore ──
 		//

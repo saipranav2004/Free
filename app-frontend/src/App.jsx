@@ -47,6 +47,8 @@ const PoliciesPage = lazy(() => import('./pages/admin/PoliciesPage'))
 const AdminJitPage = lazy(() => import('./pages/admin/AdminJitPage'))
 const AdminAuditPage = lazy(() => import('./pages/admin/AdminAuditPage'))
 const AdminVaultOpsPage = lazy(() => import('./pages/admin/AdminVaultOpsPage'))
+const ServiceIdentitiesPage = lazy(() => import('./pages/admin/ServiceIdentitiesPage'))
+const ServiceIdentityDetailPage = lazy(() => import('./pages/admin/ServiceIdentityDetailPage'))
 
 // Bridges the plain-JS http.js module (which can't call hooks) to the
 // router: on a 401 that ends a previously-valid session, navigate to
@@ -282,6 +284,26 @@ export default function App() {
                 element={
                   <SuspenseRoute>
                     <AdminVaultOpsPage />
+                  </SuspenseRoute>
+                }
+              />
+              {/* Machine identities. Inside the admin element, so the same
+                  guard that refuses a standard user the rest of the Admin
+                  Center refuses these too, rather than each page inventing
+                  its own check. */}
+              <Route
+                path="services"
+                element={
+                  <SuspenseRoute>
+                    <ServiceIdentitiesPage />
+                  </SuspenseRoute>
+                }
+              />
+              <Route
+                path="services/:id"
+                element={
+                  <SuspenseRoute>
+                    <ServiceIdentityDetailPage />
                   </SuspenseRoute>
                 }
               />

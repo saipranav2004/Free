@@ -12,6 +12,7 @@ import {
   Settings as SettingsIcon,
   ShieldCheck,
   Share2,
+  Server,
 } from 'lucide-react'
 
 // ---------------------------------------------------------------------------
@@ -81,6 +82,10 @@ export const ADMIN_NAV = [
   { to: '/admin/jit', label: 'JIT Approvals', icon: KeyRound },
   { to: '/admin/audit', label: 'Audit & Compliance', icon: ClipboardList },
   { to: '/admin/vault-ops', label: 'Vault Operations', icon: Archive },
+  // Directly under Vault Operations because it is the other half of the same
+  // subject: that page is what an operator does to the vault by hand, this is
+  // what applications are allowed to read from it on their own.
+  { to: '/admin/services', label: 'Service Identities', icon: Server },
 ]
 
 // Presentational only, maps a path segment to a human label for the
@@ -100,6 +105,7 @@ export const CRUMB_LABELS = {
   policies: 'Policies',
   'vault-ops': 'Vault Operations',
   'mfa-policy': 'MFA Policy',
+  services: 'Service Identities',
   credentials: 'Credential',
   'mfa-verify': 'Verification',
   // Without an entry a segment longer than 12 characters falls back to
