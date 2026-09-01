@@ -48,7 +48,26 @@ type NotificationService struct {
 }
 
 func NewNotificationService(db *gorm.DB, logger *zap.Logger) *NotificationService {
-	return &NotificationService{db: db, logger: logger}
+	s := &NotificationService{db: db, logger: logger}
+	// THE SERVICE CREATES ITS OWN TABLE, the same way MFAPolicyService and the
+	// admin-delegation store already do in this codebase.
+	//
+	// This is what a partial deployment looks like from a browser: the console
+	// asks for notifications, pam_notifications does not exist, every read is a
+	// 500 and every write is swallowed, so the bell reports a failure and the
+	// approval queue is never told about anything. Depending on main.go's
+	// AutoMigrate list alone means the table is only created when THAT file is
+	// also updated, which is exactly the file most likely to be left behind
+	// when a build is assembled by hand.
+	//
+	// AutoMigrate is idempotent, so this costs one cheap catalogue check at
+	// boot on an install that already has the table.
+	if err := db.AutoMigrate(&models.Notification{}); err != nil {
+		logger.Error("notification.automigrate.fail",
+			zap.String("hint", "notifications will fail to read and write until pam_notifications exists"),
+			zap.Error(err))
+	}
+	return s
 }
 
 // NotifyInput is one notification, before it is fanned out to recipients.
@@ -121,8 +140,15 @@ func (s *NotificationService) Deliver(in NotifyInput, userIDs ...string) {
 	err := s.db.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "dedupe_key"}}, DoNothing: true}).
 		Create(&rows).Error
 	if err != nil {
-		s.logger.Warn("notification.deliver.fail",
-			zap.String("category", in.Category), zap.Int("recipients", len(rows)), zap.Error(err))
+		// ERROR, not WARN. This is swallowed by design (see above), so the log
+		// line is the ONLY trace that an approver was never told about a
+		// pending request. At WARN it sat below the default threshold on a
+		// normal deployment and the failure was invisible from both ends.
+		s.logger.Error("notification.deliver.fail",
+			zap.String("category", in.Category),
+			zap.Int("recipients", len(rows)),
+			zap.String("impact", "these recipients will not see this event in their notification centre"),
+			zap.Error(err))
 	}
 }
 

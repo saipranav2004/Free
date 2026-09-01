@@ -231,17 +231,20 @@ export function UserMenu({ user, roles = [], onLogout, loading = false, mfa }) {
           aria-label="Account"
           className="animate-menu-in absolute right-0 z-50 mt-2 w-[20.5rem] overflow-hidden rounded-2xl border border-line bg-surface shadow-overlay"
         >
-          {/* SIGN OUT LIVES AT THE TOP, opposite the tenant name. It was a red
-              block at the bottom in a compartment of its own, which gave the
-              most destructive control in the menu the most visual weight and
-              ended the panel on an alarm. Up here it is a quiet text control
-              in the corner people already look at to confirm which account
-              and which tenant they are in, which is exactly the moment
-              somebody decides to leave. */}
-          <div className="flex items-center gap-3 px-4 pb-1 pt-3.5">
-            <p className="min-w-0 flex-1 truncate text-sm font-semibold text-primary">
-              Deep Algorithms
-            </p>
+          {/* SIGN OUT LIVES AT THE TOP. It was a red block at the bottom in a
+              compartment of its own, which gave the most destructive control in
+              the menu the most visual weight and ended the panel on an alarm.
+              Up here it is a quiet text control in the corner people already
+              look at to confirm which account they are in, which is exactly
+              the moment somebody decides to leave.
+
+              NO TENANT NAME BESIDE IT. The reference this was modelled on puts
+              the organisation there, but this install has no tenant concept to
+              read one from: it would have been the company's own name typed
+              into a component, true only for this deployment and wrong the
+              moment anybody else runs it. The wordmark in the top bar already
+              says whose console this is. */}
+          <div className="flex items-center justify-end px-4 pb-1 pt-3.5">
             <button
               type="button"
               role="menuitem"

@@ -428,8 +428,12 @@ export function AuditTab({ resource }) {
       <Card>
         <CardHeader>
           <CardTitle icon={ScrollText}>Recent activity</CardTitle>
+          {/* Always the Admin Center trail: this whole page is admin-only
+              (ResourceDetailPage redirects everyone else), so the branch to a
+              self-service audit route was unreachable even before that route
+              was removed. */}
           <Link
-            to={isAdmin ? '/admin/audit' : '/audit'}
+            to="/admin/audit"
             className="ml-auto text-xs font-medium text-blue-600 transition-colors hover:text-blue-500 dark:text-blue-400"
           >
             Open full audit trail →

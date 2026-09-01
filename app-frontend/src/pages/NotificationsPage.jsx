@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { Bell, CheckCheck } from 'lucide-react'
+import { AlertTriangle, Bell, CheckCheck, RefreshCw } from 'lucide-react'
 import clsx from 'clsx'
 import {
   listNotifications,
@@ -11,6 +11,8 @@ import {
 import { categoryIcon, categoryLabel, groupByDay, severityTone, timeAgo } from '../lib/notificationDisplay'
 import { Container, PageTitle, Stack } from '../components/ui/layout'
 import { EmptyState } from '../components/common/Layout'
+import { describeNotificationError } from '../lib/notificationError'
+import { Button } from '../components/common/Button'
 import { Pagination } from '../components/common/Pagination'
 import { SkeletonRows } from '../components/common/Spinner'
 
@@ -132,6 +134,27 @@ export default function NotificationsPage() {
 
         {query.isLoading ? (
           <SkeletonRows rows={6} />
+        ) : query.isError ? (
+          /* THE ERROR BRANCH THAT WAS MISSING. Without it a failed request
+             fell straight through to the empty state below, so a page that had
+             never received an answer told the reader they had no notifications.
+             That is the reported "the page shows nothing": it was not empty, it
+             was broken, and it said the wrong one. */
+          <EmptyState
+            icon={AlertTriangle}
+            title={describeNotificationError(query.error).title}
+            description={describeNotificationError(query.error).detail}
+            action={
+              <Button
+                variant="secondary"
+                icon={RefreshCw}
+                loading={query.isFetching}
+                onClick={() => query.refetch()}
+              >
+                Try again
+              </Button>
+            }
+          />
         ) : items.length === 0 ? (
           <EmptyState
             icon={Bell}

@@ -12,14 +12,10 @@ import { listResources } from '../../api/resources'
 import { JIT_DEFAULTS } from '../../config/constants'
 import { Modal } from '../common/Modal'
 import { Button } from '../common/Button'
-import { Field, inputClass, selectClass } from '../common/FormFields'
+import { Field, inputClass } from '../common/FormFields'
+import { ResourcePicker } from './ResourcePicker'
 import { apiErrorMessage } from '../../lib/apiError'
 import { userFacingNext } from '../../lib/fourEyes'
-
-function resourceOptionLabel(r) {
-  const where = r.port ? `${r.host}:${r.port}` : r.host
-  return where ? `${r.name}, ${where}` : r.name
-}
 
 // ---------------------------------------------------------------------------
 // Request access
@@ -195,14 +191,9 @@ export function CreateJitRequestModal({ open, onClose, defaultResourceId, defaul
     onError: (err) => toast.error(apiErrorMessage(err)),
   })
 
-  const resources = resourcesQuery.data?.resources || []
-  // JIT-gated systems first: they are the ones that actually require this
-  // form, and on a long catalogue they would otherwise be scattered.
-  const [gated, standing] = useMemo(() => {
-    const g = resources.filter((r) => r.requires_jit)
-    const s = resources.filter((r) => !r.requires_jit)
-    return [g, s]
-  }, [resources])
+  // Grouping and filtering moved into ResourcePicker, which owns both now
+  // that the list is searchable.
+  const resources = useMemo(() => resourcesQuery.data?.resources || [], [resourcesQuery.data])
 
   const duration = Number(watch('duration_minutes')) || 0
   const reason = watch('reason') || ''
@@ -293,37 +284,22 @@ export function CreateJitRequestModal({ open, onClose, defaultResourceId, defaul
         noValidate
         className="space-y-5"
       >
+        {/* register() is deliberately NOT used here. It hands the browser an
+            uncontrolled <select>, which is what lost the preselection: the
+            value was applied while the option list was still empty, and a
+            browser silently drops a value it has no option for. The picker is
+            controlled from form state instead, so the selection survives the
+            list arriving late. shouldValidate clears the error the moment a
+            resource is chosen rather than at the next submit. */}
         <Field label="Resource" error={errors.resource_id?.message} required htmlFor="jit-resource">
-          <select
+          <ResourcePicker
             id="jit-resource"
-            className={selectClass(!!errors.resource_id)}
-            disabled={resourcesQuery.isLoading}
-            {...register('resource_id')}
-          >
-            <option value="">{resourcesQuery.isLoading ? 'Loading resources…' : 'Select a resource…'}</option>
-            {/* The endpoint is a disambiguator, not data: two boxes can share a
-                name. The port is not part of a standard user's view of the
-                catalogue and the API does not send them one, so building the
-                label with it produced a trailing colon on every option. */}
-            {gated.length > 0 && (
-              <optgroup label="Requires just-in-time approval">
-                {gated.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {resourceOptionLabel(r)}
-                  </option>
-                ))}
-              </optgroup>
-            )}
-            {standing.length > 0 && (
-              <optgroup label="Standing access (a request is usually unnecessary)">
-                {standing.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {resourceOptionLabel(r)}
-                  </option>
-                ))}
-              </optgroup>
-            )}
-          </select>
+            resources={resources}
+            value={resourceId}
+            loading={resourcesQuery.isLoading}
+            invalid={!!errors.resource_id}
+            onChange={(id) => setValue('resource_id', id, { shouldValidate: true, shouldDirty: true })}
+          />
         </Field>
 
         {chosen && !chosen.requires_jit && (

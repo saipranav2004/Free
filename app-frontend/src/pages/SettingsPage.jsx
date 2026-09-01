@@ -18,7 +18,6 @@ import { MfaEnrollment } from '../components/auth/MfaEnrollment'
 import { AgentDevicesPanel } from '../components/agent/AgentDevicesPanel'
 import { QuickEnrolPanel } from '../components/agent/QuickEnrolPanel'
 import { JIT_DEFAULTS } from '../config/constants'
-import { categoryIcon } from '../lib/notificationDisplay'
 import {
   ALWAYS_ON_CATEGORIES,
   categoryTitle,
@@ -395,44 +394,49 @@ export default function SettingsPage() {
 
           {active === 'notifications' && (
             <>
-              {/* WHAT ARRIVES, LISTED IN FULL. Every row below is a real
-                  Deliver() call on the server, so the catalogue and the bell
-                  cannot describe different products. Rows the reader can never
-                  receive are dropped rather than shown greyed out: the
+              {/* ONE LIST, NOT A WALL OF CARDS. This section used to draw a
+                  bordered card per category, each with its own icon tile, its
+                  own header row and a bulleted list inside it, which made a
+                  four-row preference screen look like a dashboard. Settings
+                  surfaces at this level (GitHub, Okta, Stripe) all render the
+                  same thing as plain hairline rows, so notifications now use
+                  the identical Group + Rows + SettingRow pattern as every
+                  other tab on this page.
+
+                  WHAT ARRIVES IS STILL LISTED IN FULL. Every title below is a
+                  real Deliver() call on the server, so the catalogue and the
+                  bell cannot describe different products. Rows the reader can
+                  never receive are dropped rather than greyed out: the
                   approval queue only ever notifies approvers. */}
               <Group
                 title="What this console tells you about"
-                description="Everything below is delivered to the bell in the top bar and kept on the notifications page. Nothing here sends email or webhooks."
+                description="Everything below reaches the bell in the top bar and is kept on the notifications page. Nothing here sends email or webhooks, and muting a category hides it from the bell only: your history stays complete and the unread count keeps counting it."
+                aside="Saved in this browser"
               >
-                <div className="flex flex-col gap-5">
+                <Rows>
                   {notificationTypesFor(isAdmin).map((group) => {
-                    const Icon = categoryIcon(group.category)
                     const locked = ALWAYS_ON_CATEGORIES.includes(group.category)
                     const on = !mutes.includes(group.category)
                     return (
-                      <section
+                      <SettingRow
                         key={group.category}
-                        className="overflow-hidden rounded-xl border border-line bg-surface"
-                      >
-                        <header className="flex items-center gap-3 border-b border-line-soft px-4 py-3">
-                          <span className="flex h-8 w-8 flex-none items-center justify-center rounded-lg border border-line bg-surface-900 text-secondary">
-                            <Icon className="h-4 w-4" strokeWidth={1.9} />
-                          </span>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm font-semibold text-primary">
-                              {categoryTitle(group.category)}
-                            </p>
-                            <p className="mt-0.5 text-xs text-tertiary">
-                              {locked
-                                ? 'Always shown. Security events cannot be muted.'
-                                : on
-                                  ? 'Shown in the bell.'
-                                  : 'Muted in the bell. Still kept on the notifications page.'}
-                            </p>
-                          </div>
-                          {locked ? (
-                            <span className="flex flex-none items-center gap-1.5 text-2xs font-semibold uppercase tracking-[0.08em] text-tertiary">
-                              <Lock className="h-3.5 w-3.5" strokeWidth={2} />
+                        label={categoryTitle(group.category)}
+                        description={
+                          <>
+                            {locked
+                              ? 'Always shown. Security events cannot be muted.'
+                              : on
+                                ? 'Shown in the bell.'
+                                : 'Muted in the bell. Still kept on the notifications page.'}
+                            <span className="mt-1 block text-tertiary">
+                              Includes: {group.items.map((i) => i.title).join(', ')}.
+                            </span>
+                          </>
+                        }
+                        control={
+                          locked ? (
+                            <span className="inline-flex items-center gap-1.5 text-sm text-tertiary">
+                              <Lock className="h-3.5 w-3.5 flex-none" strokeWidth={2} />
                               Always on
                             </span>
                           ) : (
@@ -441,47 +445,12 @@ export default function SettingsPage() {
                               onChange={(v) => toggleCategory(group.category, v)}
                               label={`Show ${categoryTitle(group.category)} in the bell`}
                             />
-                          )}
-                        </header>
-                        <ul className="divide-y divide-line-soft">
-                          {group.items.map((item) => (
-                            <li key={item.title} className="flex items-start gap-3 px-4 py-2.5">
-                              <span
-                                className={clsx(
-                                  'mt-1 h-1.5 w-1.5 flex-none rounded-full',
-                                  item.severity === 'CRITICAL'
-                                    ? 'bg-red-500'
-                                    : item.severity === 'WARNING'
-                                      ? 'bg-amber-500'
-                                      : 'bg-blue-500'
-                                )}
-                                aria-hidden="true"
-                              />
-                              <span className="min-w-0">
-                                <span className="block text-sm text-primary">{item.title}</span>
-                                <span className="mt-0.5 block text-xs leading-relaxed text-tertiary">
-                                  {item.when}
-                                </span>
-                              </span>
-                            </li>
-                          ))}
-                        </ul>
-                      </section>
+                          )
+                        }
+                      />
                     )
                   })}
-                </div>
-              </Group>
-
-              <Group
-                title="Where preferences live"
-                description="Muting is remembered in this browser only, so it does not follow you to another machine and it changes nothing about what the server records."
-                aside="Saved in this browser"
-              >
-                <p className="text-sm leading-relaxed text-secondary">
-                  A muted category is hidden from the bell, never from your history: everything is
-                  still on the notifications page, and the unread count on the bell keeps counting
-                  it. Anything marked critical is shown whatever you set here.
-                </p>
+                </Rows>
               </Group>
 
               {/* The save affordance only exists when there is something to

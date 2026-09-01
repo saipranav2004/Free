@@ -11,6 +11,7 @@ import {
 } from '../../api/notifications'
 import { categoryIcon, severityTone, timeAgo } from '../../lib/notificationDisplay'
 import { passesMutes, readMutes } from '../../lib/notificationPrefs'
+import { describeNotificationError } from '../../lib/notificationError'
 
 // ---------------------------------------------------------------------------
 // The bell
@@ -180,12 +181,27 @@ export function NotificationsMenu() {
             {listQuery.isLoading ? (
               <p className="px-4 py-8 text-center text-xs text-tertiary">Loading…</p>
             ) : listQuery.isError ? (
+              /* NAMES WHAT ACTUALLY FAILED. This used to say the console could
+                 not reach the notification service, which describes exactly one
+                 of the ways it fails and guessed at the rest. A 404 is not
+                 unreachable: it is a server that does not have the endpoint,
+                 which points at a backend older than this console and is a
+                 different thing to go and fix. See lib/notificationError.js. */
               <div className="px-4 py-10 text-center">
                 <Bell className="mx-auto h-6 w-6 text-tertiary" strokeWidth={1.5} />
-                <p className="mt-2 text-sm font-medium text-secondary">Notifications are unavailable</p>
-                <p className="mt-1 text-xs text-tertiary">
-                  The console could not reach the notification service. It will retry on its own.
+                <p className="mt-2 text-sm font-medium text-secondary">
+                  {describeNotificationError(listQuery.error).title}
                 </p>
+                <p className="mt-1 text-xs leading-relaxed text-tertiary">
+                  {describeNotificationError(listQuery.error).detail}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => listQuery.refetch()}
+                  className="mt-3 rounded-md px-2 py-1 text-xs font-semibold text-accent transition-colors hover:bg-hover"
+                >
+                  Try again
+                </button>
               </div>
             ) : items.length === 0 ? (
               <div className="px-4 py-10 text-center">

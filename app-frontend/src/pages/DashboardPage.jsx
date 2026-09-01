@@ -1447,15 +1447,17 @@ function UserDashboard({ user }) {
         {/* personal: volume plus what was blocked. The frequency and
             category breakdowns are fleet analysis and are left to the admin
             dashboard, see the note on ActivityAnalysis. */}
+        {/* No "view all" link on this band any more: the self-scoped activity
+            page it used to point at is gone, so this is now the whole of an
+            operator's own trail rather than a preview of a longer one. */}
         <ActivityAnalysis
           personal
           events={events}
           stats={sample.value === null ? auditStatsQuery.data : null}
           loading={auditQuery.isLoading || (sample.value === null && auditStatsQuery.isLoading)}
           range={range}
-          auditHref="/activity"
           scopeNote={`Your own trail, computed from ${sample.scope}.`}
-          extra={<DeniedList events={events} href="/activity" scanned={events.length} />}
+          extra={<DeniedList events={events} scanned={events.length} />}
         />
       </QuietSection>
     </div>

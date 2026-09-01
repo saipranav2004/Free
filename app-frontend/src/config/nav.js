@@ -12,7 +12,6 @@ import {
   Settings as SettingsIcon,
   ShieldCheck,
   Share2,
-  ScrollText,
 } from 'lucide-react'
 
 // ---------------------------------------------------------------------------
@@ -32,25 +31,18 @@ export const CONSOLE_NAV = [
   { to: '/vault', label: 'Vault', icon: Vault },
   { to: '/sessions', label: 'Sessions', icon: Radio },
   { to: '/jit', label: 'JIT Access', icon: KeyRound },
-  // "MY ACTIVITY" IS FOR EVERYONE, and it was for nobody: the entry was
-  // commented out and the route was admin-gated, so a standard user's only
-  // view of their own trail was a dashboard panel with a fixed cap on how many
-  // entries it walked. There was no page to page through, no date range to
-  // narrow, and no total to trust.
+  // THERE IS NO "MY ACTIVITY" ENTRY, and the page behind it is gone too.
   //
-  // The earlier reasoning (Okta keeps the System Log admin-only, AWS gates
-  // CloudTrail, Entra keeps sign-in logs out of My Account) is about the
-  // ORGANISATION's log, and it still holds: that one is Admin Center, Audit
-  // and Compliance, and it stays there. Every one of those products also gives
-  // an individual their OWN history (Okta's end-user sign-in activity, Entra's
-  // My Sign-Ins), because "where has my account been used" is a question
-  // people are supposed to be able to answer about themselves.
+  // It was a self-scoped copy of Admin Center, Audit and Compliance: the same
+  // table, the same filters, the same report builder, narrowed to one account.
+  // The dashboard's own activity band already answers "what have I been doing"
+  // for the person looking at it, and an administrator has the org-wide view
+  // one section down this list. Two screens over one trail is one screen too
+  // many in a sidebar this long.
   //
-  // What makes this safe is not the route: AuditPage sends the caller's own id
-  // and the server now pins the scope to the token for any non-privileged
-  // caller (audit_handler.go's callerScope), so the page cannot be widened by
-  // editing a URL.
-  { to: '/activity', label: 'My activity', icon: ScrollText },
+  // Nothing was weakened by removing it. The server side is unchanged, and the
+  // caller-scoping on /pam/audit that made the page safe still applies to every
+  // other reader of that endpoint.
 ]
 
 // JIT ACCESS IS NOT RENDERED FOR AN ADMINISTRATOR. /jit is the self-service
@@ -99,8 +91,6 @@ export const CRUMB_LABELS = {
   sessions: 'Sessions',
   jit: 'JIT Access',
   requests: 'Request',
-  audit: 'My activity',
-  activity: 'My activity',
   settings: 'Settings',
   admin: 'Admin Center',
   identity: 'Identity',

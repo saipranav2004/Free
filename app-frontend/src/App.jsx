@@ -23,7 +23,6 @@ const VaultPage = lazy(() => import('./pages/vault/VaultPage'))
 const SessionsPage = lazy(() => import('./pages/sessions/SessionsPage'))
 const JitPage = lazy(() => import('./pages/jit/JitPage'))
 const JitRequestDetailPage = lazy(() => import('./pages/jit/JitRequestDetailPage'))
-const AuditPage = lazy(() => import('./pages/audit/AuditPage'))
 const SettingsPage = lazy(() => import('./pages/SettingsPage'))
 const NotificationsPage = lazy(() => import('./pages/NotificationsPage'))
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage'))
@@ -160,23 +159,19 @@ export default function App() {
                 </SelfServiceOnly>
               }
             />
-            {/* "My activity" is EVERY account's own trail, and the
-                counterpart to the org-wide Admin Center, Audit and Compliance.
-                It used to be admin-only, which left a standard user with no
-                way to page through their own history at all. The page scopes
-                itself to the caller and the server pins that scope to the
-                token, so opening the route to everyone widens nothing.
-                /audit was the original path and stays as a redirect so old
-                links and bookmarks land. */}
-            <Route
-              path="activity"
-              element={
-                <SuspenseRoute>
-                  <AuditPage />
-                </SuspenseRoute>
-              }
-            />
-            <Route path="audit" element={<Navigate to="/activity" replace />} />
+            {/* THERE IS NO "MY ACTIVITY" PAGE. It was a self-scoped copy of
+                Admin Center, Audit and Compliance, and it answered a question
+                the dashboard's own activity band already answers for the
+                account looking at it. Two screens over one trail is one screen
+                too many, and the org-wide view remains where it belongs, behind
+                RequireAdmin.
+
+                Both paths are left as redirects rather than deleted outright,
+                so a bookmark or an old link lands on the dashboard instead of
+                a 404. The server side is untouched: /pam/audit is still there,
+                still scoped to the caller. */}
+            <Route path="activity" element={<Navigate to="/" replace />} />
+            <Route path="audit" element={<Navigate to="/" replace />} />
             {/* The archive half of the notification centre. The bell is the
                 "what is new right now" view; this is "what happened, and what
                 did I miss", which needs filters, history and room to read. */}

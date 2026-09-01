@@ -332,37 +332,34 @@ export function ResourceTable({
                   onOpenCli={onOpenCli}
                   access={accessFor?.(r)}
                 />
-                <RowMenu label={`Actions for ${r.name}`}>
-                  {/* The detail page is a configuration surface (credentials,
-                      policies, audit, delete), every part of which is already
-                      admin-gated. Offering it to an operator opens a page where
-                      the only thing they can do is the thing they just did from
-                      this row, and which redirects them off it anyway. */}
-                  {isAdmin ? (
-                    <>
-                      <MenuItem icon={ExternalLink}>
-                        <Link to={`/resources/${r.id}`} className="block">
-                          Open resource
-                        </Link>
-                      </MenuItem>
-                      <MenuLabel>Administration</MenuLabel>
-                      <MenuItem icon={KeySquare} onClick={() => onStoreCredential(r)}>
-                        {r.vault_entry_id ? 'Replace credential' : 'Store a credential'}
-                      </MenuItem>
-                      <MenuItem icon={Trash2} danger onClick={() => onDelete(r)}>
-                        Delete resource
-                      </MenuItem>
-                    </>
-                  ) : (
-                    // Mounted only while the menu is open, so this is also the
-                    // moment connect-info is requested for this row.
-                    <ConnectMenuItems
-                      resource={r}
-                      onRequestAccess={onRequestAccess}
-                      onOpenCli={onOpenCli}
-                    />
-                  )}
-                </RowMenu>
+                {/* THE OVERFLOW MENU IS ADMINISTRATORS ONLY.
+                    A standard user had two controls side by side that opened
+                    the identical list: Connect, and the three dots next to it.
+                    One row, one action, offered twice. The dots are the one to
+                    go, because Connect says what it does and a bare glyph does
+                    not, and because an overflow menu whose contents are the
+                    primary action is not an overflow menu.
+
+                    For an administrator the two are genuinely different: the
+                    row action connects, the menu configures (open the detail
+                    page, store a credential, delete), and none of that is
+                    reachable any other way from this table. */}
+                {isAdmin && (
+                  <RowMenu label={`Actions for ${r.name}`}>
+                    <MenuItem icon={ExternalLink}>
+                      <Link to={`/resources/${r.id}`} className="block">
+                        Open resource
+                      </Link>
+                    </MenuItem>
+                    <MenuLabel>Administration</MenuLabel>
+                    <MenuItem icon={KeySquare} onClick={() => onStoreCredential(r)}>
+                      {r.vault_entry_id ? 'Replace credential' : 'Store a credential'}
+                    </MenuItem>
+                    <MenuItem icon={Trash2} danger onClick={() => onDelete(r)}>
+                      Delete resource
+                    </MenuItem>
+                  </RowMenu>
+                )}
               </RowActions>
             </Td>
           </Tr>
