@@ -193,6 +193,12 @@ func main() {
 	if err := services.SeedRootAccount(db, cfg.IsProduction(), logger); err != nil {
 		logger.Fatal("seed.root_account.fail", zap.Error(err))
 	}
+	// The safe every credential falls back to. Without it, anything attached
+	// from the Resources screen points at a safe id with no row behind it and
+	// never appears in the Vault. See SeedDefaultSafe.
+	if err := services.SeedDefaultSafe(db, logger); err != nil {
+		logger.Fatal("seed.default_safe.fail", zap.Error(err))
+	}
 
 	// ── PAM JWT Issuer (HS256, self-signed) ──
 	jwtIssuer := pamjwt.New(
@@ -234,7 +240,7 @@ func main() {
 		cfg.Security.LockoutMinutes,
 		logger,
 	)
-	resourceService := services.NewResourceService(db, cfg.Vault.EncryptionKey, logger)
+	resourceService := services.NewResourceService(db, logger)
 
 	// Session-recording storage backend (DAM — see internal/recorder and
 	// internal/gateway). AES-256-GCM-encrypted at rest reusing the same
@@ -290,6 +296,12 @@ func main() {
 		logger.Fatal("vault.init.fail", zap.Error(err))
 	}
 	rotationService := services.NewRotationService(db, vaultService, logger)
+
+	// ONE CREDENTIAL STORE. The Resources screen files its credentials in the
+	// vault rather than keeping a second, weaker copy of the encryption logic
+	// of its own. See ResourceService.WithVault for what the second one was
+	// and what it broke.
+	resourceService.WithVault(vaultService)
 
 	// ── MACHINE DATA PLANE ────────────────────────────────────────────────
 	//

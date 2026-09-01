@@ -119,10 +119,46 @@ func (s *VaultService) CreateSafe(ctx context.Context, name, description, ownerI
 	return safe, nil
 }
 
-func (s *VaultService) ListSafes(ctx context.Context) ([]models.Safe, error) {
+// SafeSummary is a safe plus the one number the list view is actually about.
+//
+// The console has always had a Credentials column on the safes list and the
+// endpoint has never returned the figure, so it rendered "-" on every row
+// forever: a column that looks like data and is a placeholder. Counting is the
+// server's job here, not the browser's, because doing it client-side means one
+// request per safe just to fill in a column.
+type SafeSummary struct {
+	models.Safe
+	CredentialCount int64 `json:"credential_count"`
+}
+
+func (s *VaultService) ListSafes(ctx context.Context) ([]SafeSummary, error) {
 	var safes []models.Safe
-	err := s.db.Order("name ASC").Find(&safes).Error
-	return safes, err
+	if err := s.db.WithContext(ctx).Order("name ASC").Find(&safes).Error; err != nil {
+		return nil, err
+	}
+
+	// One grouped count for the whole page rather than one per row.
+	type row struct {
+		SafeID string
+		N      int64
+	}
+	var counts []row
+	if err := s.db.WithContext(ctx).Model(&models.Credential{}).
+		Select("safe_id, count(*) as n").
+		Where("status <> ?", "archived").
+		Group("safe_id").Scan(&counts).Error; err != nil {
+		return nil, err
+	}
+	byID := make(map[string]int64, len(counts))
+	for _, c := range counts {
+		byID[c.SafeID] = c.N
+	}
+
+	out := make([]SafeSummary, 0, len(safes))
+	for _, sf := range safes {
+		out = append(out, SafeSummary{Safe: sf, CredentialCount: byID[sf.ID]})
+	}
+	return out, nil
 }
 
 func (s *VaultService) GetSafe(ctx context.Context, safeID string) (*models.Safe, error) {

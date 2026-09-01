@@ -3,13 +3,13 @@ package services
 
 import (
 	"encoding/json"
+	"context"
 	"errors"
 	"fmt"
 	"sync"
 	"time"
 
 	"github.com/yourorg/pam/internal/models"
-	"github.com/yourorg/pam/pkg/crypto"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -23,7 +23,8 @@ var (
 // ResourceService manages the resource registry, vault, and connection sessions.
 type ResourceService struct {
 	db        *gorm.DB
-	cryptoKey string
+	// vault is the single credential store. See WithVault.
+	vault *VaultService
 	logger    *zap.Logger
 
 	// liveSessions maps an ACTIVE pam_connection_sessions.id to the cancel
@@ -43,8 +44,38 @@ type ResourceService struct {
 	liveSessions map[string]func()
 }
 
-func NewResourceService(db *gorm.DB, cryptoKey string, logger *zap.Logger) *ResourceService {
-	return &ResourceService{db: db, cryptoKey: cryptoKey, logger: logger, liveSessions: make(map[string]func())}
+// NewResourceService no longer takes the master key: credentials are the
+// vault's business now, and this service was the only other thing holding a
+// copy of it.
+func NewResourceService(db *gorm.DB, logger *zap.Logger) *ResourceService {
+	return &ResourceService{db: db, logger: logger, liveSessions: make(map[string]func())}
+}
+
+// WithVault hands this service the vault, and with it the ONE way credentials
+// are stored in this product.
+//
+// WHY THIS EXISTS. There used to be two. A credential attached from the
+// Resources screen was sealed with a single AES-GCM layer under the master key
+// and written straight to pam_credentials: no per-secret data key, no AAD
+// binding it to its row, no version history, no rotation metadata, and a log
+// line where the vault path writes an audit record. A credential attached from
+// the Vault screen was sealed as an envelope with all of that. Same table, two
+// formats, decided by which screen an operator happened to use.
+//
+// It was not only inconsistent, it was broken across the seam. The connection
+// path read rows with the single-layer reader, which cannot parse an envelope,
+// so a credential attached to a resource through the Vault screen could not be
+// used to connect to that resource. Rotating from the Resources screen wrote
+// the single-layer format back over an envelope, quietly downgrading it.
+//
+// No PAM product of this class has two credential stores. In CyberArk,
+// BeyondTrust and Delinea alike there is one privileged account object, in one
+// safe, under one policy, and the target system is a property of the account
+// rather than a second place to keep it. So the Resources screen now files its
+// credential in the vault like everything else and keeps only the link.
+func (s *ResourceService) WithVault(v *VaultService) *ResourceService {
+	s.vault = v
+	return s
 }
 
 // RegisterLiveSession records the cancel function for a just-opened
@@ -205,31 +236,46 @@ func (s *ResourceService) DeleteResource(id string) error {
 // VAULT (encrypted credential management)
 // ──────────────────────────────────────────────────────────────────────────
 
-// StoreCredential creates a vault entry with an AES-256-GCM encrypted credential.
+// StoreCredential files a resource's credential in the vault and links it.
+//
+// It is a thin wrapper on purpose: the encryption, the AAD binding, the first
+// version row and the rotation schedule all come from VaultService, so a
+// credential attached here is indistinguishable from one attached through the
+// Vault screen. What this adds is the resource link, which is the only thing
+// that is genuinely about resources.
 func (s *ResourceService) StoreCredential(resourceID, accountName, credentialType, plaintext string) (*models.VaultEntry, error) {
-	encrypted, err := crypto.Encrypt(plaintext, s.cryptoKey)
+	if s.vault == nil {
+		return nil, errors.New("credential store unavailable: the vault was not attached to this service")
+	}
+
+	entry, err := s.vault.StoreCredential(context.Background(), StoreCredentialRequest{
+		// Named rather than left to the column default, so the safe this
+		// lands in is a decision in the code instead of a string Postgres
+		// fills in. It is the same value either way; stating it is what keeps
+		// the encryption binding and the row in agreement.
+		SafeID:          models.DefaultSafeID,
+		ResourceID:      resourceID,
+		AccountName:     accountName,
+		CredentialType:  models.CredentialType(credentialType),
+		SecretPlaintext: plaintext,
+	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to encrypt credential: %w", err)
+		return nil, fmt.Errorf("failed to store credential: %w", err)
 	}
 
-	entry := &models.VaultEntry{
-		ResourceID:     resourceID,
-		AccountName:    accountName,
-		CredentialType: credentialType,
-		CredentialEnc:  encrypted,
+	// The pointer is what every connection resolves through, so it is written
+	// after the row exists and its failure is reported rather than swallowed:
+	// a stored credential nothing points at is a credential the resource
+	// cannot use, which looks identical to no credential at all.
+	if err := s.db.Model(&models.PAMResource{}).Where("id = ?", resourceID).
+		Update("vault_entry_id", entry.ID).Error; err != nil {
+		return nil, fmt.Errorf("credential stored but could not be linked to the resource: %w", err)
 	}
-
-	if err := s.db.Create(entry).Error; err != nil {
-		return nil, fmt.Errorf("failed to store vault entry: %w", err)
-	}
-
-	// Link the vault entry to the resource.
-	s.db.Model(&models.PAMResource{}).Where("id = ?", resourceID).
-		Update("vault_entry_id", entry.ID)
 
 	s.logger.Info("vault.credential.stored",
 		zap.String("resource_id", resourceID),
 		zap.String("account", accountName),
+		zap.String("credential_id", entry.ID),
 	)
 	return entry, nil
 }
@@ -273,7 +319,17 @@ func (s *ResourceService) GetDecryptedCredential(resourceID string) (accountName
 		return "", "", err
 	}
 
-	decrypted, err := crypto.Decrypt(entry.CredentialEnc, s.cryptoKey)
+	// READ THROUGH THE VAULT, which is what makes both formats readable here.
+	// This used to call crypto.Decrypt, the single-layer reader, so a
+	// credential attached through the Vault screen (an envelope) could not be
+	// decrypted and the connection failed with "no credential configured" on a
+	// resource that plainly had one. EnvelopeDecryptor reads the envelope and
+	// still reads rows written before this change, so nothing has to be
+	// migrated for a connection to start working again.
+	if s.vault == nil {
+		return "", "", errors.New("credential store unavailable: the vault was not attached to this service")
+	}
+	decrypted, err := s.vault.GetDecryptedCredential(context.Background(), entry.ID)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to decrypt credential: %w", err)
 	}
@@ -296,22 +352,34 @@ func (s *ResourceService) RotateCredential(resourceID, newPlaintext string) erro
 	if err != nil {
 		return err
 	}
-	encrypted, err := crypto.Encrypt(newPlaintext, s.cryptoKey)
-	if err != nil {
-		return err
+	// ROTATION GOES THROUGH THE VAULT TOO, so it writes a version row and the
+	// new secret stays in the same format as the old one. The previous
+	// implementation re-encrypted with the single-layer writer, which silently
+	// downgraded an enveloped credential to a weaker format the first time
+	// anyone rotated it from this screen, and left no version history behind
+	// either.
+	if s.vault == nil {
+		return errors.New("credential store unavailable: the vault was not attached to this service")
 	}
-	now := time.Now()
 
-	q := s.db.Model(&models.VaultEntry{})
+	credID := ""
 	if resource.VaultEntryID != nil && *resource.VaultEntryID != "" {
-		q = q.Where("id = ?", *resource.VaultEntryID)
+		credID = *resource.VaultEntryID
 	} else {
-		q = q.Where("resource_id = ?", resourceID)
+		var entry models.VaultEntry
+		if err := s.db.Where("resource_id = ?", resourceID).
+			Order("created_at DESC").First(&entry).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return ErrVaultNotFound
+			}
+			return err
+		}
+		credID = entry.ID
 	}
-	return q.Updates(map[string]interface{}{
-		"credential_enc":  encrypted,
-		"last_rotated_at": now,
-	}).Error
+
+	_, err = s.vault.CreateVersion(context.Background(), credID, newPlaintext,
+		"Rotated from the resource", "")
+	return err
 }
 
 // ──────────────────────────────────────────────────────────────────────────

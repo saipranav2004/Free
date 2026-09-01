@@ -121,6 +121,41 @@ func SeedRBACDefaults(db *gorm.DB, logger *zap.Logger) error {
 // Seeded once. An operator who deletes the rule, or moves it to off or
 // enforce, keeps their choice across every restart: this only writes when the
 // role has no rule at all.
+// SeedDefaultSafe makes sure the safe every credential falls back to actually
+// exists.
+//
+// WHAT WAS WRONG. Credential.SafeID defaults to the string "default", so every
+// credential attached from the Resources screen pointed at a safe id with no
+// row behind it. The Vault lists safes and then their credentials, so those
+// rows were invisible: the product stored a secret and its own vault could not
+// show it. On a fresh install three of four credentials were unreachable that
+// way. A vault with credentials it cannot list is not a vault, and no PAM
+// product of this class has accounts that live outside a safe.
+//
+// Idempotent, and deliberately keyed on the id rather than the name so a
+// deployment that renames it keeps the same row.
+func SeedDefaultSafe(db *gorm.DB, logger *zap.Logger) error {
+	var count int64
+	if err := db.Model(&models.Safe{}).Where("id = ?", models.DefaultSafeID).Count(&count).Error; err != nil {
+		return fmt.Errorf("check default safe: %w", err)
+	}
+	if count > 0 {
+		return nil
+	}
+
+	safe := models.Safe{
+		ID:          models.DefaultSafeID,
+		Name:        "Resource accounts",
+		Description: "Credentials attached directly to a resource. Move them into a safe of your own to apply different retention or delegation.",
+		IsDefault:   true,
+	}
+	if err := db.Create(&safe).Error; err != nil {
+		return fmt.Errorf("create default safe: %w", err)
+	}
+	logger.Info("seed.default_safe.created", zap.String("safe_id", safe.ID), zap.String("name", safe.Name))
+	return nil
+}
+
 func SeedMFAPolicyDefaults(db *gorm.DB, logger *zap.Logger) error {
 	for _, roleName := range []string{"root", "admin"} {
 		var count int64
