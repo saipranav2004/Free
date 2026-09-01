@@ -94,7 +94,7 @@ export function PreferencesMenu({
       trigger={(open) => (
         <span
           className={clsx(
-            'inline-flex h-8 w-8 flex-none cursor-pointer items-center justify-center rounded-lg border transition-colors',
+            'inline-flex h-9 w-9 flex-none cursor-pointer items-center justify-center rounded-lg border transition-colors',
             open
               ? 'border-line-strong bg-hover text-primary'
               : 'border-line-strong bg-surface text-secondary hover:bg-hover'

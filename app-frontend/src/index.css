@@ -352,6 +352,11 @@ html {
 }
 :focus-visible {
   outline: 2px solid rgb(var(--accent));
+  /* Offset so the ring sits AROUND the control rather than on its border,
+     which is what makes it legible on a filled button as well as a hairline
+     one. Form fields opt out below: they already carry their own soft ring
+     from FormFields.jsx, and the two together drew three rings on one input. */
+  outline-offset: 2px;
   outline-offset: 2px;
   border-radius: 4px;
 }
@@ -378,6 +383,49 @@ html {
 ::-webkit-scrollbar-thumb:hover {
   background-color: rgb(var(--border-strong));
 }
+/* ===========================================================================
+ * Selects
+ * ===========================================================================
+ * A <select> is the one control the product was still letting the operating
+ * system draw. Everything else, down to the removable filter chip, is ours;
+ * the three selects on Resources and the Dashboard shipped with the OS caret,
+ * ignored the theme, and were the most recognisable unfinished detail in any
+ * screenshot of the console.
+ *
+ * The element stays native on purpose. The menu, the keyboard behaviour and
+ * the mobile picker are the platform's and are better than anything we would
+ * write. Only the CLOSED control is restyled, which is what people look at
+ * essentially all of the time. One rule reaches every select in the product,
+ * including ones not written yet. */
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23656871' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 14px 14px;
+}
+
+.dark select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23b6bec9' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+}
+
+/* The options list is still the platform's, but Chrome and Firefox will use
+   these when the page declares them, so a dark theme stops flashing a white
+   menu over a dark page. */
+select option {
+  background-color: rgb(var(--bg-surface));
+  color: rgb(var(--text-primary));
+}
+
+/* A field carries its own focus ring (FormFields.jsx), so the global outline
+   would be a second, larger one drawn around it. One treatment per control. */
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: none;
+}
+
 .scrollbar-none {
   scrollbar-width: none;
 }

@@ -37,10 +37,14 @@ const VARIANTS = {
   link: 'border border-transparent px-0 text-accent hover:text-accent-hover hover:underline',
 }
 
+// ONE HEIGHT FOR ANYTHING THAT CAN SHARE A ROW. md is 36px because that is
+// what the text inputs, the selects and the icon buttons already were, so a
+// toolbar now lines up instead of stepping. xs and sm keep their smaller
+// heights for the one job that wants them: actions inside a 44px table row.
 const SIZES = {
   xs: 'h-7 gap-1.5 rounded-md px-2.5 text-xs',
-  sm: 'h-8 gap-1.5 rounded-md px-2.5 text-sm',
-  md: 'h-8 gap-2 rounded-lg px-3 text-sm',
+  sm: 'h-8 gap-1.5 rounded-lg px-2.5 text-sm',
+  md: 'h-9 gap-2 rounded-lg px-3.5 text-sm',
   lg: 'h-10 gap-2 rounded-lg px-4 text-sm',
   // xl exists for the rare action that IS the point of its screen, the
   // Audit & Compliance report builder, an empty-state primary CTA. One step
@@ -56,9 +60,14 @@ const ICON_SIZES = {
   xl: 'h-11 w-11 rounded-xl',
 }
 
+// The only thing that used to happen on press was a colour change, so a click
+// on a button that starts a network call had no acknowledgement until the
+// response came back. One pixel of settle costs nothing and lands on the
+// frame the pointer goes down, which is the whole point.
 const BASE =
   'inline-flex flex-none select-none items-center justify-center whitespace-nowrap font-semibold ' +
-  'transition-[background-color,border-color,color] duration-100 ' +
+  'transition-[background-color,border-color,color,transform] duration-100 ' +
+  'active:translate-y-px ' +
   'disabled:pointer-events-none disabled:opacity-45'
 
 export function buttonClass({ variant = 'secondary', size = 'md', block = false, iconOnly = false } = {}) {
