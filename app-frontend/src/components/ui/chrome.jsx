@@ -295,14 +295,37 @@ export function ActiveFilters({ chips, onClearAll, className }) {
   )
 }
 
+// "safes" to "safe", "policies" to "policy". Every label this component is
+// given is a plain English plural (accounts, credentials, events, grants,
+// notifications, policies, recordings, requests, resources, roles, safes,
+// sessions), so two rules cover the vocabulary; anything unrecognised is left
+// exactly as it was passed rather than guessed at.
+function singular(label) {
+  if (/ies$/.test(label)) return label.replace(/ies$/, 'y')
+  if (/(ss|us|is)$/.test(label)) return label
+  if (/s$/.test(label)) return label.replace(/s$/, '')
+  return label
+}
+
 /**
- * Pagination. Shown even when everything fits one page, because the range
- * read-out is what tells an operator whether their filter narrowed anything.
+ * Pagination. The range read-out stays whatever happens, because it is what
+ * tells an operator whether their filter narrowed anything.
+ *
+ * THE PAGE CONTROLS DO NOT. A tenant with four resources in it was getting
+ * "1 to 4 of 4 resources" beside a "1 of 1" and two arrows that can never be
+ * clicked, which is the product filling a footer with the shape of an
+ * interaction that does not exist. Below one page the read-out says the
+ * simple true thing ("4 resources", "1 safe") and the controls are gone.
+ *
+ * This is the state a demo tenant is always in, and it was the state the
+ * console handled worst.
  */
 export function Pagination({ page, pageSize, total, totalPages, onPageChange, label = 'items', className }) {
   const pages = Math.max(1, totalPages || Math.ceil((total || 0) / (pageSize || 1)))
   const from = total === 0 ? 0 : (page - 1) * pageSize + 1
   const to = Math.min(page * pageSize, total || 0)
+  const count = total || 0
+  const onePage = pages <= 1
   return (
     <div
       className={clsx(
@@ -311,8 +334,17 @@ export function Pagination({ page, pageSize, total, totalPages, onPageChange, la
       )}
     >
       <span className="text-sm tabular text-secondary">
-        {from.toLocaleString()} to {to.toLocaleString()} of {(total || 0).toLocaleString()} {label}
+        {onePage ? (
+          <>
+            {count.toLocaleString()} {count === 1 ? singular(label) : label}
+          </>
+        ) : (
+          <>
+            {from.toLocaleString()} to {to.toLocaleString()} of {count.toLocaleString()} {label}
+          </>
+        )}
       </span>
+      {!onePage && (
       <div className="flex items-center gap-1">
         <Button
           variant="subtle"
@@ -336,6 +368,7 @@ export function Pagination({ page, pageSize, total, totalPages, onPageChange, la
           className="w-8 px-0"
         />
       </div>
+      )}
     </div>
   )
 }
