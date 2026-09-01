@@ -32,14 +32,24 @@ type MFAPostureFunc func(userID string, roles []string) (MFAPosture, error)
 type DelegationScopeFunc func(userID string) ([]string, bool, error)
 
 type AuthHandler struct {
-	auth    *services.AuthService
-	posture MFAPostureFunc
-	scope   DelegationScopeFunc
-	log     *zap.Logger
+	auth *services.AuthService
+	// idleTimeoutMin is this deployment's inactivity policy, handed to the
+	// console on /auth/me because the console is what can see whether a person
+	// is actually there. See config.JWTConfig.IdleTimeoutMin.
+	idleTimeoutMin int
+	posture        MFAPostureFunc
+	scope          DelegationScopeFunc
+	log            *zap.Logger
 }
 
 func NewAuthHandler(auth *services.AuthService, posture MFAPostureFunc, log *zap.Logger) *AuthHandler {
 	return &AuthHandler{auth: auth, posture: posture, log: log}
+}
+
+// WithIdleTimeout sets the inactivity window published to the console.
+func (h *AuthHandler) WithIdleTimeout(minutes int) *AuthHandler {
+	h.idleTimeoutMin = minutes
+	return h
 }
 
 // WithDelegationScope attaches the resolver so /auth/me can tell the console
@@ -275,6 +285,11 @@ func (h *AuthHandler) Me(c *gin.Context) {
 		"email":        email,
 		"mfa_verified": mfa,
 		"roles":        rolesRaw,
+		// How long this deployment lets a session sit idle. Published here
+		// because the console is what enforces it: only the browser can tell a
+		// person being present from the console's own background polling. See
+		// JWTConfig.IdleTimeoutMin.
+		"idle_timeout_min": h.idleTimeoutMin,
 	}
 
 	if h.posture != nil {

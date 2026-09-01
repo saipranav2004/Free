@@ -56,17 +56,21 @@ type CreateUserInput struct {
 	CreatedBy string
 }
 
-func (s *IdentityService) ListUsers(search string) ([]models.User, error) {
-	q := s.db.Order("created_at desc")
+// ListUsers returns at most MaxUnpagedRows accounts, and says so when it had
+// to stop. See unpaged_limit.go: this endpoint takes no page parameters, so
+// without a ceiling one call reads every identity in the deployment.
+func (s *IdentityService) ListUsers(search string) ([]models.User, bool, error) {
+	q := s.db.Order("created_at desc").Limit(MaxUnpagedRows + 1)
 	if search != "" {
 		like := "%" + strings.ToLower(search) + "%"
 		q = q.Where("LOWER(username) LIKE ? OR LOWER(email) LIKE ? OR LOWER(full_name) LIKE ?", like, like, like)
 	}
 	var users []models.User
 	if err := q.Find(&users).Error; err != nil {
-		return nil, fmt.Errorf("list users: %w", err)
+		return nil, false, fmt.Errorf("list users: %w", err)
 	}
-	return users, nil
+	users, truncated := capUnpaged(users)
+	return users, truncated, nil
 }
 
 func (s *IdentityService) GetUser(userID string) (*models.User, error) {

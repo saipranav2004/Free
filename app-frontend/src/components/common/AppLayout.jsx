@@ -11,6 +11,8 @@ import { MfaEnforcementGate } from '../auth/MfaEnforcementGate'
 import { TopNavbar, NAVBAR_PT_CLASS, NAVBAR_BELOW_CLASS } from './TopNavbar'
 import { Breadcrumbs } from './Breadcrumbs'
 import { SessionExpiryNotice } from './SessionExpiryNotice'
+import { IdleTimeoutNotice } from './IdleTimeoutNotice'
+import { useIdleTimeout } from '../../hooks/useIdleTimeout'
 import { toast } from 'sonner'
 
 const SIDEBAR_STORAGE_KEY = 'pam_sidebar_collapsed'
@@ -351,6 +353,21 @@ export function AppLayout() {
     }
   }
 
+  // INACTIVITY, MEASURED WHERE IT CAN BE MEASURED. The window comes from the
+  // server (/auth/me publishes idle_timeout_min), because it is deployment
+  // policy; the counting happens here, because the server sees this console's
+  // own background polling as traffic and cannot tell it apart from a person.
+  // Without this an unattended tab renewed itself indefinitely. See
+  // hooks/useIdleTimeout.js.
+  const idle = useIdleTimeout(meQuery.data?.idle_timeout_min, () => {
+    doLogout()
+    navigate('/login', { replace: true })
+    toast.warning('Signed out for inactivity', {
+      description: 'Your session ended because the console was left unattended. Sign in to carry on.',
+      duration: 10000,
+    })
+  })
+
   return (
     // The shell is exactly one viewport tall with the top 4rem reserved for
     // the fixed navbar (pt-16 + border-box height:100vh), so the browser's
@@ -464,6 +481,12 @@ export function AppLayout() {
                 not a fact about the page you are on, and it has to be seen
                 before the reader starts something they cannot finish. */}
             <SessionExpiryNotice onSignOut={handleLogout} />
+            {/* Only in the final minute, and only when a policy is set. A
+                countdown that runs all day is wallpaper; one that appears with
+                sixty seconds left is a prompt. */}
+            {idle.warning && (
+              <IdleTimeoutNotice secondsLeft={idle.secondsLeft} onStay={idle.stayActive} />
+            )}
             <Breadcrumbs />
             <Outlet />
           </div>

@@ -1,11 +1,12 @@
 import { http } from '../lib/http'
 
-// Whole-vault backup/restore (Feature 119), infra-level, admin/root only.
-// NOTE: these two calls are hardcoded backend-side to a local MinIO/S3
-// endpoint (see vault_handler.go, independent of any per-deployment env
-// config), so expect them to fail with a connection error in any
-// environment that hasn't stood up that endpoint. That's an environment
-// gap, not a frontend bug, surface the server's error message as-is.
+// Whole-vault backup/restore (Feature 119), infra-level, root only.
+//
+// The hardcoded local MinIO endpoint this note used to warn about is gone: the
+// backup service now takes the deployment's real PAM_S3_* settings, so a
+// connection error here means object storage is genuinely unreachable or
+// misconfigured rather than the code ignoring what it was told. Surface the
+// server's error message as-is either way.
 
 // BOTH TAKE A REASON, and the server rejects either without one. These are the
 // two operations that touch every secret at once, so they are root only, they

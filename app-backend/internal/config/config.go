@@ -314,6 +314,21 @@ type JWTConfig struct {
 	SecretKey      string `mapstructure:"secret_key"`       // PAM-only signing secret
 	AccessTTLMin   int    `mapstructure:"access_ttl_min"`   // access token lifetime (default 30)
 	RefreshTTLDays int    `mapstructure:"refresh_ttl_days"` // refresh token lifetime (default 7)
+
+	// IdleTimeoutMin ends a session after this long with no deliberate action
+	// from the person holding it. 0 turns the check off.
+	//
+	// It is SERVER POLICY, ENFORCED BY THE CONSOLE, which is the same split
+	// every console of this class uses and is not the same thing as hiding a
+	// button. The server cannot tell a click from the console's own background
+	// polling: both arrive as ordinary authenticated requests, and it was
+	// exactly that polling (auth/me every 60s, the notification count every
+	// 30s) that kept an unattended tab alive for the full refresh lifetime,
+	// seven days. Only the browser knows whether a person is there. The server
+	// decides how long is too long and publishes it on /auth/me; the console
+	// watches for real input and ends the session when it runs out. The
+	// refresh-token lifetime remains the absolute backstop underneath.
+	IdleTimeoutMin int `mapstructure:"idle_timeout_min"`
 }
 
 // VaultConfig — AES-256-GCM master key management.
@@ -437,7 +452,13 @@ func Load() (*Config, error) {
 	v.SetDefault("database.name", "")
 	v.SetDefault("database.user", "")
 	v.SetDefault("database.password", "")
-	v.SetDefault("database.sslmode", "prefer")
+	// REQUIRE, NOT PREFER. "prefer" asks for TLS and silently continues without
+	// it when the server does not offer any, which is precisely the case you
+	// would want to hear about: this database holds the encrypted vault and the
+	// audit chain. A deployment that genuinely cannot do TLS can still say so by
+	// setting PAM_DATABASE_SSLMODE=disable, and that is then a decision somebody
+	// made rather than a default nobody noticed.
+	v.SetDefault("database.sslmode", "require")
 	v.SetDefault("database.schema", "pam")
 
 	v.SetDefault("redis.host", "localhost")
@@ -450,7 +471,9 @@ func Load() (*Config, error) {
 	v.SetDefault("s3.access_key", "")
 	v.SetDefault("s3.secret_key", "")
 	v.SetDefault("s3.region", "us-east-1")
-	v.SetDefault("s3.use_ssl", false)
+	// Vault backups and session recordings go to this bucket, so the transport
+	// carrying them is encrypted unless a deployment opts out by name.
+	v.SetDefault("s3.use_ssl", true)
 
 	v.SetDefault("iam.base_url", "")
 	v.SetDefault("iam.service_token", "")
@@ -465,6 +488,13 @@ func Load() (*Config, error) {
 
 	v.SetDefault("jwt.secret_key", "")
 	v.SetDefault("jwt.access_ttl_min", 30)
+	// IDLE TIMEOUT. A privileged-access console left open on an unlocked
+	// workstation used to stay usable for the full refresh-token lifetime,
+	// because the console polls /auth/me and the notification count in the
+	// background and every one of those requests renewed the session. Nothing
+	// measured whether a PERSON was there. Sessions now end after this many
+	// minutes without a deliberate action; 0 disables the check.
+	v.SetDefault("jwt.idle_timeout_min", 30)
 	v.SetDefault("jwt.refresh_ttl_days", 7)
 
 	v.SetDefault("vault.encryption_key", "")

@@ -11,6 +11,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/google/uuid"
 	"github.com/yourorg/pam/internal/models"
@@ -93,9 +94,9 @@ func SeedRBACDefaults(db *gorm.DB, logger *zap.Logger) error {
 //	PAM_ROOT_USERNAME  (default "root")
 //	PAM_ROOT_EMAIL     (default "root@pam.local")
 //	PAM_ROOT_PASSWORD  (required in production; in development, if unset, a
-//	                    random password is generated and printed to the log
-//	                    exactly once — the same dev-fallback pattern main.go
-//	                    already uses for the audit HMAC secret)
+//	                    random password is generated and written to a 0600
+//	                    file, whose path is logged. See writeGeneratedPassword
+//	                    for why it does not go into the log itself.)
 //
 // If a root-role account already exists, this is a no-op — it does NOT
 // reset the password of an existing root account on every restart, which
@@ -165,7 +166,7 @@ func SeedRootAccount(db *gorm.DB, isProduction bool, logger *zap.Logger) error {
 	generated := false
 	if password == "" {
 		if isProduction {
-			return fmt.Errorf("PAM_ROOT_PASSWORD is required in production — refusing to seed a root account with no configured password")
+			return fmt.Errorf("PAM_ROOT_PASSWORD is required in production. Refusing to seed a root account with no configured password")
 		}
 		var err error
 		password, err = randomPassword()
@@ -193,11 +194,7 @@ func SeedRootAccount(db *gorm.DB, isProduction bool, logger *zap.Logger) error {
 		}
 
 		if generated {
-			logger.Warn("seed.root_account.generated_password",
-				zap.String("username", username),
-				zap.String("password", password),
-				zap.String("action_required", "log in and rotate this immediately; set PAM_ROOT_PASSWORD to control it explicitly on future deployments"),
-			)
+			writeGeneratedPassword(username, password, logger)
 		} else {
 			logger.Info("seed.root_account.created", zap.String("username", username))
 		}
@@ -222,4 +219,44 @@ func randomPassword() (string, error) {
 		return "", err
 	}
 	return base64.RawURLEncoding.EncodeToString(b), nil
+}
+
+// writeGeneratedPassword puts a generated root password somewhere a developer
+// can read it and a log pipeline cannot.
+//
+// It used to go straight into the structured log as zap.String("password",
+// ...). Application logs are shipped, retained and searchable, and the people
+// who can read them are not the same set as the people who should hold root on
+// a privileged-access system, so the one credential that opens everything was
+// ending up in the least controlled place in the stack. Production already
+// refuses to seed without PAM_ROOT_PASSWORD, so this only ever fired in
+// development, but development installs are shared too.
+//
+// A 0600 file, and only its path in the log. If the file cannot be written the
+// password still reaches the log, because a developer locked out of a fresh
+// install is a worse outcome than a noisy log line, and the line says plainly
+// that it happened.
+func writeGeneratedPassword(username, password string, logger *zap.Logger) {
+	path := envOrDefault("PAM_ROOT_PASSWORD_FILE", "pam-root-password.txt")
+	body := fmt.Sprintf("username: %s\npassword: %s\n\nGenerated because PAM_ROOT_PASSWORD was unset.\nSign in, rotate it, then delete this file.\n", username, password)
+
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		logger.Warn("seed.root_account.generated_password",
+			zap.String("username", username),
+			zap.String("password", password),
+			zap.String("note", "could not write the password file, so it is in this log line instead"),
+			zap.String("path_attempted", path),
+			zap.Error(err),
+		)
+		return
+	}
+
+	if abs, err := filepath.Abs(path); err == nil {
+		path = abs
+	}
+	logger.Warn("seed.root_account.generated_password",
+		zap.String("username", username),
+		zap.String("password_file", path),
+		zap.String("action_required", "read the file, sign in, rotate the password, delete the file, and set PAM_ROOT_PASSWORD on future deployments"),
+	)
 }

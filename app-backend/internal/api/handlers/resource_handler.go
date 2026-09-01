@@ -131,7 +131,7 @@ func (h *ResourceHandler) ListGroups(c *gin.Context) {
 	userID, _ := c.Get("user_id")
 	uid, _ := userID.(string)
 
-	groups, err := h.svc.ListResourceGroups()
+	groups, truncated, err := h.svc.ListResourceGroups()
 	if err != nil {
 		h.logger.Error("resource.list_groups.fail", zap.Error(err))
 		response.Error(c, 500, "Failed to fetch resources")
@@ -176,10 +176,18 @@ func (h *ResourceHandler) ListGroups(c *gin.Context) {
 	}
 
 	if full {
-		response.Success(c, gin.H{"groups": filtered}, "Resources fetched")
+		response.Success(c, gin.H{
+			"groups":    filtered,
+			"truncated": truncated,
+			"limit":     services.MaxUnpagedRows,
+		}, "Resources fetched")
 		return
 	}
-	response.Success(c, gin.H{"groups": projected}, "Resources fetched")
+	response.Success(c, gin.H{
+		"groups":    projected,
+		"truncated": truncated,
+		"limit":     services.MaxUnpagedRows,
+	}, "Resources fetched")
 }
 
 // ── LIST (flat, optional filter by type) ───────────────────────────────────
@@ -189,7 +197,7 @@ func (h *ResourceHandler) List(c *gin.Context) {
 	uid, _ := userID.(string)
 	rtype := c.Query("type")
 
-	resources, err := h.svc.ListResources(rtype)
+	resources, truncated, err := h.svc.ListResources(rtype)
 	if err != nil {
 		response.Error(c, 500, "Failed to fetch resources")
 		return
@@ -211,10 +219,20 @@ func (h *ResourceHandler) List(c *gin.Context) {
 
 	if !privilegedViewer(c) {
 		projected := projectAllForCatalog(visible)
-		response.Success(c, gin.H{"resources": projected, "count": len(projected)}, "Resources fetched")
+		response.Success(c, gin.H{
+			"resources": projected,
+			"count":     len(projected),
+			"truncated": truncated,
+			"limit":     services.MaxUnpagedRows,
+		}, "Resources fetched")
 		return
 	}
-	response.Success(c, gin.H{"resources": visible, "count": len(visible)}, "Resources fetched")
+	response.Success(c, gin.H{
+		"resources": visible,
+		"count":     len(visible),
+		"truncated": truncated,
+		"limit":     services.MaxUnpagedRows,
+	}, "Resources fetched")
 }
 
 // ── GET single resource ────────────────────────────────────────────────────

@@ -457,9 +457,10 @@ func main() {
 	}
 
 	authHandler := handlers.NewAuthHandler(authService, mfaPostureFor, logger).
-		WithDelegationScope(identityService.DelegationScopeFor)
+		WithDelegationScope(identityService.DelegationScopeFor).
+		WithIdleTimeout(cfg.JWT.IdleTimeoutMin)
 	resourceHandler := handlers.NewResourceHandler(resourceService, agentService, policyEngine, cfg.WebProxy.Enabled, logger)
-	vaultHandler := handlers.NewVaultHandler(vaultService, rotationService, logger)
+	vaultHandler := handlers.NewVaultHandler(vaultService, rotationService, cfg.S3, logger)
 	auditHandler := handlers.NewAuditHandler(auditQuery, reportSvc, auditService, logger)
 	notificationService := services.NewNotificationService(db, logger)
 	// Attached after construction because JITService is built long before this

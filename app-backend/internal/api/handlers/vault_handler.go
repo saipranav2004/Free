@@ -21,15 +21,22 @@ type VaultHandler struct {
 	logger      *zap.Logger
 }
 
+// NewVaultHandler takes the deployment's real object-storage settings.
+//
+// THEY USED TO BE HARDCODED HERE: bucket "pam-recordings", endpoint
+// "localhost:9000", TLS off, whatever PAM_S3_* said. Every whole-vault backup
+// therefore went to a plaintext connection to localhost, so on any real
+// deployment the feature either failed outright or wrote the export somewhere
+// nobody had configured, while the console offered the button as though it
+// worked. An encrypted archive of every credential in the product is the last
+// thing that should ignore where it was told to go.
 func NewVaultHandler(
 	vaultSvc *services.VaultService,
 	rotationSvc *services.RotationService,
+	s3Cfg config.S3Config,
 	logger *zap.Logger,
 ) *VaultHandler {
-	backupSvc := services.NewVaultBackupService(vaultSvc.DB(), vaultSvc.KMS(), config.S3Config{
-		Bucket:   "pam-recordings",
-		Endpoint: "localhost:9000",
-	}, logger)
+	backupSvc := services.NewVaultBackupService(vaultSvc.DB(), vaultSvc.KMS(), s3Cfg, logger)
 	return &VaultHandler{
 		vaultSvc:    vaultSvc,
 		rotationSvc: rotationSvc,
