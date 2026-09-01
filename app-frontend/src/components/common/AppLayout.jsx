@@ -476,7 +476,7 @@ export function AppLayout() {
               wide monitor just strands the content in the middle.
               Breadcrumbs live here, above the page, because they describe
               where you are in your data rather than in the product. */}
-          <div className="w-full px-4 py-5 sm:px-6 sm:py-6">
+          <div className="mx-auto w-full max-w-[92rem] px-4 py-5 sm:px-6 sm:py-6">
             {/* Above the breadcrumb rather than below it: the session ending is
                 not a fact about the page you are on, and it has to be seen
                 before the reader starts something they cannot finish. */}

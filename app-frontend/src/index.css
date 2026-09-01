@@ -1,0 +1,815 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ===========================================================================
+ * Theme tokens
+ * ===========================================================================
+ * Values are "R G B" triplets (no commas, no rgb() wrapper) because that is
+ * what Tailwind's rgb(var(--x) / <alpha-value>) pattern needs for opacity
+ * modifiers such as bg-surface/50 to keep working.
+ *
+ * WHERE THESE COME FROM. AWS publishes the Console's design tokens
+ * (@cloudscape-design/design-tokens), so the structure below is measured
+ * rather than guessed. The three decisions that matter, and what each fixes:
+ *
+ * 1. THE PAGE IS WHITE, AND SO ARE THE PANELS. Cloudscape sets
+ *    background-layout-main, container-content and layout-panel all to
+ *    #ffffff. Separation is carried entirely by a visible border. Our build
+ *    had white cards floating on a grey page with a soft shadow, which is the
+ *    single most recognisable admin-template signature. Remove the shadow and
+ *    a grey page just looks unfinished; remove the grey too and let a real
+ *    border do the work, and it reads as a console.
+ *
+ * 2. THERE ARE TWO DIVIDER STRENGTHS, NOT ONE. divider-default (#c6c6cd) is
+ *    the edge of a container. divider-secondary (#ebebf0) is a line INSIDE
+ *    one, such as between table rows. Using a single mid grey for both is why
+ *    tables read as either boxed-in or as floating text.
+ *
+ * 3. FORM CONTROLS HAVE A DARK BORDER. Cloudscape's input border is #8c8c94,
+ *    a real grey, not a hairline. It is why an AWS input reads as a control
+ *    you can type into rather than as a rectangle drawn on the page.
+ *
+ * Accent, status and heading colours are taken from the same set. Note that
+ * the accent goes DARKER on hover in light mode (#006ce0 to #002b66), not
+ * lighter, which is the opposite of what most themes do and reads as firmer.
+ * ======================================================================== */
+:root {
+  /* -- ground ------------------------------------------------------------ */
+  /* THREE PLANES, NOT ONE. The app ground used to be the same 255 255 255 as
+     a panel, so a container was a rectangle drawn in pencil on the sheet it
+     was already lying on: no depth, nothing to say where content begins. The
+     ground now steps back one notch and panels keep the bright plane, which
+     is the whole reason a panel reads as an object rather than as a border.
+     It is two points of luminance and it changes every screen at once. */
+  --bg-app: 250 250 252;
+  --bg-surface: 255 255 255;
+  --bg-subtle: 244 244 248;
+  --bg-hover: 238 238 244;
+
+  /* -- lines -------------------------------------------------------------- */
+  /* The container edge is now a HAIRLINE, not a rule. It was 198 198 205,
+     which had to be that dark because it was doing the separating on its own
+     with no elevation behind it. With --shadow-card carrying that job, a
+     heavy edge just makes every panel look drawn rather than placed. */
+  --border: 224 224 231;        /* container edge */
+  --border-soft: 236 236 241;   /* divider inside a container, table rows */
+  --border-strong: 140 140 148; /* form control at rest */
+
+  /* -- text --------------------------------------------------------------- */
+  --text-primary: 15 20 26;
+  --text-secondary: 66 70 80;
+  --text-tertiary: 101 104 113;
+  --text-disabled: 180 180 187;
+
+  /* -- accent ------------------------------------------------------------- */
+  --accent: 0 108 224;
+  /* The text that goes ON an accent fill. It is a token rather than a literal
+     because the answer flips between themes: white reads on the light theme's
+     deep blue (4.97:1) and fails badly on the dark theme's pale one (2.28:1),
+     which is exactly what every primary button in dark mode was doing. */
+  --accent-on: 255 255 255;
+  --accent-hover: 0 43 102;
+  --accent-soft: 240 251 255;
+  --accent-active: 209 241 255;
+
+  /* -- status ------------------------------------------------------------- */
+  --danger: 219 0 0;
+  --danger-soft: 255 244 244;
+  --danger-fill: 205 10 10;
+
+  --warn: 133 89 0;
+  --warn-soft: 255 249 232;
+
+  --ok: 0 128 47;
+  --ok-soft: 238 250 241;
+
+  /* -- shipped ramp, re-pointed ------------------------------------------- */
+  --surface-1000: 250 250 252;
+  --surface-950: 255 255 255;
+  --surface-900: 255 255 255;
+  --surface-850: 244 244 248;
+  --surface-800: 238 238 244;
+  --surface-750: 231 231 238;
+  --surface-700: 224 224 231;
+  --surface-600: 140 140 148;
+
+  --ink-50: 15 20 26;
+  --ink-100: 15 20 26;
+  --ink-200: 51 56 66;
+  --ink-300: 66 70 80;
+  --ink-400: 101 104 113;
+  --ink-500: 101 104 113;
+  /* Darkened from 140 140 148. It is used for small-caps section labels at
+     13px ("Console", "Filtered by"), which measured 3.09:1 on the app plane
+     and 3.22:1 on a card: below the 4.5 that normal-size text needs, and the
+     only WCAG AA failure an axe sweep of the console turned up. 106 110 120
+     clears it on every light surface the token lands on (4.73:1 worst case)
+     while staying clearly quieter than --text-tertiary. */
+  --ink-600: 106 110 120;
+
+  /* -- elevation ---------------------------------------------------------- */
+  /* Cloudscape sets shadow-card to none, and we copied it. That is right for
+     AWS, whose screens are wall-to-wall panels where any elevation becomes
+     visual noise at volume. It was wrong here: with a border as the only
+     separator and the ground the same colour as the panel, every screen read
+     as a wireframe of itself.
+     The values are deliberately small. A card is not floating, it is RESTING:
+     a tight contact shadow plus one soft ambient pass, which is what an eye
+     reads as a real surface rather than as a drop shadow. */
+  --shadow-card:
+    0 1px 2px -1px rgb(15 20 26 / 0.10),
+    0 1px 3px 0 rgb(15 20 26 / 0.05);
+  --shadow-raised:
+    0 2px 4px -2px rgb(15 20 26 / 0.10),
+    0 6px 16px -6px rgb(15 20 26 / 0.12);
+  --shadow-pop: 0 4px 12px -4px rgb(0 7 22 / 0.14), 0 1px 3px 0 rgb(0 7 22 / 0.08);
+  --shadow-overlay: 0 8px 28px -8px rgb(0 7 22 / 0.22), 0 2px 6px -2px rgb(0 7 22 / 0.10);
+  --shadow-frozen: 8px 0 10px -8px rgb(0 7 22 / 0.14);
+
+  /* -- product chrome ------------------------------------------------------ */
+  /* The top bar and the sidebar share one tint, one step off the white
+     content area, with a real border underneath. That is the separation the
+     page needs: the chrome is quiet, the data is on white, and the line
+     between them is a line rather than a change of brightness.
+     (A dark bar was tried and pulled: it anchored the page but made the
+     product feel like it belonged to a different application than the
+     content, and it fought the light sidebar next to it.) */
+  --chrome-bg: 246 246 249;
+  --chrome-fg: 15 20 26;
+  --chrome-muted: 101 104 113;
+  --chrome-line: 198 198 205;
+  --chrome-hover: 235 235 240;
+
+  /* ---------------------------------------------------------------------
+   * CHART PALETTE
+   * ---------------------------------------------------------------------
+   * The charts used to hold one hard-coded set of hex values for both
+   * themes, which meant every one of them failed contrast in one theme or
+   * the other: the blue measured 3.07:1 on the dark card, and the green and
+   * amber 2.54:1 and 2.15:1 on the white one. A dark palette is a SELECTED
+   * palette, not a flipped one, so there are two, and both were run through
+   * the palette validator rather than eyeballed.
+   *
+   * THE PAIRING IS EMPHASIS, NOT CATEGORICAL. Volume and denials are not two
+   * peer categories; the denials are the point and the volume is the context
+   * they sit in. A red/green succeeded-versus-denied pair, which is what this
+   * wanted to be, measures 5.0 dE under deuteranopia and 2.8 in dark: a red
+   * green colourblind reader cannot separate them at all. Blue for context
+   * and red for the exception measures 20+ dE in every simulation.
+   *
+   * Validated: lightness band, chroma floor, colour-vision separation,
+   * normal-vision floor, and contrast against this mode's real card colour.
+   */
+  --chart-series: 22 104 201;
+  --chart-denied: 200 16 46;
+  --chart-muted: 118 128 142;
+  --chart-grid: 235 235 240;
+
+  /* Sequential ramp for the activity heatmap: one hue, monotone lightness,
+     four steps. Zero is drawn as an empty cell rather than a fifth pale step,
+     which is both honest and what keeps the light end above the 2:1 floor. */
+  --chart-seq-1: 127 178 234;
+  --chart-seq-2: 79 146 224;
+  --chart-seq-3: 36 112 200;
+  --chart-seq-4: 11 67 130;
+
+  color-scheme: light;
+}
+
+.dark {
+  /* ---------------------------------------------------------------------
+   * THE SURFACE LADDER, AND THE ONE THING THAT WAS WRONG WITH IT
+   * ---------------------------------------------------------------------
+   * `--bg-app` and `--bg-surface` used to hold the SAME value. Every card,
+   * table and panel sat on exactly the page colour, so nothing was ever
+   * raised off anything: the only thing separating a container from the page
+   * behind it was a hairline, and a screen of them read as one flat sheet
+   * with lines drawn on it. That is the whole reason this theme felt heavier
+   * than the console it is modelled on.
+   *
+   * AWS's dark mode is clean because it keeps four distinct planes and never
+   * skips one. These are its values, and they are used the same way:
+   *
+   *   #161d26  the page behind everything          (layout main)
+   *   #1b232d  a container: card, table, panel     (container content)
+   *   #212a36  a band inside one: header, footer   (container header)
+   *   #2a3442  hover
+   *
+   * Each step is small enough to stay calm and large enough to read as a
+   * separate plane, which is what lets the borders drop to a hairline
+   * without anything dissolving.
+   */
+  --bg-app: 22 29 38;
+  --bg-surface: 27 35 45;
+  --bg-subtle: 33 42 54;
+  --bg-hover: 42 52 66;
+
+  /* Bluer than the greys they replace, so a divider belongs to the navy
+     ground instead of sitting on top of it as a neutral smear. */
+  --border: 65 77 92;
+  --border-soft: 39 50 64;
+  --border-strong: 125 137 152;
+
+  /* Headings go to near white and body text to a light blue grey. The old
+     values ran everything through one neutral ramp, which left headings
+     looking slightly switched off next to the accent. */
+  --text-primary: 249 249 250;
+  --text-secondary: 209 213 219;
+  --text-tertiary: 182 190 201;
+  --text-disabled: 116 124 138;
+
+  --accent: 66 180 255;
+  /* Near-black on the pale blue, which is what Cloudscape's own dark primary
+     button does and the only way a light accent fill can carry text: 8.31:1
+     at rest, 10.95:1 on hover. */
+  --accent-on: 8 17 28;
+  --accent-hover: 117 207 255;
+  /* Lifted off pure navy so a selected row still reads as a surface rather
+     than as a hole cut in the page. */
+  --accent-soft: 6 37 71;
+  --accent-active: 11 52 97;
+
+  --danger: 255 122 122;
+  --danger-soft: 44 21 21;
+  --danger-fill: 176 32 32;
+
+  --warn: 251 211 50;
+  --warn-soft: 41 34 12;
+
+  --ok: 43 181 52;
+  --ok-soft: 12 36 18;
+
+  /* The numbered ramp moves with the named tokens above, one step each. The
+     screens still on it (segmented controls, table chrome) would otherwise
+     drift a plane away from everything that uses --bg-surface. */
+  --surface-1000: 16 21 28;
+  --surface-950: 22 29 38;
+  --surface-900: 27 35 45;
+  --surface-850: 33 42 54;
+  --surface-800: 33 42 54;
+  --surface-750: 42 52 66;
+  --surface-700: 65 77 92;
+  --surface-600: 125 137 152;
+
+  --ink-50: 249 249 250;
+  --ink-100: 232 234 238;
+  --ink-200: 209 213 219;
+  --ink-300: 196 202 211;
+  --ink-400: 182 190 201;
+  --ink-500: 150 160 174;
+  /* Same label token, same fix, selected against the dark planes rather than
+     derived from the light value: 116 124 138 measured 2.99:1 on the hover
+     plane. 150 159 174 clears 4.5 on all four (4.72:1 worst case). */
+  --ink-600: 150 159 174;
+
+  /* On a dark ground a drop shadow does almost nothing: there is no light for
+     it to subtract. Depth is carried by a hairline of LIGHT along the top
+     edge, the way a real panel catches the room, with a shadow underneath it
+     doing the small remaining work. This is the single most recognisable
+     detail of a well-made dark interface and it costs one inset. */
+  --shadow-card:
+    inset 0 1px 0 0 rgb(255 255 255 / 0.05),
+    0 1px 2px 0 rgb(0 0 0 / 0.30);
+  --shadow-raised:
+    inset 0 1px 0 0 rgb(255 255 255 / 0.07),
+    0 4px 14px -6px rgb(0 0 0 / 0.55);
+  --shadow-pop: 0 4px 12px -4px rgb(0 0 0 / 0.55), 0 1px 3px 0 rgb(0 0 0 / 0.40);
+  --shadow-overlay: 0 8px 28px -8px rgb(0 0 0 / 0.70), 0 2px 6px -2px rgb(0 0 0 / 0.50);
+  --shadow-frozen: 8px 0 10px -8px rgb(0 0 0 / 0.55);
+
+  --chrome-bg: 33 42 54;
+  --chrome-fg: 249 249 250;
+  --chrome-muted: 182 190 201;
+  --chrome-line: 65 77 92;
+  --chrome-hover: 42 52 66;
+
+  /* Selected against the dark card (#1b232d), not flipped from light. */
+  --chart-series: 66 149 232;
+  --chart-denied: 224 95 102;
+  --chart-muted: 150 160 174;
+  --chart-grid: 39 50 64;
+
+  --chart-seq-1: 47 93 143;
+  --chart-seq-2: 58 122 184;
+  --chart-seq-3: 72 151 220;
+  --chart-seq-4: 111 178 242;
+
+  color-scheme: dark;
+}
+
+/* ===========================================================================
+ * Base
+ * =========================================================================== */
+
+/* The root stays at the browser default. Density comes from the type scale
+   and the spacing grid, so 4px is 4px at every viewport and in every browser.
+   The previous build shrank the root to 14.5px and stepped it twice at 1800px
+   and 2400px, which made every rem value depend on viewport width and on the
+   reader's own browser font setting, and made the type smaller than an
+   operations console read for hours should be. */
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  @apply bg-app font-sans text-base font-normal text-ink-200 antialiased;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: 'cv11', 'ss01';
+  text-rendering: optimizeLegibility;
+}
+
+/* Numbers never reflow as digits change. */
+table,
+.tabular,
+.tabular-nums,
+.font-mono {
+  font-variant-numeric: tabular-nums;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  @apply font-bold text-ink-50;
+  letter-spacing: -0.012em;
+}
+
+/* Reserve the scrollbar gutter so a page that grows past the fold does not
+   shift sideways, and so Chrome with overlay scrollbars lays out identically
+   to Edge without them. */
+html {
+  scrollbar-gutter: stable;
+}
+
+/* Focus is visible for keyboard users and absent for mouse users. The ring is
+   the one other sanctioned use of the accent. */
+:focus:not(:focus-visible) {
+  outline: none;
+}
+:focus-visible {
+  outline: 2px solid rgb(var(--accent));
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+::selection {
+  background-color: rgb(var(--accent) / 0.2);
+}
+
+/* Theme aware scrollbars, so the light theme does not inherit a dark OS track
+   and both Chromium browsers render the same width. */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background-color: rgb(var(--border-strong) / 0.9);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: rgb(var(--border-strong));
+}
+.scrollbar-none {
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+/* Theme flips should feel instant. Deliberately narrow: colour only, never
+   layout, so nothing animates on first paint. */
+.theme-transition * {
+  transition:
+    background-color 120ms linear,
+    border-color 120ms linear,
+    color 120ms linear,
+    fill 120ms linear;
+}
+
+/* ===========================================================================
+ * Motion
+ * =========================================================================== */
+
+/* Skeletons match the shape of what is loading, so they are plain blocks the
+   caller sizes. No shimmer sweep, which reads as decoration. */
+@keyframes pulse-soft {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+.skeleton {
+  background-color: rgb(var(--bg-subtle));
+  border-radius: 4px;
+  animation: pulse-soft 1.6s ease-in-out infinite;
+}
+
+/* The one ambient animation in the product: a live session's presence dot. */
+@keyframes ping-soft {
+  0% {
+    transform: scale(1);
+    opacity: 0.5;
+  }
+  70%,
+  100% {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+}
+.dot-live::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background-color: currentColor;
+  animation: ping-soft 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+/* Overlay and popover entrances. Short (120 to 170ms), opacity and position
+   only, so the console never feels like it is animating instead of
+   responding. Written as plain classes rather than Tailwind animation
+   utilities because the overlay components apply them conditionally. */
+@keyframes overlay-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes sheet-in {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: none;
+  }
+}
+@keyframes drawer-in {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.animate-overlay-in {
+  animation: overlay-in 140ms ease-out;
+}
+.animate-panel-in {
+  animation: panel-in 160ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.animate-menu-in {
+  animation: menu-in 120ms cubic-bezier(0.16, 1, 0.3, 1);
+  transform-origin: top right;
+}
+.animate-sheet-in {
+  animation: sheet-in 220ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.animate-drawer-in {
+  animation: drawer-in 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* A hairline top highlight. One pixel, barely visible, and it is what stops a
+   bordered panel from reading as a flat rectangle. */
+.edge-lit {
+  box-shadow:
+    var(--shadow-card),
+    inset 0 1px 0 0 rgb(255 255 255 / 0.55);
+}
+.dark .edge-lit {
+  box-shadow:
+    var(--shadow-card),
+    inset 0 1px 0 0 rgb(255 255 255 / 0.04);
+}
+
+/* Chart entrance. The only motion on this page that carries meaning rather
+   than decorating: a column growing from the baseline shows the reader where
+   zero is, which is the one thing a bar chart's encoding depends on. It runs
+   once on mount and once per data change, never on hover, and the global
+   reduced-motion rule above collapses it to nothing. */
+@keyframes chart-rise {
+  from {
+    transform: scaleY(0);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+
+.chart-rise {
+  transform-origin: bottom;
+  animation: chart-rise 480ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes cell-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.cell-in {
+  animation: cell-in 320ms ease-out both;
+}
+
+/* ===========================================================================
+ * The everyday surfaces, and how they arrive
+ * ===========================================================================
+ * Motion in this console used to exist only where something OVERLAPPED the
+ * page: modals, drawers, menus, one chart. The page itself, which is what a
+ * person actually looks at all day, appeared fully formed with no sense that
+ * anything had been fetched, arranged and handed over. A product with no
+ * motion on its ordinary screens does not read as calm, it reads as static,
+ * and static is most of what "does not feel finished" turns out to mean.
+ *
+ * Two rules, both applied in the shared primitives so no page has to opt in:
+ * a panel RISES a little as it lands, and rows ARRIVE in the order they are
+ * read. Everything is under 300ms, runs once on mount, and never on hover:
+ * this is meant to be felt on the first frame and then forgotten. */
+
+@keyframes surface-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.surface-in {
+  animation: surface-in 260ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes row-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* THE STAGGER IS DONE IN CSS, ON PURPOSE. Passing an index down to every row
+   would mean editing every table in the product; nth-child gets the identical
+   result from one class on the table primitive. The ramp stops at ten because
+   past that the delay is longer than the eye waits, and a hundred-row table
+   would otherwise finish arriving two seconds after it was ready. */
+.dt-rows tbody > tr {
+  animation: row-in 240ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.dt-rows tbody > tr:nth-child(1) { animation-delay: 0ms; }
+.dt-rows tbody > tr:nth-child(2) { animation-delay: 16ms; }
+.dt-rows tbody > tr:nth-child(3) { animation-delay: 32ms; }
+.dt-rows tbody > tr:nth-child(4) { animation-delay: 48ms; }
+.dt-rows tbody > tr:nth-child(5) { animation-delay: 64ms; }
+.dt-rows tbody > tr:nth-child(6) { animation-delay: 80ms; }
+.dt-rows tbody > tr:nth-child(7) { animation-delay: 96ms; }
+.dt-rows tbody > tr:nth-child(8) { animation-delay: 112ms; }
+.dt-rows tbody > tr:nth-child(9) { animation-delay: 128ms; }
+.dt-rows tbody > tr:nth-child(n + 10) { animation-delay: 140ms; }
+
+/* THE ROW GUTTER. Every interactive row reserves three pixels at its leading
+   edge and keeps them empty. Hovering fills them with the accent.
+   Reserving the space rather than adding it on hover is the entire trick:
+   nothing shifts, the pointer lands on a row that was already shaped to
+   receive it, and the accent finally touches the data instead of living only
+   on buttons. A selected row draws its own spine (see grid.jsx) and is
+   excluded from this so the two never fight. */
+.row-spine > td:first-child {
+  box-shadow: inset 3px 0 0 0 transparent;
+  transition: box-shadow 120ms ease-out;
+}
+
+.row-spine:hover > td:first-child {
+  box-shadow: inset 3px 0 0 0 rgb(var(--accent) / 0.55);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  .animate-overlay-in,
+  .animate-panel-in,
+  .animate-menu-in,
+  .animate-sheet-in,
+  .animate-drawer-in,
+  .skeleton,
+  .chart-rise,
+  .cell-in,
+  .surface-in,
+  .dt-rows tbody > tr,
+  .dot-live::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ===========================================================================
+ * Third party surfaces
+ * =========================================================================== */
+
+/* Toasts. Sonner is called from ~140 places and every one works, so it is
+   themed here rather than replaced. richColors is off (see main.jsx); this
+   gives every toast the same neutral surface, with the outcome icon carrying
+   the one bit of colour. */
+[data-sonner-toaster] {
+  --normal-bg: rgb(var(--bg-surface));
+  --normal-border: rgb(var(--border));
+  --normal-text: rgb(var(--text-primary));
+  --border-radius: 12px;
+  font-family: theme('fontFamily.sans');
+}
+[data-sonner-toast] {
+  border: 1px solid rgb(var(--border)) !important;
+  border-radius: 12px !important;
+  padding: 14px 16px !important;
+  gap: 12px !important;
+  box-shadow: var(--shadow-pop) !important;
+}
+[data-sonner-toast] [data-icon] {
+  margin-top: 1px;
+  margin-right: 0;
+}
+[data-sonner-toast] [data-content] {
+  gap: 3px !important;
+}
+[data-sonner-toast] [data-title] {
+  font-size: 0.875rem !important;
+  font-weight: 600 !important;
+  line-height: 1.25rem !important;
+  color: rgb(var(--text-primary)) !important;
+}
+[data-sonner-toast] [data-description] {
+  font-size: 0.8125rem !important;
+  color: rgb(var(--text-secondary)) !important;
+  line-height: 1.15rem !important;
+}
+/* The close control is chrome: quiet until the toast is hovered. */
+[data-sonner-toast] [data-close-button] {
+  border: 1px solid rgb(var(--border)) !important;
+  background: rgb(var(--bg-surface)) !important;
+  color: rgb(var(--text-tertiary)) !important;
+  opacity: 0;
+  transition: opacity 120ms ease, color 120ms ease;
+}
+[data-sonner-toast]:hover [data-close-button] {
+  opacity: 1;
+}
+[data-sonner-toast] [data-close-button]:hover {
+  color: rgb(var(--text-primary)) !important;
+  background: rgb(var(--bg-hover)) !important;
+}
+
+/* Native date and time inputs render a dark picker glyph on a dark field in
+   Chromium unless the icon is inverted. */
+.dark input[type='date']::-webkit-calendar-picker-indicator,
+.dark input[type='datetime-local']::-webkit-calendar-picker-indicator,
+.dark input[type='time']::-webkit-calendar-picker-indicator {
+  filter: invert(0.8);
+}
+
+/* Autofill paints its own yellow field in Chromium. Repaint it with the
+   theme's own well colour so a filled login or search input does not flash a
+   colour that exists nowhere else in the product. */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-text-fill-color: rgb(var(--text-primary));
+  -webkit-box-shadow: 0 0 0 1000px rgb(var(--bg-subtle)) inset;
+  caret-color: rgb(var(--text-primary));
+}
+
+/* The sign-in and verification cards are the exception, and they have to be.
+   Those two screens paint a WHITE card whatever the app theme is, because they
+   are seen before a theme has any meaning. The rule above resolves against the
+   theme tokens, so on a dark theme it filled those white cards with a near
+   black well and near white text: the saved-credentials case in the report,
+   where the field turns black the moment the browser fills it.
+
+   Fixed colours here rather than tokens, for the same reason the card itself
+   uses fixed colours. The tint is a light wash of the sign-in button's blue,
+   so an autofilled field still reads as filled by the browser rather than
+   typed, without becoming the only dark thing on a white card. */
+.auth-field:-webkit-autofill,
+.auth-field:-webkit-autofill:hover,
+.auth-field:-webkit-autofill:focus,
+.auth-field:-webkit-autofill:active {
+  -webkit-text-fill-color: #0f172a;
+  -webkit-box-shadow: 0 0 0 1000px #f0f8fd inset;
+  caret-color: #0f172a;
+}
+
+/* ---------------------------------------------------------------------------
+ * Identity graph: flowing edges
+ * ---------------------------------------------------------------------------
+ * A dashed stroke whose dashoffset animates reads as flow along the path, and
+ * flow is the thing a directed graph is trying to say: this grants that, which
+ * reaches this. Static dashes say nothing a solid line does not.
+ *
+ * Every edge flows from the moment the canvas opens, quietly. The branch the
+ * reader has lit flows faster and brighter, so motion still discriminates: it
+ * is the DIFFERENCE in speed that marks the selected path, not the presence of
+ * motion. Animating only the selection left the rest of the graph looking
+ * frozen until something was clicked.
+ *
+ * Both are switched off entirely under prefers-reduced-motion. */
+@keyframes edge-flow {
+  to {
+    stroke-dashoffset: -14;
+  }
+}
+
+.react-flow .edge-flow path,
+.react-flow path.edge-flow {
+  animation: edge-flow 2.4s linear infinite;
+}
+
+.react-flow .edge-flow-lit path,
+.react-flow path.edge-flow-lit {
+  animation: edge-flow 0.9s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .react-flow .edge-flow path,
+  .react-flow path.edge-flow,
+  .react-flow .edge-flow-lit path,
+  .react-flow path.edge-flow-lit {
+    animation: none;
+  }
+}
+
+/* React Flow ships its own hard-coded light palette for the zoom controls
+   (#fefefe fill, #222 glyph), which renders as a white box with invisible
+   icons on the dark canvas. The library exposes no token for these, so the
+   only way to make the graph obey the theme is to repaint them here. Scoped
+   to the control buttons, so nothing else the library draws is touched. */
+/* Scoped through .react-flow on purpose. The library's own rule is a single
+   class, and its stylesheet is imported from the page component, so it lands
+   AFTER this file in the bundle and wins any tie. Two classes settles it
+   without resorting to !important. */
+.react-flow .react-flow__controls-button {
+  background: rgb(var(--bg-surface));
+  border-bottom: 1px solid rgb(var(--border-soft));
+  fill: rgb(var(--text-secondary));
+  color: rgb(var(--text-secondary));
+}
+.react-flow .react-flow__controls-button:hover {
+  background: rgb(var(--bg-hover));
+  fill: rgb(var(--text-primary));
+  color: rgb(var(--text-primary));
+}
+.react-flow .react-flow__controls-button:last-child {
+  border-bottom: none;
+}
+.react-flow .react-flow__controls-button:disabled {
+  opacity: 0.4;
+}
+.react-flow .react-flow__controls-button svg {
+  fill: currentColor;
+}
+
+/* The minimap ships the same hard-coded light fill. */
+.react-flow .react-flow__minimap {
+  background: rgb(var(--bg-surface));
+}

@@ -110,7 +110,10 @@ export function DataTable({ children, className, minWidth = '68rem', label }) {
     <div className={clsx('overflow-x-auto overscroll-x-contain', className)}>
       <table
         aria-label={label}
-        className="w-full table-fixed border-collapse text-left"
+        // dt-rows is what makes rows arrive in reading order. The stagger is
+        // pure CSS off nth-child (see index.css), so it reaches every table in
+        // the product from here without a single page passing an index down.
+        className="dt-rows w-full table-fixed border-collapse text-left"
         style={{ minWidth }}
       >
         {children}
@@ -222,6 +225,12 @@ export function Tr({ children, selected = false, onClick, to, className }) {
       className={clsx(
         'group',
         interactive && 'cursor-pointer',
+        // A row you can open reserves three pixels at its leading edge and
+        // fills them on hover, so the pointer lands on something already
+        // shaped for it and nothing shifts. Excluded when selected: that row
+        // draws its own spine on the Td below, and two spines in the same
+        // three pixels is a fight, not a state.
+        interactive && !selected && 'row-spine',
         selected ? 'bg-subtle' : 'bg-surface hover:bg-hover',
         className
       )}
