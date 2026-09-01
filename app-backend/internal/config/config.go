@@ -254,12 +254,40 @@ type DatabaseConfig struct {
 	Password string `mapstructure:"password"`
 	SSLMode  string `mapstructure:"sslmode"`
 	Schema   string `mapstructure:"schema"` // "pam"
+
+	// AutoMigrate lets a production deployment ask GORM to create or update
+	// the PAM tables. Outside production it is implied; in production it has
+	// to be said out loud, because automigration can widen a column nobody
+	// reviewed. See Config.ShouldAutoMigrate.
+	AutoMigrate bool `mapstructure:"auto_migrate"`
+}
+
+// dsnValue quotes a keyword/value connection-string value.
+//
+// This is not cosmetic. The unquoted form built one flat string, so a value
+// that was EMPTY produced "password= dbname=pam ...", and lib/pq stops
+// reading the keyword it is in the middle of at that point: everything after
+// the empty value was dropped, dbname fell back to the user name, and the
+// server connected to a DIFFERENT DATABASE than the one configured without a
+// single error. A deployment whose database uses trust, peer or IAM
+// authentication has no password to set, so it hits exactly that case, and
+// writes the vault and the audit chain somewhere nobody asked for. Quoting
+// every value makes an empty one explicit (”) and terminates it.
+func dsnValue(v string) string {
+	replacer := strings.NewReplacer(`\`, `\\`, `'`, `\'`)
+	return "'" + replacer.Replace(v) + "'"
 }
 
 func (d DatabaseConfig) DSN() string {
 	return fmt.Sprintf(
 		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s search_path=%s",
-		d.Host, d.Port, d.User, d.Password, d.Name, d.SSLMode, d.Schema,
+		dsnValue(d.Host),
+		d.Port,
+		dsnValue(d.User),
+		dsnValue(d.Password),
+		dsnValue(d.Name),
+		dsnValue(d.SSLMode),
+		dsnValue(d.Schema),
 	)
 }
 
@@ -477,6 +505,11 @@ func Load() (*Config, error) {
 	// made rather than a default nobody noticed.
 	v.SetDefault("database.sslmode", "require")
 	v.SetDefault("database.schema", "pam")
+	// Off by default so that production never migrates by accident. A first
+	// production deploy against an empty database sets
+	// PAM_DATABASE_AUTO_MIGRATE=true once to create the schema, then unsets
+	// it. Outside production the value is ignored (see ShouldAutoMigrate).
+	v.SetDefault("database.auto_migrate", false)
 
 	v.SetDefault("redis.host", "localhost")
 	v.SetDefault("redis.port", 6379)
@@ -792,6 +825,15 @@ func (c *Config) normaliseJIT() error {
 // value or an unrecognised name therefore keeps the guards on rather than
 // quietly dropping them, which is the opposite of how an equality test against
 // "production" behaves.
+// ShouldAutoMigrate reports whether this process may create or alter tables.
+//
+// Development always migrates, which is what makes a fresh checkout run. In
+// production the answer is no unless PAM_DATABASE_AUTO_MIGRATE says yes, so
+// the schema is something an operator changed on purpose.
+func (c *Config) ShouldAutoMigrate() bool {
+	return !c.IsProduction() || c.Database.AutoMigrate
+}
+
 func (c *Config) IsProduction() bool {
 	switch strings.ToLower(strings.TrimSpace(c.Server.Env)) {
 	case "development", "dev", "local", "test":

@@ -94,12 +94,18 @@ func main() {
 		logger.Fatal("db.connect.fail", zap.Error(err))
 	}
 
-	// AutoMigrate PAM-specific tables. Dev-only by design (see
-	// APIs_Docunment_PAM.md's deployment matrix): production schema changes
-	// go through reviewed SQL migrations instead of GORM's automigration,
-	// since automigration can silently widen a column or add a nullable one
-	// in a way nobody reviewed.
-	if !cfg.IsProduction() {
+	// AutoMigrate PAM-specific tables. Automatic outside production, because
+	// that is what makes a fresh checkout run; opt-in inside it, because
+	// automigration can silently widen a column or add a nullable one in a
+	// way nobody reviewed.
+	//
+	// The opt-in matters: production used to skip this block outright, and
+	// nothing else in the tree creates these tables, so a first production
+	// deploy against an empty database died a few lines below on
+	// "relation pam.pam_audit_log does not exist" with no way forward.
+	// PAM_DATABASE_AUTO_MIGRATE=true is that way forward: set it once to
+	// create the schema, then take it back off.
+	if cfg.ShouldAutoMigrate() {
 		if err := db.AutoMigrate(
 			// ── Identity, RBAC & PBAC (Admin Center) ──
 			// User now lives here too: it used to be a read-only mirror of
@@ -153,8 +159,8 @@ func main() {
 
 			// NOTE: the four-eyes and role-criticality tables are NOT listed
 			// here. They are additive tables their own features own, and they
-			// migrate unconditionally further down so that production — where
-			// this whole block is skipped — still gets them. See there.
+			// migrate unconditionally further down, so a production boot that
+			// has this block switched off still gets them. See there.
 
 			// ── Tamper-evident audit chain + session recording metadata ──
 			&models.AuditLog{},
@@ -170,7 +176,19 @@ func main() {
 			// to serve rather than fail later on the first privileged request.
 			logger.Fatal("db.migrate.fail", zap.Error(err))
 		}
-		logger.Info("db.migrated.pam_tables")
+		logger.Info("db.migrated.pam_tables",
+			zap.Bool("production", cfg.IsProduction()),
+		)
+	} else if err := database.AssertSchemaPresent(db, cfg.Database.Schema); err != nil {
+		// Nothing in this process is going to create the schema, so say that
+		// plainly here rather than letting the next statement fail on a raw
+		// SQLSTATE that reads like a database outage.
+		logger.Fatal("db.schema.missing",
+			zap.Error(err),
+			zap.String("schema", cfg.Database.Schema),
+			zap.String("database", cfg.Database.Name),
+			zap.String("fix", "run the schema migration, or set PAM_DATABASE_AUTO_MIGRATE=true for one boot to create it"),
+		)
 	}
 
 	// The audit log's full-text search (Feature 107, audit_query_service.go's
