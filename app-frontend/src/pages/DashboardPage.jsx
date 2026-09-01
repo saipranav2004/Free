@@ -124,6 +124,27 @@ const EVENT_LIMITS = [
 // the charts are using. Small and fixed: those cards show five entries.
 const ROW_CARD_SAMPLE = 200
 
+// HOW OFTEN THE DASHBOARD RE-READS ITSELF.
+//
+// It used to never re-read at all. Not one of its queries set an interval, and
+// the client-wide refetchOnWindowFocus is off, so the numbers were frozen at
+// whatever they were when the page mounted. Left open on a second monitor,
+// which is exactly what an operations dashboard is for, it would sit on
+// "Pending approvals 0" while the bell three centimetres above it said one
+// unread. Thirty seconds matches the bell's own count poll, so the two agree
+// instead of contradicting each other on screen.
+const LIVE_POLL_MS = 30000
+
+// A COUNT THIS PAGE NEVER RECEIVED IS NOT ZERO.
+//
+// The admin tiles already did this, falling back to "n/a" whenever the stats
+// call came back empty. The personal tiles did not: they ended in `?? 0`, so a
+// failed read rendered "Active grants 0" and "Active sessions 0", which is the
+// same lie the notifications page used to tell when it said "no notifications
+// yet" after a request had errored. On a privileged-access console the number
+// people act on has to be either true or visibly absent.
+const naOnError = (query, value) => (query?.isError ? 'n/a' : value)
+
 // The server buckets by hour or by day; the range presets already decide which
 // makes sense. One lookup so the two cannot drift.
 function rangeSpan(rangeKey) {
@@ -966,7 +987,12 @@ function AdminDashboard() {
   // actions that were DENIED or FAILED. Nobody is notified about those, and
   // they are the ones that mean something is misconfigured.
 
-  const statsQuery = useQuery({ queryKey: ['admin', 'stats'], queryFn: ({ signal }) => getStats(signal) })
+  const statsQuery = useQuery({
+    queryKey: ['admin', 'stats'],
+    queryFn: ({ signal }) => getStats(signal),
+    refetchInterval: LIVE_POLL_MS,
+    refetchOnWindowFocus: true,
+  })
 
   // One sample serves every chart AND the denied list. The chosen size is part
   // of the key, so switching it refetches instead of re-slicing stale rows,
@@ -1022,6 +1048,8 @@ function AdminDashboard() {
     queryKey: ['admin', 'grants', 'dashboard'],
     queryFn: ({ signal }) => listGrants({ page: 1, page_size: 100 }, signal),
     staleTime: 30_000,
+    refetchInterval: LIVE_POLL_MS,
+    refetchOnWindowFocus: true,
     retry: false,
   })
 
@@ -1043,7 +1071,10 @@ function AdminDashboard() {
 
   // Denied and failed, which is the whole of "needs your attention" now.
   const denied = useMemo(() => events.filter(isFailure), [events])
-  const nothingWaiting = !auditQuery.isLoading && denied.length === 0
+  // NOT CLAIMED WHEN THE READ FAILED. "Nothing needs a decision from you" is a
+  // statement about the estate, not about this component's state, so an errored
+  // query must fall through to the list rather than reassure the operator.
+  const nothingWaiting = !auditQuery.isLoading && !auditQuery.isError && denied.length === 0
 
   return (
     <div>
@@ -1205,13 +1236,20 @@ function UserDashboard({ user }) {
   // Who the trail belongs to. Every audit read on this page is filtered by it.
   const selfId = viewerIdOf(user)
 
+  // LIVE, like the admin side. A grant expiring in twelve minutes and a
+  // request an approver just decided are the two things this page exists to
+  // surface, and neither of them arrives if the page only reads once.
   const grantsQuery = useQuery({
     queryKey: ['jit', 'grants', 'mine', { activeOnly: true, dashboard: true }],
     queryFn: ({ signal }) => listMyGrants({ activeOnly: true, pageSize: 25, signal }),
+    refetchInterval: LIVE_POLL_MS,
+    refetchOnWindowFocus: true,
   })
   const requestsQuery = useQuery({
     queryKey: ['jit', 'requests', 'mine', { status: 'PENDING', dashboard: true }],
     queryFn: ({ signal }) => listMyJitRequests({ status: 'PENDING', pageSize: 5, signal }),
+    refetchInterval: LIVE_POLL_MS,
+    refetchOnWindowFocus: true,
   })
   // Half-approved is still in flight, one approval short of access, and the
   // state a requester most wants to see on their own dashboard. The endpoint
@@ -1220,11 +1258,15 @@ function UserDashboard({ user }) {
     queryKey: ['jit', 'requests', 'mine', { status: JIT_STATUS.PARTIALLY_APPROVED, dashboard: true }],
     queryFn: ({ signal }) =>
       listMyJitRequests({ status: JIT_STATUS.PARTIALLY_APPROVED, pageSize: 5, signal }),
+    refetchInterval: LIVE_POLL_MS,
+    refetchOnWindowFocus: true,
     retry: false,
   })
   const sessionsQuery = useQuery({
     queryKey: ['sessions', 'mine', { activeOnly: true, dashboard: true }],
     queryFn: ({ signal }) => listMySessions({ activeOnly: true, pageSize: 5, signal }),
+    refetchInterval: LIVE_POLL_MS,
+    refetchOnWindowFocus: true,
   })
   // Walked in pages of 500, the ceiling /audit/search enforces on limit.
   const rowTarget = sample.value ?? ROW_CARD_SAMPLE
@@ -1258,7 +1300,10 @@ function UserDashboard({ user }) {
   const partiallyApprovedCount = (partialRequestsQuery.data?.requests ?? []).length
 
   const loadingAttention = grantsQuery.isLoading || requestsQuery.isLoading
-  const nothingWaiting = !loadingAttention && expiring.length === 0 && pendingRequests.length === 0
+  const attentionFailed =
+    grantsQuery.isError || requestsQuery.isError || partialRequestsQuery.isError
+  const nothingWaiting =
+    !loadingAttention && !attentionFailed && expiring.length === 0 && pendingRequests.length === 0
 
   return (
     <div>
@@ -1273,7 +1318,7 @@ function UserDashboard({ user }) {
             label: 'Active grants',
             icon: Lock,
             loading: grantsQuery.isLoading,
-            value: grantsQuery.data?.pagination?.total ?? grants.length,
+            value: naOnError(grantsQuery, grantsQuery.data?.pagination?.total ?? grants.length),
             description: 'Elevation available to you right now',
             to: '/jit',
           },
@@ -1283,7 +1328,7 @@ function UserDashboard({ user }) {
             icon: Clock,
             tone: expiring.some((e) => e.tone === 'red') ? 'red' : expiring.length > 0 ? 'amber' : 'default',
             loading: grantsQuery.isLoading,
-            value: expiring.length,
+            value: naOnError(grantsQuery, expiring.length),
             description: 'Within the next 12 hours',
             to: '/jit',
           },
@@ -1297,10 +1342,14 @@ function UserDashboard({ user }) {
             // requests have not landed yet", which is the only question this
             // tile answers.
             value:
-              (requestsQuery.data?.pagination?.total ?? requestsQuery.data?.requests?.length ?? 0) +
-              (partialRequestsQuery.data?.pagination?.total ??
-                partialRequestsQuery.data?.requests?.length ??
-                0),
+              requestsQuery.isError || partialRequestsQuery.isError
+                ? 'n/a'
+                : (requestsQuery.data?.pagination?.total ??
+                    requestsQuery.data?.requests?.length ??
+                    0) +
+                  (partialRequestsQuery.data?.pagination?.total ??
+                    partialRequestsQuery.data?.requests?.length ??
+                    0),
             description:
               partiallyApprovedCount > 0
                 ? `${partiallyApprovedCount} one approval short`
@@ -1313,7 +1362,10 @@ function UserDashboard({ user }) {
             icon: Radio,
             live: true,
             loading: sessionsQuery.isLoading,
-            value: sessionsQuery.data?.pagination?.total ?? sessionsQuery.data?.sessions?.length ?? 0,
+            value: naOnError(
+              sessionsQuery,
+              sessionsQuery.data?.pagination?.total ?? sessionsQuery.data?.sessions?.length ?? 0
+            ),
             description: 'Connections open in your name',
             to: '/sessions',
           },

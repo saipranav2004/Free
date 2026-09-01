@@ -630,7 +630,14 @@ func main() {
 	// DEV-ONLY: Test login endpoint. Issues a fresh JWT for any user.
 	// REMOVE THIS BLOCK BEFORE GOING TO PRODUCTION.
 	// ═════════════════════════════════════════════════════════════
-	if !cfg.IsProduction() {
+	//
+	// BOTH SWITCHES, OR NOTHING. This used to be gated on the environment
+	// alone, and the environment used to default to development, so an
+	// install that never set PAM_SERVER_ENV served an unauthenticated route
+	// that mints a root session for any account id. It now also needs
+	// PAM_SERVER_ENABLE_DEV_TEST_LOGIN=true, named for exactly what it does,
+	// so no single unset variable can publish it.
+	if !cfg.IsProduction() && cfg.Server.EnableDevTestLogin {
 		r.POST("/test/login-as", func(c *gin.Context) {
 			var body struct {
 				UserID    string   `json:"user_id"`
@@ -663,7 +670,7 @@ func main() {
 			}
 			c.JSON(200, gin.H{
 				"success": true,
-				"message": "test token issued (DEV-ONLY) — roles are whatever you pass, not resolved from the database",
+				"message": "test token issued (DEV-ONLY). Roles are whatever you pass, not resolved from the database",
 				"data": gin.H{
 					"access_token": accessToken,
 					"session_id":   sessionID,
@@ -673,7 +680,9 @@ func main() {
 			})
 		})
 		logger.Warn("dev_only.test_login_endpoint_enabled",
-			zap.String("route", "POST /test/login-as"))
+			zap.String("route", "POST /test/login-as"),
+			zap.String("danger", "this route issues a session for any account with no password and no second factor"),
+			zap.String("disable_with", "unset PAM_SERVER_ENABLE_DEV_TEST_LOGIN"))
 	}
 
 	// ═════════════════════════════════════════════════════════════
@@ -1169,9 +1178,26 @@ func main() {
 			resources.POST("/:id/rotate", inScope, resourceHandler.RotateCredential)
 		}
 
-		// ── Whole-vault backup & restore — infra-level, admin-only ──
-		admin.POST("/vault/backup", vaultHandler.CreateBackup)
-		admin.POST("/vault/restore", vaultHandler.RestoreBackup)
+		// ── Whole-vault backup & restore ──
+		//
+		// ROOT, WITH A VERIFIED SECOND FACTOR, AND A WRITTEN REASON. These
+		// two used to sit behind RequireAdmin alone, which made them the
+		// least guarded things in the product and the most consequential:
+		// backup exports every secret, restore overwrites the live vault from
+		// a caller-supplied object key, and a delegated admin's resource
+		// scope cannot narrow either of them because neither addresses a
+		// resource. Revealing a single credential, by contrast, wanted a
+		// verified factor, a reason and a per-credential permission check.
+		// The gates are now the right way round. The reason is enforced in
+		// the handler and lands in the audit row.
+		admin.POST("/vault/backup",
+			middleware.RequireRoot("Exporting the vault"),
+			middleware.RequireMFA(),
+			vaultHandler.CreateBackup)
+		admin.POST("/vault/restore",
+			middleware.RequireRoot("Restoring the vault"),
+			middleware.RequireMFA(),
+			vaultHandler.RestoreBackup)
 
 		// ── 5. JIT — READ-ONLY (org-wide) ──
 		admin.GET("/jit-requests", adminHandler.ListJITRequests)

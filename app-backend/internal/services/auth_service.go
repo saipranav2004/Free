@@ -228,8 +228,23 @@ func (s *AuthService) Login(identifier, password, clientIP string) (*LoginResult
 		}, ErrMFARequired
 	}
 
-	// No MFA → issue tokens directly.
-	return s.issueTokensForUser(user, true, clientIP)
+	// NO FACTOR ENROLLED, SO THE SESSION IS NOT MFA-VERIFIED. It logs in
+	// normally; it simply cannot claim to have proved something it never
+	// proved.
+	//
+	// This used to pass `true` here, and that one argument hollowed out every
+	// MFA gate in the product. middleware.RequireMFA reads this claim and
+	// nothing else, so an account with no second factor satisfied it by
+	// definition: revealing a vault credential, approving a JIT request,
+	// pairing an agent and regenerating backup codes were all reachable with
+	// a password alone, while Settings told the operator to their face that
+	// revealing a secret "re-checks your second factor even mid-session".
+	//
+	// The gate has to mean "a factor was proved", not "no challenge was
+	// owed". Accounts with no factor now get a 403 naming enrolment as the
+	// way forward, which is also what makes the MFA policy screen's monitor
+	// and enforce modes mean anything for these actions.
+	return s.issueTokensForUser(user, false, clientIP)
 }
 
 // ──────────────────────────────────────────────────────────────────────────

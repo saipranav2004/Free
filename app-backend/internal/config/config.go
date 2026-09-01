@@ -218,10 +218,23 @@ type WebProxyConfig struct {
 }
 
 type ServerConfig struct {
-	Port            string `mapstructure:"port"`
-	Env             string `mapstructure:"env"` // "development" | "production"
+	Port string `mapstructure:"port"`
+	// Env is "production" unless it explicitly names a development
+	// environment. See IsProduction, which decides that question fail-closed.
+	Env             string `mapstructure:"env"`
 	AllowedOrigins  string `mapstructure:"allowed_origins"`
 	ShutdownTimeout int    `mapstructure:"shutdown_timeout"` // seconds
+
+	// EnableDevTestLogin arms POST /test/login-as, which mints a session for
+	// any account without a password or a second factor.
+	//
+	// TWO SWITCHES, BOTH REQUIRED, and that is deliberate. The endpoint used
+	// to ride on Env alone, and Env used to default to development, so an
+	// install that simply never set PAM_SERVER_ENV published an
+	// unauthenticated "become root" route. Now the environment must not be
+	// production AND this must be turned on by name, so no single missing
+	// variable can expose it. Never set it anywhere a real account exists.
+	EnableDevTestLogin bool `mapstructure:"enable_dev_test_login"`
 
 	// PublicURL is this PAM server's externally-reachable base URL — used to
 	// build the pam-agent://launch?...&server=<this> handoff URL (see
@@ -407,7 +420,14 @@ func Load() (*Config, error) {
 	// Viper's AutomaticEnv only binds env vars for keys that have a SetDefault.
 	// Without this, keys like database.host are invisible even if the env var exists.
 	v.SetDefault("server.port", "8080")
-	v.SetDefault("server.env", "development")
+	// PRODUCTION IS THE DEFAULT, and the fail-closed direction is the whole
+	// point: the settings that key off this all relax something (GORM
+	// automigration, a stand-in audit HMAC secret, the dev test-login route).
+	// Defaulting to development meant forgetting one environment variable
+	// silently opted a deployment into every one of them. Development is now
+	// something you ask for.
+	v.SetDefault("server.env", "production")
+	v.SetDefault("server.enable_dev_test_login", false)
 	v.SetDefault("server.allowed_origins", "*")
 	v.SetDefault("server.shutdown_timeout", 30)
 	v.SetDefault("server.public_url", "http://localhost:8080")
@@ -703,6 +723,17 @@ func (c *Config) normaliseJIT() error {
 	return nil
 }
 
+// IsProduction answers "should this process behave as if real credentials are
+// at stake", and answers it fail-closed: anything that is not explicitly a
+// known development environment is production. A typo ("prodction"), a blank
+// value or an unrecognised name therefore keeps the guards on rather than
+// quietly dropping them, which is the opposite of how an equality test against
+// "production" behaves.
 func (c *Config) IsProduction() bool {
-	return c.Server.Env == "production"
+	switch strings.ToLower(strings.TrimSpace(c.Server.Env)) {
+	case "development", "dev", "local", "test":
+		return false
+	default:
+		return true
+	}
 }
