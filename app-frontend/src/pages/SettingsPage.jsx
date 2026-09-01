@@ -247,14 +247,26 @@ export default function SettingsPage() {
                             label: 'User ID',
                             value: <span className="font-mono text-xs">{data.id || data.user_id || '-'}</span>,
                           },
-                          {
-                            label: 'Organization',
-                            value: (
-                              <span className="font-mono text-xs">
-                                {data.org_id || data.organization_id || '-'}
-                              </span>
-                            ),
-                          },
+                          // ORGANIZATION IS COMMENTED OUT, NOT STYLED AWAY.
+                          //
+                          // This install is single tenant: /auth/me returns no
+                          // org id, nothing else in the schema carries one, and
+                          // no query filters by one. The row therefore rendered
+                          // "-" for every account, forever, which reads as "we
+                          // could not load it" rather than "there is nothing to
+                          // load" and quietly implies a tenancy boundary the
+                          // product does not enforce.
+                          //
+                          // Left here rather than deleted because it comes back
+                          // the day the backend has something to put in it.
+                          // {
+                          //   label: 'Organization',
+                          //   value: (
+                          //     <span className="font-mono text-xs">
+                          //       {data.org_id || data.organization_id || '-'}
+                          //     </span>
+                          //   ),
+                          // },
                           {
                             label: 'Second factor',
                             value: (

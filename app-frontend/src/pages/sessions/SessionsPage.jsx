@@ -466,7 +466,7 @@ export default function SessionsPage() {
           <NoMatchState description="No session matches the current search and filters." onClear={clearAll} />
         ) : (
           <>
-            <DataTable minWidth="62rem">
+            <DataTable minWidth="62rem" label="Sessions">
               <colgroup>
                 {show('resource_name') && <col className="w-[17rem] min-w-[13rem]" />}
                 {show('username') && <col className="w-[11rem]" />}

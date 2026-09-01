@@ -1154,7 +1154,7 @@ function RequestsTab() {
                 />
               ) : (
                 <>
-                  <DataTable minWidth="52rem">
+                  <DataTable minWidth="52rem" label="Access requests awaiting a decision">
                     <colgroup>
                       <col className="w-[26rem] min-w-[16rem]" />
                       <col className="w-[8rem]" />

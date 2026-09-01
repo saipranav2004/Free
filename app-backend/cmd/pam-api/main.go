@@ -1179,7 +1179,14 @@ func main() {
 			identity.PATCH("/users/:id", identityHandler.Update)
 			identity.DELETE("/users/:id", identityHandler.Delete)
 			identity.POST("/users/:id/status", identityHandler.SetStatus)
-			identity.POST("/users/:id/reset-password", identityHandler.ResetPassword)
+			// Setting somebody's password is taking their account, so this is
+			// a credential-reset action and carries the same weight as
+			// clearing their second factor below: MFA-gated on the way in, and
+			// refused outright by the service when the actor may not act on
+			// that target (see services.CanResetPassword, which stops an
+			// administrator resetting a root's or another admin's password).
+			identity.POST("/users/:id/reset-password",
+				middleware.RequireMFA(), identityHandler.ResetPassword)
 			identity.POST("/users/:id/roles", identityHandler.AssignRole)
 			identity.DELETE("/users/:id/roles/:role_name", identityHandler.RemoveRole)
 			identity.POST("/users/:id/policies", identityHandler.AttachPolicy)

@@ -175,7 +175,7 @@ export function ResourceTable({
   const show = (key) => allowed.has(key) && (!visibleColumns || visibleColumns.includes(key))
 
   return (
-    <DataTable minWidth="60rem">
+    <DataTable minWidth="60rem" label="Resources">
       {/* Budgeted to fit a 1130px panel with nothing clipped and no header
           truncated: 272 + 144 + 272 + 120 + 136 + 176 = 1120. Below the
           minWidth the container scrolls and the identity column freezes. */}

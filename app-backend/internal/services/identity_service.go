@@ -279,9 +279,27 @@ func (s *IdentityService) DeleteUser(userID string) error {
 // ResetPassword is an admin-triggered password reset (as distinct from a
 // user's own self-service password change, which does not exist yet — see
 // IMPLEMENTED_FEATURES.md's known-limitations section).
-func (s *IdentityService) ResetPassword(userID, newPassword string) error {
+// ResetPassword sets an account's password on an administrator's behalf.
+//
+// actorRoles is not optional and not decoration: setting a password is taking
+// the account, so who the target is decides whether this is allowed at all.
+// See CanResetPassword. Passing nil roles is treated as an unprivileged actor
+// and refused, rather than defaulting to "allow" the way an omitted check does.
+func (s *IdentityService) ResetPassword(userID, newPassword string, actorRoles []string) error {
 	if len(newPassword) < 10 {
 		return ErrWeakPassword
+	}
+
+	target, err := s.GetUser(userID)
+	if err != nil {
+		return err
+	}
+	targetRoles, err := s.RoleNamesForUser(userID)
+	if err != nil {
+		return fmt.Errorf("resolve target roles: %w", err)
+	}
+	if !CanResetPassword(actorRoles, targetRoles, target.IsProtected) {
+		return ErrPasswordResetForbidden
 	}
 	hash, err := argon2.Hash(newPassword)
 	if err != nil {

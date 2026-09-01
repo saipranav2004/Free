@@ -742,7 +742,7 @@ export default function IdentityListPage() {
           <NoMatchState description="No account matches the current search and filters." onClear={clearAll} />
         ) : (
           <>
-            <DataTable minWidth="62rem">
+            <DataTable minWidth="62rem" label="Accounts">
               {/* Budgeted to fit without clipping: 44 + 288 + 176 + 208 + 128
                   + 160 + 60 = 1064 inside a ~1130px panel. */}
               <colgroup>

@@ -196,9 +196,23 @@ func (h *IdentityHandler) ResetPassword(c *gin.Context) {
 		response.Error(c, http.StatusBadRequest, "Invalid request: "+err.Error())
 		return
 	}
-	if err := h.identity.ResetPassword(c.Param("id"), req.NewPassword); err != nil {
+	// The LIVE roles the middleware resolved for this request, so an
+	// administrator whose role was revoked mid-session cannot still spend it
+	// here.
+	rolesRaw, _ := c.Get("roles")
+	actorRoles, _ := rolesRaw.([]string)
+
+	if err := h.identity.ResetPassword(c.Param("id"), req.NewPassword, actorRoles); err != nil {
 		if errors.Is(err, services.ErrWeakPassword) {
 			response.Error(c, http.StatusBadRequest, err.Error())
+			return
+		}
+		if errors.Is(err, services.ErrPasswordResetForbidden) {
+			// Named plainly. An administrator refused here is not being told
+			// about a bug; they are being told this particular account is
+			// above their level, which is the answer they need.
+			response.Error(c, http.StatusForbidden,
+				"Resetting the password for a root or administrator account is restricted to the root account.")
 			return
 		}
 		h.logger.Error("identity.reset_password.fail", zap.Error(err))

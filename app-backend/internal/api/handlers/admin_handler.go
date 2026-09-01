@@ -19,6 +19,8 @@ package handlers
 import (
 	"bytes"
 	"compress/gzip"
+	"crypto/sha256"
+	"encoding/hex"
 	"io"
 	"net/http"
 	"strconv"
@@ -240,6 +242,33 @@ func (h *AdminHandler) GetRecordingCast(c *gin.Context) {
 		h.logger.Error("admin.recordings.cast.load.fail", zap.String("recording_id", rec.ID), zap.Error(err))
 		response.Error(c, http.StatusInternalServerError, "Failed to load recording artifact")
 		return
+	}
+
+	// THE HASH IS CHECKED, NOT JUST STORED.
+	//
+	// A digest was computed when the artifact was captured and written to the
+	// row, and then nothing ever looked at it again: playback served whatever
+	// object storage returned. In a product where the recording IS the
+	// evidence, that means anyone who can write to the bucket can change what
+	// an investigation sees, and the console would render the altered version
+	// with no sign anything had happened.
+	//
+	// Refused rather than shown with a warning. A recording that does not
+	// match its capture-time digest has no evidentiary value, and showing it
+	// anyway invites someone to draw a conclusion from it.
+	if rec.SHA256 != "" {
+		sum := sha256.Sum256(raw)
+		if got := hex.EncodeToString(sum[:]); !strings.EqualFold(got, rec.SHA256) {
+			h.logger.Error("admin.recordings.cast.integrity.fail",
+				zap.String("recording_id", rec.ID),
+				zap.String("storage_key", rec.StorageKey),
+				zap.String("expected_sha256", rec.SHA256),
+				zap.String("actual_sha256", got),
+				zap.String("impact", "the stored artifact no longer matches what was captured; treat this recording as tampered with"))
+			response.Error(c, http.StatusConflict,
+				"This recording does not match the checksum taken when it was captured, so it is not being played. Treat it as tampered with and check object storage access.")
+			return
+		}
 	}
 
 	reader, err := gzip.NewReader(bytes.NewReader(raw))
