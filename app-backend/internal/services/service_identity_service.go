@@ -356,11 +356,169 @@ func (s *ServiceIdentityService) ListGrants(ctx context.Context, serviceRef stri
 	return s.activeGrants(ctx, identity.ID)
 }
 
-// ListIdentities returns every registered machine principal.
-func (s *ServiceIdentityService) ListIdentities(ctx context.Context) ([]models.ServiceIdentity, error) {
-	var out []models.ServiceIdentity
-	err := s.db.WithContext(ctx).Order("name ASC").Find(&out).Error
-	return out, err
+// ServiceIdentitySummary is one machine principal as the LIST needs it.
+//
+// The list used to return the bare row, which answered "does this exist and is
+// it switched on" and nothing else. That is not what anybody opens this page
+// to find out. The three questions an operator actually arrives with are: what
+// can it reach, is anything still using it, and is a token about to expire
+// under a job nobody is watching. All three were already in the database and
+// none of them travelled, so every one of them cost a click into the identity.
+//
+// The counts are deliberately shaped as "live" rather than "total": a revoked
+// token and an expired grant are history, and a list that counts them tells
+// you a service is wider and busier than it is.
+type ServiceIdentitySummary struct {
+	models.ServiceIdentity
+
+	// GrantCount is live path grants. WildcardScope is set when any one of
+	// them can read everything, which is the finding an auditor opens with and
+	// which a count alone hides: "3 paths" and "3 paths, one of them *" are
+	// not the same risk.
+	GrantCount    int    `json:"grant_count"`
+	WildcardScope bool   `json:"wildcard_scope"`
+	WidestScope   string `json:"widest_scope,omitempty"`
+
+	// LiveTokens counts tokens that would authenticate right now.
+	// NextTokenExpiry is the soonest of their expiries, and is the field that
+	// turns this page from a register into a warning: it is how you find the
+	// credential that takes a production job down on Sunday. A live token with
+	// no expiry at all reports NeverExpires instead, because "no next expiry"
+	// and "nothing expires, ever" are opposite facts that a null would blur.
+	LiveTokens      int        `json:"live_tokens"`
+	NextTokenExpiry *time.Time `json:"next_token_expiry,omitempty"`
+	NeverExpires    bool       `json:"never_expires"`
+
+	// LastUsedAt is the most recent read across every token this identity
+	// holds, including revoked ones: a service that last read a secret in
+	// March is a decommissioning candidate whether or not that token still
+	// works, and hiding the evidence with the token would lose the fact.
+	LastUsedAt *time.Time `json:"last_used_at,omitempty"`
+}
+
+// ListIdentities returns every registered machine principal with the rollup
+// the list needs.
+//
+// THREE QUERIES, NOT THREE PER ROW. The grants and the tokens are aggregated
+// in one grouped pass each, the same shape VaultService.ListSafes uses for its
+// credential count. Doing it per identity would be four queries for four
+// services and four hundred for four hundred.
+func (s *ServiceIdentityService) ListIdentities(ctx context.Context) ([]ServiceIdentitySummary, error) {
+	var identities []models.ServiceIdentity
+	if err := s.db.WithContext(ctx).Order("name ASC").Find(&identities).Error; err != nil {
+		return nil, err
+	}
+	if len(identities) == 0 {
+		return []ServiceIdentitySummary{}, nil
+	}
+
+	now := time.Now().UTC()
+	db := s.db.WithContext(ctx)
+
+	// ── grants ──
+	// Live only, and the widest scope comes back with the count so the row can
+	// say WHAT it reaches rather than only how many.
+	type grantRow struct {
+		ServiceID string
+		N         int
+		Scopes    string
+	}
+	var grantRows []grantRow
+	if err := db.Model(&models.ServiceGrant{}).
+		Select("service_id, count(*) as n, string_agg(scope, ',') as scopes").
+		Where("revoked_at IS NULL AND (expires_at IS NULL OR expires_at > ?)", now).
+		Group("service_id").Scan(&grantRows).Error; err != nil {
+		return nil, err
+	}
+
+	// ── tokens ──
+	// Two facts that a single aggregate cannot carry together: how many are
+	// live, and whether any live one never expires. min(expires_at) silently
+	// ignores NULLs, so a service whose only token is immortal would otherwise
+	// report "no upcoming expiry" and read as the safe case.
+	type tokenRow struct {
+		ServiceID  string
+		Live       int
+		NextExpiry *time.Time
+		NoExpiry   int
+	}
+	var tokenRows []tokenRow
+	if err := db.Model(&models.ServiceToken{}).
+		Select(`service_id,
+			count(*) as live,
+			min(expires_at) as next_expiry,
+			count(*) filter (where expires_at is null) as no_expiry`).
+		Where("revoked_at IS NULL AND (expires_at IS NULL OR expires_at > ?)", now).
+		Group("service_id").Scan(&tokenRows).Error; err != nil {
+		return nil, err
+	}
+
+	// Last use is asked of EVERY token, live or not: see LastUsedAt above.
+	type usedRow struct {
+		ServiceID string
+		LastUsed  *time.Time
+	}
+	var usedRows []usedRow
+	if err := db.Model(&models.ServiceToken{}).
+		Select("service_id, max(last_used_at) as last_used").
+		Group("service_id").Scan(&usedRows).Error; err != nil {
+		return nil, err
+	}
+
+	grantsBy := make(map[string]grantRow, len(grantRows))
+	for _, g := range grantRows {
+		grantsBy[g.ServiceID] = g
+	}
+	tokensBy := make(map[string]tokenRow, len(tokenRows))
+	for _, t := range tokenRows {
+		tokensBy[t.ServiceID] = t
+	}
+	usedBy := make(map[string]*time.Time, len(usedRows))
+	for _, u := range usedRows {
+		usedBy[u.ServiceID] = u.LastUsed
+	}
+
+	out := make([]ServiceIdentitySummary, 0, len(identities))
+	for _, id := range identities {
+		row := ServiceIdentitySummary{ServiceIdentity: id}
+
+		if g, ok := grantsBy[id.ID]; ok {
+			row.GrantCount = g.N
+			row.WildcardScope, row.WidestScope = widestScope(g.Scopes)
+		}
+		if t, ok := tokensBy[id.ID]; ok {
+			row.LiveTokens = t.Live
+			row.NextTokenExpiry = t.NextExpiry
+			row.NeverExpires = t.NoExpiry > 0
+		}
+		row.LastUsedAt = usedBy[id.ID]
+
+		out = append(out, row)
+	}
+	return out, nil
+}
+
+// widestScope picks the grant that reaches furthest out of a comma separated
+// list, and says whether it reaches everything.
+//
+// "Widest" is length: a shorter pattern is a shallower prefix and therefore
+// covers more, so "prod/*" outranks "prod/billing/db". A bare "*" outranks
+// everything and is reported separately, because it is the one an auditor
+// asks about by name.
+func widestScope(joined string) (wildcard bool, widest string) {
+	for _, raw := range strings.Split(joined, ",") {
+		scope := strings.TrimSpace(raw)
+		if scope == "" {
+			continue
+		}
+		if scope == "*" || scope == "**" || scope == "*/*" {
+			return true, scope
+		}
+		if widest == "" || len(scope) < len(widest) {
+			widest = scope
+		}
+	}
+	return false, widest
 }
 
 // ListTokens returns a service's tokens (hashes are never exposed).

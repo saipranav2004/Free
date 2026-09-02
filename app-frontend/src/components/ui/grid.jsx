@@ -205,7 +205,7 @@ export function SortTh({ children, columnKey, sort, onSort, align = 'left', ...r
  * link, so keyboard users have a path; making the row focusable too would put
  * two stops on every record and read the name twice.
  */
-export function Tr({ children, selected = false, onClick, to, className }) {
+export function Tr({ children, selected = false, onClick, to, tone, className }) {
   const navigate = useNavigate()
   const interactive = !!(to || onClick)
 
@@ -230,7 +230,15 @@ export function Tr({ children, selected = false, onClick, to, className }) {
         // shaped for it and nothing shifts. Excluded when selected: that row
         // draws its own spine on the Td below, and two spines in the same
         // three pixels is a fight, not a state.
-        interactive && !selected && 'row-spine',
+        //
+        // `tone` claims the same three pixels PERMANENTLY for a row that needs
+        // to be found rather than hovered: a service identity that can read
+        // every path, a grant about to expire under a job. It replaces the
+        // hover gutter rather than sitting beside it, for the same reason
+        // selection does.
+        interactive && !selected && !tone && 'row-spine',
+        !selected && tone === 'danger' && 'row-spine-danger',
+        !selected && tone === 'warn' && 'row-spine-warn',
         selected ? 'bg-subtle' : 'bg-surface hover:bg-hover',
         className
       )}

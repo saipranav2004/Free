@@ -764,6 +764,17 @@ textarea:focus-visible {
   box-shadow: inset 3px 0 0 0 rgb(var(--accent) / 0.55);
 }
 
+/* A row that has to be FOUND, not hovered. Same three pixels, permanently
+   claimed, so a wildcard grant or a credential about to expire is visible
+   from across the table without a badge shouting in every cell. */
+.row-spine-danger > td:first-child {
+  box-shadow: inset 3px 0 0 0 rgb(var(--danger));
+}
+
+.row-spine-warn > td:first-child {
+  box-shadow: inset 3px 0 0 0 rgb(var(--warn));
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   .animate-overlay-in,
