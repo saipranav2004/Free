@@ -357,9 +357,16 @@ export default function ResourceDetailPage() {
   const queryClient = useQueryClient()
   const isAdmin = useAuthStore((s) => s.isAdmin())
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false)
-  // A 409 from the launch endpoint means "no device paired". The header
-  // button can't host the pairing panel, so the page does.
-  const [needsPairing, setNeedsPairing] = useState(false)
+  // "No device paired" from the launch endpoint. The header button can't host
+  // the pairing panel, so the page does.
+  //
+  // Seeded from ?pair=1 because the resource drawer sends people here for
+  // exactly this reason and cannot carry component state across the
+  // navigation. Without the seed they arrived at a page in its default state
+  // with nothing explaining the trip.
+  const [needsPairing, setNeedsPairing] = useState(
+    () => new URLSearchParams(location.search).get('pair') === '1'
+  )
 
   // Deep-link support for the admin view: /resources/:id#connect still opens
   // the Connect tab. Non-admins have no tabs, so the hash is simply inert for

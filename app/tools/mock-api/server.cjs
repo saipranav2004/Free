@@ -45,6 +45,14 @@ const db = {
   recordings: F.RECORDINGS.map((r) => ({ ...r })),
   audit: F.AUDIT.map((a) => ({ ...a })),
   devices: F.AGENT_DEVICES.map((d) => ({ ...d })),
+  // Launches issued this run, so the console's outcome polling has something
+  // real to read back. Reset with the process, same as every other table here.
+  //
+  // Seeded with one row because the contract checker is GET-only by design (a
+  // conformance run must not mutate the fixture set), so without a launch that
+  // already exists it can only ever probe this endpoint with an id that does
+  // not resolve and read the 404 as a broken contract.
+  launches: [{ launch_id: 'lch-seed-01', resource_id: 'res-01', user_id: 'u-root-0001', state: 'opened', created_at: F.iso(-1) }],
   mfaRules: F.MFA_RULES.map((r) => ({ ...r })),
   rolePolicies: { 'r-1': ['p-5'], 'r-2': ['p-5', 'p-1'], 'r-3': ['p-6'], 'r-4': ['p-4'], 'r-5': ['p-2'], 'r-6': ['p-1'], 'r-7': ['p-3'] },
   criticalityOverrides: {},
@@ -333,8 +341,90 @@ on('POST', '/api/v1/pam/resources/:id/sessions', (ctx) => {
   auditRow(ctx.user, 'SESSION', 'session.started', 'SUCCESS', `resource:${r.name}`)
   return ok(ctx.res, { session: s, notice: r.recording_required ? 'This session is being recorded.' : undefined }, 201)
 })
-on('POST', '/api/v1/pam/resources/:id/launch', (ctx) =>
-  ok(ctx.res, { launch_url: `https://agent.local/launch/${uid('lch')}`, expires_at: F.iso(2), expires_in_seconds: 120 }))
+// The native-launch handoff, modelled the way agent_handler.go actually
+// behaves, because the two failure modes the console has to render are BOTH
+// invisible unless the mock reproduces them.
+//
+//   409 + code agent_not_paired  no ACTIVE device on this account. Note the
+//                                code: the same route answers 409 for an
+//                                expired JIT grant too, so the console must
+//                                not branch on the status alone.
+//   launch_id                    the handle the browser polls to find out
+//                                what the agent did with the handoff.
+on('POST', '/api/v1/pam/resources/:id/launch', (ctx) => {
+  const paired = db.devices.some((d) => d.user_id === ctx.user.user_id && d.status === 'ACTIVE')
+  if (!paired) {
+    // Through send(), not a hand-rolled writeHead: this response needs the
+    // same CORS headers as every other one, and a 409 the browser cannot read
+    // arrives at the console as a network error instead of as "not paired".
+    return send(ctx.res, 409, {
+      success: false,
+      code: 'agent_not_paired',
+      error: 'This device is not paired with your account yet',
+      hint: 'Run: pam-agent pair --code <code> --server <this PAM server>',
+    })
+  }
+  const launch = {
+    launch_id: uid('lch'),
+    resource_id: ctx.params.id,
+    user_id: ctx.user.user_id,
+    state: 'waiting',
+    created_at: new Date().toISOString(),
+  }
+  db.launches.unshift(launch)
+  return ok(ctx.res, {
+    launch_id: launch.launch_id,
+    launch_url: `pam-agent://launch?token=${uid('tok')}&server=http://127.0.0.1:8787`,
+    expires_at: F.iso(2),
+    expires_in_seconds: 120,
+  })
+})
+
+// What became of a launch. Scoped to its owner, the same as GetLaunchStatus:
+// another user's launch is reported as missing, never as forbidden, so the
+// endpoint cannot be used to probe for launch ids.
+//
+// MOCK_LAUNCH_OUTCOME drives which ending the console is asked to render
+// without needing a real agent on the machine:
+//   opened (default)  the agent took it and a session exists
+//   failed            a tool is missing; carries the reason and install hint
+//   expired           nothing ever picked the handoff up
+on('GET', '/api/v1/pam/agent/launch/:launch_id/status', (ctx) => {
+  const l = db.launches.find((x) => x.launch_id === ctx.params.launch_id && x.user_id === ctx.user.user_id)
+  if (!l) return fail(ctx.res, 404, 'NOT_FOUND', 'That launch does not exist.')
+
+  // One poll of "waiting" first, so the console's progress state is on screen
+  // long enough to be seen and asserted, exactly as it would be while a real
+  // agent starts up.
+  if (l.state === 'waiting') {
+    l.state = 'settling'
+    return ok(ctx.res, { launch_id: l.launch_id, resource_id: l.resource_id, state: 'waiting' })
+  }
+
+  const outcome = process.env.MOCK_LAUNCH_OUTCOME || 'opened'
+  if (outcome === 'failed') {
+    return ok(ctx.res, {
+      launch_id: l.launch_id,
+      resource_id: l.resource_id,
+      state: 'failed',
+      outcome: 'FAILED',
+      failure_code: 'tool_not_installed',
+      failure_reason: 'mongosh is not installed on this machine.',
+      failure_hint:
+        "Install any one of these, then try again. mongosh: macOS 'brew install mongosh', Windows: download the mongosh msi from mongodb.com/try/download/shell.",
+    })
+  }
+  if (outcome === 'expired') {
+    return ok(ctx.res, { launch_id: l.launch_id, resource_id: l.resource_id, state: 'expired' })
+  }
+  return ok(ctx.res, {
+    launch_id: l.launch_id,
+    resource_id: l.resource_id,
+    state: 'opened',
+    outcome: 'OPENED',
+    session_id: uid('sess'),
+  })
+})
 
 on('GET', '/api/v1/pam/sessions/mine', (ctx) => {
   let rows = db.sessions.filter((s) => s.user_id === ctx.user.user_id)

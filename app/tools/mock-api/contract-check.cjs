@@ -94,6 +94,7 @@ const BY_PATH = [
   [/\/sessions\//, 'sess-01'],
   [/recordings\//, 'rec-03'],
   [/agent\/devices\//, 'dev-01'],
+  [/agent\/launch\//, 'lch-seed-01'],
   [/audit\/request\//, 'req-000001'],
   [/audit\/user\//, 'u-user-0004'],
   [/audit\/resource\//, 'postgres-payments-prod-01'],

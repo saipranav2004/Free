@@ -1,6 +1,5 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { ExternalLink, Maximize2 } from 'lucide-react'
-import { toast } from 'sonner'
 import { Drawer } from '../common/Drawer'
 import { buttonClass } from '../common/Button'
 import { DetailList } from '../common/Layout'
@@ -33,16 +32,22 @@ export function ResourceDrawer({ resource, open, onClose }) {
         <>
           {/* Was a "Connect" link that only navigated to the detail page and
  left you to find the launcher. This is the real hand-off: same
- mutation the detail page's header button runs. A 409 ("no device
- paired") is the one case the drawer can't host, the pairing
- panel doesn't fit here, so it sends you to the page that does. */}
+ mutation the detail page's header button runs. An unpaired device
+ is the one case the drawer can't host, the pairing panel doesn't
+ fit here, so it sends you to the page that does.
+
+ ?pair=1 is what makes that handoff work. Navigating without it
+ landed the reader on a detail page in its default state, with
+ the pairing panel closed and nothing explaining why they had
+ been moved, so the drawer's own toast was the only trace of the
+ problem and it had already faded. The hook toasts the reason;
+ this makes the destination match it. */}
           <OpenInDesktopButton
             resourceId={resource.id}
             size="sm"
             onNeedsPairing={() => {
-              toast.info('Pair this browser with the desktop agent to continue')
               onClose?.()
-              navigate(`/resources/${resource.id}`)
+              navigate(`/resources/${resource.id}?pair=1`)
             }}
           />
           <Link
