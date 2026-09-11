@@ -1,0 +1,492 @@
+{
+  "redis": [
+    {
+      "id": "redis-cli",
+      "kind": "cli",
+      "command": "redis-cli",
+      "args": [
+        "-h",
+        "{{.Host}}",
+        "-p",
+        "{{.Port}}"
+      ],
+      "credential_injection": "env",
+      "credential_env_var": "REDISCLI_AUTH",
+      "discovery": {
+        "binary_names": [
+          "redis-cli"
+        ],
+        "windows_app_paths": [
+          "redis-cli.exe"
+        ],
+        "absolute_path_globs": {
+          "windows": [
+            "C:\\Program Files\\Redis\\redis-cli.exe",
+            "C:\\Redis\\redis-cli.exe"
+          ],
+          "darwin": [
+            "/opt/homebrew/bin/redis-cli",
+            "/usr/local/bin/redis-cli"
+          ],
+          "linux": [
+            "/usr/bin/redis-cli",
+            "/usr/local/bin/redis-cli"
+          ]
+        }
+      },
+      "install_hint": "macOS 'brew install redis', Debian/Ubuntu 'sudo apt install redis-tools', Windows: install Redis Insight or use WSL."
+    },
+    {
+      "id": "redisinsight",
+      "kind": "gui",
+      "command": "RedisInsight",
+      "args": [],
+      "credential_injection": "none",
+      "discovery": {
+        "windows_app_paths": [
+          "RedisInsight.exe"
+        ],
+        "absolute_path_globs": {
+          "windows": [
+            "C:\\Program Files\\RedisInsight\\RedisInsight.exe",
+            "C:\\Users\\*\\AppData\\Local\\Programs\\RedisInsight\\RedisInsight.exe"
+          ],
+          "linux": [
+            "/opt/RedisInsight/RedisInsight",
+            "/usr/bin/redisinsight"
+          ]
+        },
+        "mac_app_bundles": [
+          "RedisInsight.app",
+          "RedisInsight-v2.app"
+        ]
+      },
+      "install_hint": "Download Redis Insight from redis.io/insight and install it for your platform."
+    }
+  ],
+  "postgresql": [
+    {
+      "id": "psql",
+      "kind": "cli",
+      "command": "psql",
+      "args": [
+        "-h",
+        "{{.Host}}",
+        "-p",
+        "{{.Port}}",
+        "-U",
+        "{{.AccountName}}",
+        "-d",
+        "{{.DatabaseName}}"
+      ],
+      "credential_injection": "pgpass",
+      "discovery": {
+        "binary_names": [
+          "psql"
+        ],
+        "windows_app_paths": [
+          "psql.exe"
+        ],
+        "absolute_path_globs": {
+          "windows": [
+            "C:\\Program Files\\PostgreSQL\\*\\bin\\psql.exe"
+          ],
+          "darwin": [
+            "/Applications/Postgres.app/Contents/Versions/*/bin/psql",
+            "/opt/homebrew/opt/postgresql*/bin/psql",
+            "/usr/local/opt/postgresql*/bin/psql",
+            "/opt/homebrew/bin/psql",
+            "/usr/local/bin/psql",
+            "/opt/homebrew/opt/libpq/bin/psql",
+            "/usr/local/opt/libpq/bin/psql"
+          ],
+          "linux": [
+            "/usr/bin/psql",
+            "/usr/lib/postgresql/*/bin/psql",
+            "/usr/local/bin/psql",
+            "/usr/local/pgsql/bin/psql"
+          ]
+        }
+      },
+      "install_hint": "macOS 'brew install libpq' then link it, Debian/Ubuntu 'sudo apt install postgresql-client', Windows: run the EnterpriseDB PostgreSQL installer and tick Command Line Tools."
+    },
+    {
+      "id": "pgadmin4",
+      "kind": "gui",
+      "command": "pgAdmin4",
+      "args": [],
+      "credential_injection": "pgadmin_preseed",
+      "discovery": {
+        "windows_app_paths": [
+          "pgAdmin4.exe"
+        ],
+        "absolute_path_globs": {
+          "windows": [
+            "C:\\Program Files\\pgAdmin 4\\*\\pgAdmin4.exe",
+            "C:\\Program Files (x86)\\pgAdmin 4\\*\\pgAdmin4.exe",
+            "C:\\Program Files\\PostgreSQL\\*\\pgAdmin 4\\runtime\\pgAdmin4.exe",
+            "C:\\Program Files (x86)\\PostgreSQL\\*\\pgAdmin 4\\runtime\\pgAdmin4.exe"
+          ],
+          "linux": [
+            "/usr/pgadmin4/bin/pgadmin4",
+            "/usr/local/bin/pgadmin4"
+          ]
+        },
+        "mac_app_bundles": [
+          "pgAdmin 4.app"
+        ]
+      },
+      "install_hint": "Download pgAdmin 4 from pgadmin.org/download and install it for your platform."
+    }
+  ],
+  "mongodb": [
+    {
+      "id": "mongosh",
+      "kind": "cli",
+      "command": "mongosh",
+      "args": [],
+      "credential_injection": "mongo_init_file",
+      "discovery": {
+        "binary_names": [
+          "mongosh"
+        ],
+        "windows_app_paths": [
+          "mongosh.exe"
+        ],
+        "absolute_path_globs": {
+          "windows": [
+            "C:\\Program Files\\mongosh\\mongosh.exe",
+            "C:\\Program Files\\MongoDB\\mongosh\\mongosh.exe",
+            "C:\\Program Files\\MongoDB\\Server\\*\\bin\\mongosh.exe",
+            "C:\\Program Files\\MongoDB\\Tools\\*\\bin\\mongosh.exe",
+            "C:\\Program Files (x86)\\mongosh\\mongosh.exe",
+            "C:\\Users\\*\\AppData\\Local\\Programs\\mongosh\\mongosh.exe",
+            "C:\\Users\\*\\AppData\\Local\\mongosh\\mongosh.exe",
+            "C:\\Users\\*\\AppData\\Roaming\\npm\\mongosh.cmd",
+            "C:\\Users\\*\\scoop\\shims\\mongosh.exe",
+            "C:\\ProgramData\\chocolatey\\bin\\mongosh.exe",
+            "C:\\Users\\*\\Downloads\\mongosh*\\bin\\mongosh.exe",
+            "C:\\Users\\*\\Downloads\\mongosh*\\mongosh.exe",
+            "C:\\Users\\*\\Downloads\\mongosh.exe",
+            "C:\\mongosh\\mongosh.exe",
+            "C:\\mongosh*\\bin\\mongosh.exe"
+          ],
+          "darwin": [
+            "/opt/homebrew/bin/mongosh",
+            "/usr/local/bin/mongosh",
+            "/opt/homebrew/opt/mongosh/bin/mongosh",
+            "~/.local/bin/mongosh",
+            "~/Downloads/mongosh*/bin/mongosh",
+            "~/Downloads/mongosh*/mongosh",
+            "~/Downloads/mongosh"
+          ],
+          "linux": [
+            "/usr/bin/mongosh",
+            "/usr/local/bin/mongosh",
+            "/snap/bin/mongosh",
+            "/opt/mongosh/bin/mongosh",
+            "~/.local/bin/mongosh",
+            "~/Downloads/mongosh*/bin/mongosh",
+            "~/Downloads/mongosh*/mongosh",
+            "~/Downloads/mongosh"
+          ]
+        }
+      },
+      "install_hint": "macOS 'brew install mongosh', Debian/Ubuntu install the mongodb-mongosh package from the MongoDB apt repository, Windows: download the mongosh msi from mongodb.com/try/download/shell."
+    },
+    {
+      "id": "mongodb-compass",
+      "kind": "gui",
+      "command": "MongoDBCompass",
+      "args": [
+        "--trustedConnectionString"
+      ],
+      "credential_injection": "connection_string_arg",
+      "discovery": {
+        "windows_app_paths": [
+          "MongoDBCompass.exe"
+        ],
+        "absolute_path_globs": {
+          "windows": [
+            "C:\\Program Files\\MongoDB Compass\\MongoDBCompass.exe",
+            "C:\\Users\\*\\AppData\\Local\\MongoDBCompass\\MongoDBCompass.exe"
+          ],
+          "linux": [
+            "/opt/mongodb-compass/mongodb-compass",
+            "/usr/bin/mongodb-compass"
+          ]
+        },
+        "mac_app_bundles": [
+          "MongoDB Compass.app"
+        ]
+      },
+      "install_hint": "Download MongoDB Compass from mongodb.com/try/download/compass and install it for your platform."
+    },
+    {
+      "id": "mongodb-web",
+      "kind": "browser",
+      "command": "{{.ConsoleURL}}",
+      "args": [],
+      "credential_injection": "clipboard"
+    }
+  ],
+  "mongodb-compass": [
+    {
+      "id": "mongodb-compass",
+      "kind": "gui",
+      "command": "MongoDBCompass",
+      "args": [
+        "--trustedConnectionString"
+      ],
+      "credential_injection": "connection_string_arg",
+      "discovery": {
+        "windows_app_paths": [
+          "MongoDBCompass.exe"
+        ],
+        "absolute_path_globs": {
+          "windows": [
+            "C:\\Program Files\\MongoDB Compass\\MongoDBCompass.exe",
+            "C:\\Users\\*\\AppData\\Local\\MongoDBCompass\\MongoDBCompass.exe"
+          ],
+          "linux": [
+            "/opt/mongodb-compass/mongodb-compass",
+            "/usr/bin/mongodb-compass"
+          ]
+        },
+        "mac_app_bundles": [
+          "MongoDB Compass.app"
+        ]
+      },
+      "install_hint": "Download MongoDB Compass from mongodb.com/try/download/compass and install it for your platform."
+    }
+  ],
+  "oracle": [
+    {
+      "id": "sqldeveloper",
+      "kind": "gui",
+      "command": "sqldeveloper",
+      "args": [],
+      "credential_injection": "clipboard",
+      "discovery": {
+        "binary_names": [
+          "sqldeveloper"
+        ],
+        "absolute_path_globs": {
+          "windows": [
+            "C:\\Program Files\\sqldeveloper\\sqldeveloper.exe",
+            "C:\\sqldeveloper\\sqldeveloper.exe",
+            "C:\\Users\\*\\Downloads\\sqldeveloper*\\sqldeveloper.exe"
+          ],
+          "linux": [
+            "/opt/sqldeveloper/sqldeveloper",
+            "/usr/local/sqldeveloper/sqldeveloper"
+          ]
+        },
+        "mac_app_bundles": [
+          "SQLDeveloper.app",
+          "SQL Developer.app"
+        ]
+      },
+      "install_hint": "Download Oracle SQL Developer from oracle.com/database/sqldeveloper and install it for your platform."
+    },
+    {
+      "id": "sqlplus",
+      "kind": "cli",
+      "command": "sqlplus",
+      "args": [],
+      "credential_injection": "oracle_login_script",
+      "discovery": {
+        "binary_names": [
+          "sqlplus"
+        ],
+        "windows_app_paths": [
+          "sqlplus.exe"
+        ],
+        "absolute_path_globs": {
+          "windows": [
+            "C:\\oracle\\instantclient*\\sqlplus.exe",
+            "C:\\oracle\\product\\*\\*\\bin\\sqlplus.exe",
+            "C:\\app\\*\\product\\*\\client_1\\bin\\sqlplus.exe",
+            "C:\\app\\*\\product\\*\\dbhome_1\\bin\\sqlplus.exe",
+            "C:\\instantclient*\\sqlplus.exe",
+            "C:\\Program Files\\Oracle\\instantclient*\\sqlplus.exe",
+            "C:\\Users\\*\\Downloads\\instantclient*\\sqlplus.exe",
+            "C:\\Users\\*\\Downloads\\instantclient*\\*\\sqlplus.exe"
+          ],
+          "darwin": [
+            "/opt/homebrew/bin/sqlplus",
+            "/usr/local/bin/sqlplus",
+            "/opt/oracle/instantclient*/sqlplus",
+            "~/Downloads/instantclient*/sqlplus"
+          ],
+          "linux": [
+            "/usr/lib/oracle/*/client64/bin/sqlplus",
+            "/opt/oracle/instantclient*/sqlplus",
+            "/usr/local/instantclient*/sqlplus",
+            "~/Downloads/instantclient*/sqlplus"
+          ]
+        }
+      },
+      "install_hint": "Install the Oracle Instant Client 'Basic' and 'SQL*Plus' packages from oracle.com/database/technologies/instant-client, then put its directory on PATH."
+    },
+    {
+      "id": "sqlcl",
+      "kind": "cli",
+      "command": "sql",
+      "args": [],
+      "credential_injection": "oracle_login_script",
+      "discovery": {
+        "binary_names": [
+          "sql"
+        ],
+        "absolute_path_globs": {
+          "windows": [
+            "C:\\sqlcl\\bin\\sql.exe",
+            "C:\\Program Files\\sqlcl\\bin\\sql.exe",
+            "C:\\Users\\*\\Downloads\\sqlcl*\\bin\\sql.exe"
+          ],
+          "darwin": [
+            "/opt/homebrew/bin/sql",
+            "/usr/local/bin/sql",
+            "/opt/sqlcl/bin/sql",
+            "~/Downloads/sqlcl*/bin/sql"
+          ],
+          "linux": [
+            "/opt/sqlcl/bin/sql",
+            "/usr/local/sqlcl/bin/sql",
+            "~/Downloads/sqlcl*/bin/sql"
+          ]
+        }
+      },
+      "install_hint": "Download Oracle SQLcl from oracle.com/database/sqldeveloper/technologies/sqlcl and put its bin directory on PATH. It needs a Java 11 or newer runtime."
+    },
+    {
+      "id": "oracle-web",
+      "kind": "browser",
+      "command": "{{.ConsoleURL}}",
+      "args": [],
+      "credential_injection": "clipboard"
+    }
+  ],
+  "clickhouse": [
+    {
+      "id": "clickhouse-client",
+      "kind": "cli",
+      "command": "clickhouse-client",
+      "args": [],
+      "credential_injection": "clickhouse_config_file",
+      "discovery": {
+        "binary_names": [
+          "clickhouse-client"
+        ],
+        "absolute_path_globs": {
+          "darwin": [
+            "/opt/homebrew/bin/clickhouse-client",
+            "/usr/local/bin/clickhouse-client"
+          ],
+          "linux": [
+            "/usr/bin/clickhouse-client"
+          ]
+        }
+      },
+      "install_hint": "macOS 'brew install clickhouse', Linux 'curl https://clickhouse.com/ | sh', Windows: download clickhouse.exe from clickhouse.com/docs/install and put it on PATH."
+    }
+  ],
+  "minio": [
+    {
+      "id": "mc-shell",
+      "kind": "cli",
+      "command": "mc",
+      "args": [],
+      "credential_injection": "minio_mc_shell",
+      "discovery": {
+        "binary_names": [
+          "mc"
+        ],
+        "windows_app_paths": [
+          "mc.exe"
+        ],
+        "absolute_path_globs": {
+          "windows": [
+            "C:\\Program Files\\MinIO\\mc.exe",
+            "C:\\mc\\mc.exe"
+          ],
+          "darwin": [
+            "/opt/homebrew/bin/mc",
+            "/usr/local/bin/mc"
+          ],
+          "linux": [
+            "/usr/bin/mc",
+            "/usr/local/bin/mc"
+          ]
+        }
+      },
+      "install_hint": "Install the MinIO client: macOS 'brew install minio/stable/mc', Linux download mc from dl.min.io/client/mc/release and chmod +x it, Windows download mc.exe from the same place and put it on PATH."
+    },
+    {
+      "id": "minio-console",
+      "kind": "browser",
+      "command": "{{.ConsoleURL}}",
+      "args": [],
+      "credential_injection": "clipboard"
+    }
+  ],
+  "qdrant": [
+    {
+      "id": "qdrant-dashboard",
+      "kind": "browser",
+      "command": "{{.ConsoleURL}}",
+      "args": [],
+      "credential_injection": "none"
+    }
+  ],
+  "langfuse": [
+    {
+      "id": "langfuse-cli",
+      "kind": "cli",
+      "command": "langfuse",
+      "args": [],
+      "credential_injection": "langfuse_cli_shell",
+      "discovery": {
+        "binary_names": [
+          "langfuse"
+        ],
+        "windows_app_paths": [
+          "langfuse.cmd"
+        ],
+        "absolute_path_globs": {
+          "windows": [
+            "C:\\Program Files\\nodejs\\langfuse.cmd",
+            "C:\\Users\\*\\AppData\\Roaming\\npm\\langfuse.cmd"
+          ],
+          "darwin": [
+            "/opt/homebrew/bin/langfuse",
+            "/usr/local/bin/langfuse"
+          ],
+          "linux": [
+            "/usr/bin/langfuse",
+            "/usr/local/bin/langfuse",
+            "/usr/lib/node_modules/.bin/langfuse"
+          ]
+        }
+      },
+      "install_hint": "Install the Langfuse CLI with 'npm install -g langfuse-cli' (it needs Node 20 or newer). The command it installs is 'langfuse'."
+    },
+    {
+      "id": "langfuse-web",
+      "kind": "browser",
+      "command": "{{.ConsoleURL}}",
+      "args": [],
+      "credential_injection": "none"
+    }
+  ],
+  "metabase": [
+    {
+      "id": "metabase-web",
+      "kind": "browser",
+      "command": "{{.ConsoleURL}}",
+      "args": [],
+      "credential_injection": "none"
+    }
+  ]
+}
