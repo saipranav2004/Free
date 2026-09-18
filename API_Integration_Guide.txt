@@ -1,0 +1,263 @@
+================================================================================
+SECRET SCANNER API -- INTEGRATION GUIDE
+================================================================================
+ 
+ 
+BASE URL
+--------------------------------------------------------------------------------
+https://js-dev.adapid.link
+ 
+All endpoints below are relative to this. For example, "GET /api/findings"
+means "GET https://js-dev.adapid.link/api/findings".
+ 
+ 
+AUTHENTICATION
+--------------------------------------------------------------------------------
+Every request (except /health) needs this header:
+ 
+  X-Dashboard-Key: <the key we gave you>
+ 
+If the header is missing or wrong, you get back:
+  Status: 401
+  Body:   {"error": "unauthorized"}
+ 
+IMPORTANT -- keep this key on your SERVER, not in browser JavaScript.
+If you put it directly in frontend code that runs in someone's browser,
+anyone can open developer tools and read it out of the page, and then
+they'd have permanent read access to every finding. The correct pattern:
+ 
+  Your dashboard's browser code --> Your own backend --> Our API
+ 
+ 
+================================================================================
+ENDPOINT 1: GET /api/findings
+This is the one endpoint that gives you everything -- both the
+"Findings" list AND everything you need to build an "Overview" summary.
+================================================================================
+ 
+REQUEST
+--------------------------------------------------------------------------------
+  GET /api/findings
+  Header: X-Dashboard-Key: <your key>
+ 
+Example (curl, to try it yourself first):
+ 
+  curl -H "X-Dashboard-Key: <your key>" https://js-dev.adapid.link/api/findings
+ 
+RESPONSE
+--------------------------------------------------------------------------------
+  Status: 200
+  Body:
+  {
+    "count": 11,
+    "findings": [
+      {
+        "finding_id": "test-sample-client/test-sample/8a97bcc.../project-h-low-risk-test/config.py:2:generic_password_assignment",
+        "client_id": "test-sample-client",
+        "repository": "test-sample",
+        "branch": "feature/branch-risk-test",
+        "commit_id": "8a97bccc...",
+        "author": "Naresh <naresh@das357.onmicrosoft.com>",
+        "created_at": "2026-09-18 12:17:39",
+        "detector": "generic_password_assignment",
+        "severity": "medium",
+        "file_path": "project-h-low-risk-test/config.py",
+        "line_number": 2,
+        "redacted": "pass****************4tN\"",
+        "verification_status": "UNSUPPORTED",
+        "risk_tier": "LOW",
+        "recommended_action": "LOG_ONLY",
+        "codecommit_uri": "https://ap-south-1.console.aws.amazon.com/codesuite/codecommit/repositories/test-sample/browse/8a97bccc.../--/project-h-low-risk-test/config.py?region=ap-south-1%22
+      }
+    ]
+  }
+ 
+FIELD-BY-FIELD, IN PLAIN LANGUAGE
+--------------------------------------------------------------------------------
+  finding_id            A unique ID for this exact finding. Use it as your
+                        React/UI list "key" -- it won't collide with
+                        anything else, ever.
+ 
+  client_id             Which customer/account this finding belongs to.
+                        You'll only ever see one value here today
+                        ("test-sample-client"), but the field exists
+                        because the system supports more than one.
+ 
+  repository            The CodeCommit repository name the secret was
+                        found in.
+ 
+  branch                Which branch was pushed (e.g. "master",
+                        "feature/branch-risk-test").
+ 
+  commit_id             The full Git commit hash the secret was
+                        introduced in (or last seen in).
+ 
+  author                Who pushed it, as "Name <email>" -- straight from
+                        their Git commit author info.
+ 
+  created_at            When we detected it. UTC time, formatted like
+                        "2026-09-18 12:17:39" with NO timezone letter at
+                        the end. Convert it in your own code by treating
+                        it as UTC and converting to whatever timezone your
+                        users expect (see the "TIMEZONE GOTCHA" note
+                        below -- this one bit us once, worth reading).
+ 
+  detector              Which rule matched -- e.g. "aws_access_key_id",
+                        "slack_webhook", "mongodb_connection_string",
+                        "github_token", "generic_password_assignment".
+                        There are dozens of these; treat it as an opaque
+                        label to show the user, not something to
+                        hard-code a list of.
+ 
+  severity              The detector's OWN opinion of how bad this type
+                        of secret usually is: "high" or "medium". This is
+                        an input to risk_tier below, not the final
+                        answer -- use risk_tier for anything
+                        user-facing.
+ 
+  file_path             Path to the file inside the repository.
+ 
+  line_number            Line number inside that file.
+ 
+  redacted              The secret's value, safely masked (e.g.
+                        "AKIA****************ZZZZ"). We never return the
+                        real secret over this API -- this is the only
+                        form of it you'll ever see.
+ 
+  verification_status   Whether we confirmed the secret is actually still
+                        live. Today this is ALWAYS "UNSUPPORTED" -- by
+                        design, this deployment's AWS access is
+                        read-only-CodeCommit only, with no permission to
+                        check IAM key liveness. Don't build UI that
+                        implies we've confirmed something is safe or
+                        dangerous based on this field; it just means "not
+                        checked."
+ 
+  risk_tier             The actionable severity: "CRITICAL", "HIGH",
+                        "MEDIUM", or "LOW". This is what should drive your
+                        UI's color-coding and sorting. NOTE: "CRITICAL"
+                        cannot currently appear (it requires the liveness
+                        check mentioned above), so don't be surprised if
+                        you never see it in real data yet.
+ 
+  recommended_action    A suggested next step: "LOG_ONLY", "NOTIFY_SOC",
+                        "PAGE_ON_CALL", or "TRIGGER_REMEDIATION" -- rising
+                        urgency in that order. Purely informational; we
+                        don't page anyone automatically.
+ 
+  codecommit_uri        A ready-to-click link straight to that exact
+                        file, line, and commit in the AWS CodeCommit
+                        console. Can be null if we didn't have enough
+                        information to build it (older data, or a client
+                        with no region on file) -- always check for null
+                        before rendering a link.
+ 
+ 
+HOW TO BUILD AN "OVERVIEW" PAGE FROM THIS SAME DATA
+--------------------------------------------------------------------------------
+There's no separate "overview" endpoint -- call /api/findings once and
+compute the summary yourself, the same way our own dashboard does:
+ 
+  - Total findings          = findings.length
+  - Critical / High / Medium / Low counts
+                             = count findings where risk_tier equals each
+  - Repositories affected   = number of DISTINCT values of `repository`
+                              across all findings
+  - "Most recent" list      = the findings array is already sorted
+                              newest-first by created_at -- just take
+                              the first N
+ 
+GROUPING MULTIPLE FINDINGS FROM ONE PUSH
+--------------------------------------------------------------------------------
+A single push can introduce several secrets at once (e.g. a new folder
+with three config files). If you want your UI to show "one push, N
+findings" instead of N separate unrelated-looking rows, group the array
+by `commit_id` before rendering -- every finding from the same push
+shares the same commit_id.
+ 
+ 
+================================================================================
+ENDPOINT 2: GET /api/allowlist
+Lists every finding a human has already reviewed and marked safe.
+================================================================================
+ 
+REQUEST
+  GET /api/allowlist
+  Header: X-Dashboard-Key: <your key>
+ 
+RESPONSE
+  Status: 200
+  Body:
+  {
+    "entries": [
+      {
+        "client_id": "test-sample-client",
+        "file_path": "config.py",
+        "detector": "aws_access_key_id",
+        "redacted": "AKIA****MNOP",
+        "reason": "rotated",
+        "dismissed_by": "dashboard user",
+        "dismissed_at": "2026-09-18T12:01:44+00:00"
+      }
+    ]
+  }
+ 
+You probably don't need to call this directly -- GET /api/findings already
+excludes anything on this list automatically. This endpoint exists mainly
+so a UI can show a separate "previously dismissed" view if you want one.
+ 
+ 
+================================================================================
+ENDPOINT 3: POST /api/allowlist
+"Mark this finding as safe" -- a known fixture, already-rotated secret,
+etc. Once marked, it stops appearing in GET /api/findings immediately.
+================================================================================
+ 
+REQUEST
+  POST /api/allowlist
+  Header: X-Dashboard-Key: <your key>
+  Header: Content-Type: application/json
+  Body:
+  {
+    "client_id": "test-sample-client",
+    "file_path": "config.py",
+    "detector": "aws_access_key_id",
+    "redacted": "AKIA****MNOP",
+    "reason": "rotated"
+  }
+ 
+All four of client_id, file_path, detector, and redacted are REQUIRED --
+copy them exactly from the finding object you got back from
+GET /api/findings. `reason` is optional free text, shown back to whoever
+looks at the allowlist later.
+ 
+RESPONSE
+  Status: 200
+  Body:
+  {
+    "ok": true,
+    "entry": { ... the saved entry, same shape as endpoint 2 ... }
+  }
+ 
+ 
+================================================================================
+ENDPOINT 4: DELETE /api/allowlist
+Undo a "mark as safe" -- the finding will reappear in
+GET /api/findings again (assuming it's still in our records).
+================================================================================
+ 
+REQUEST
+  DELETE /api/allowlist
+  Header: X-Dashboard-Key: <your key>
+  Header: Content-Type: application/json
+  Body: (same four required fields as POST, no "reason" needed)
+  {
+    "client_id": "test-sample-client",
+    "file_path": "config.py",
+    "detector": "aws_access_key_id",
+    "redacted": "AKIA****MNOP"
+  }
+ 
+RESPONSE
+  Status: 200
+  Body: {"ok": true}       (ok is false if nothing matched -- not an error)
