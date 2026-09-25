@@ -1,0 +1,186 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ===========================================================================
+ * Phase 4 tokens. Light is the base; .dark overrides. Values are R G B
+ * triplets so Tailwind's rgb(var(--x) / <alpha-value>) opacity modifiers work.
+ * ======================================================================== */
+:root {
+  --bg-app: 247 248 250;
+  --bg-surface: 255 255 255;
+  --bg-subtle: 241 243 246;
+  --bg-hover: 241 243 246;
+
+  --border: 227 231 236;
+  --border-strong: 203 210 219;
+
+  --text-primary: 15 23 42;
+  --text-secondary: 71 85 105;
+  --text-tertiary: 122 135 155;
+
+  /* The one accent. Four permitted uses: primary button, active nav,
+     link, focus ring. Nothing else. */
+  --accent: 37 99 235;
+  --accent-hover: 29 78 216;
+  --accent-soft: 235 242 254;
+
+  /* Semantic — state only, never category, never decoration. */
+  --danger: 190 38 38;
+  --danger-soft: 254 238 238;
+  /* A solid fill that carries white text in BOTH themes — used by the one
+     filled marker in the system (break-glass). The semantic --danger is tuned
+     for text on the page background and is too light in dark mode to fill. */
+  --danger-fill: 185 28 28;
+  --warn: 180 105 10;
+  --warn-soft: 254 246 231;
+  --ok: 21 128 84;
+  --ok-soft: 233 247 240;
+
+  color-scheme: light;
+}
+
+.dark {
+  --bg-app: 10 12 16;
+  --bg-surface: 16 19 24;
+  --bg-subtle: 23 27 34;
+  --bg-hover: 27 32 41;
+
+  --border: 35 41 53;
+  --border-strong: 51 59 73;
+
+  --text-primary: 244 246 248;
+  --text-secondary: 168 177 192;
+  --text-tertiary: 107 116 136;
+
+  --accent: 59 130 246;
+  --accent-hover: 96 165 250;
+  --accent-soft: 23 37 62;
+
+  --danger: 239 116 116;
+  --danger-soft: 47 24 26;
+  --danger-fill: 153 27 27;
+  --warn: 226 165 78;
+  --warn-soft: 45 34 18;
+  --ok: 74 190 136;
+  --ok-soft: 17 40 32;
+
+  color-scheme: dark;
+}
+
+/* Root font-size is back to the browser default 16px (Phase 4.1). Density
+   comes from the type scale and the 4px grid, not from shrinking the root —
+   so "4px" is 4px, at every viewport, in every browser. */
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  @apply bg-app font-sans text-base font-normal text-secondary antialiased;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Numbers never reflow as digits change. */
+table,
+.tabular,
+.font-mono {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Scrollbar gutter reserved so a page that grows past the fold doesn't shift
+   horizontally. This is the Chrome/Edge parity fix (Phase 6): both are
+   Chromium and both overlay-scroll differently from Firefox, so we take the
+   gutter deterministically instead of letting layout depend on content
+   height. */
+html {
+  scrollbar-gutter: stable;
+}
+
+/* Focus: visible for keyboard, absent for mouse. The ring is the ONLY other
+   sanctioned use of the accent. */
+:focus:not(:focus-visible) {
+  outline: none;
+}
+:focus-visible {
+  outline: 2px solid rgb(var(--accent));
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+::selection {
+  background-color: rgb(var(--accent) / 0.2);
+}
+
+/* Thin, theme-aware scrollbars so the light theme doesn't inherit a dark OS
+   track, and so Chrome and Edge render the same width. */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background-color: rgb(var(--border-strong) / 0.8);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: rgb(var(--border-strong));
+}
+.scrollbar-none {
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+/* Skeletons match the SHAPE of what's loading (Phase 4.7), so they're plain
+   blocks the caller sizes — no shimmer sweep, which reads as decoration. */
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+.skeleton {
+  background-color: rgb(var(--bg-subtle));
+  border-radius: 4px;
+  animation: pulse-soft 1.6s ease-in-out infinite;
+}
+
+/* Overlay entrance — the only entrance animation in the system. */
+@keyframes overlay-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes panel-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@keyframes drawer-in { from { transform: translateX(16px); opacity: 0; } to { transform: none; opacity: 1; } }
+.anim-overlay { animation: overlay-in 120ms ease-out; }
+.anim-panel { animation: panel-in 160ms cubic-bezier(0.16, 1, 0.3, 1); }
+.anim-drawer { animation: drawer-in 160ms cubic-bezier(0.16, 1, 0.3, 1); }
+
+/* The one ambient animation in the product: a live session's presence dot. */
+@keyframes ping-soft {
+  0% { transform: scale(1); opacity: 0.5; }
+  70%, 100% { transform: scale(2.4); opacity: 0; }
+}
+.dot-live::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background-color: currentColor;
+  animation: ping-soft 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  .anim-overlay,
+  .anim-panel,
+  .anim-drawer,
+  .skeleton,
+  .dot-live::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
