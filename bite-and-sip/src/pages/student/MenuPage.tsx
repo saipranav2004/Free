@@ -67,8 +67,8 @@ export function MenuPage() {
     <div className="min-h-dvh pb-28">
       <DemoRibbon />
       <StudentHeader />
-      <main className="mx-auto max-w-3xl px-4">
-        <section className="-mx-4 rounded-b-[1.75rem] bg-ink px-4 pt-2 pb-5 text-white">
+      <section className="rounded-b-[1.75rem] bg-ink px-4 pt-2 pb-5 text-white">
+        <div className="mx-auto max-w-3xl md:px-4">
           <p className="inline-flex min-h-9 items-center gap-1.5 rounded-full bg-brand px-3 text-sm font-bold text-ink">
             <IconPin size={16} />
             {table ? `Table ${table} · Pickup at the counter` : 'Pickup at the counter'}
@@ -78,7 +78,9 @@ export function MenuPage() {
           </h1>
           <p className="mt-1.5 text-sm text-white/75 sm:text-[15px]">Track it live and collect it at the counter when it’s ready.</p>
           {error && <p className="mt-2 text-sm font-semibold text-brand">{error} Showing the last menu we loaded.</p>}
-        </section>
+        </div>
+      </section>
+      <main className="mx-auto max-w-3xl px-4">
 
         {!isOpen && (
           <Banner tone="warning" title="We’re closed right now" className="my-3">

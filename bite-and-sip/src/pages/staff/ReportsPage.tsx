@@ -164,12 +164,10 @@ export function ReportsPage() {
           </div>
 
           <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
-            <section className="card p-4" aria-labelledby="trend-h">
+            <section className="card min-w-0 p-4" aria-labelledby="trend-h">
               <h2 id="trend-h" className="font-extrabold">{range.from === range.to ? 'Sales by hour' : 'Sales by day'}</h2>
               {range.from === range.to ? (
-                <BarChart
-                  data={summary.by_hour.map((h) => ({ key: String(h.hour), label: hourLabel(h.hour), value: h.sales, detail: `${h.orders} orders` }))}
-                />
+                <BarChart data={hoursFor(summary.by_hour)} />
               ) : (
                 <BarChart
                   data={enumerateDays(range.from, range.to).map((d) => {
@@ -214,6 +212,18 @@ export function ReportsPage() {
   )
 }
 
+/** A full trading day (8am–8pm, widened if orders fall outside), so quiet hours show as gaps. */
+function hoursFor(rows: SalesSummary['by_hour']) {
+  const first = Math.min(8, ...rows.map((r) => r.hour))
+  const last = Math.max(20, ...rows.map((r) => r.hour))
+  const out = []
+  for (let h = first; h <= last; h++) {
+    const r = rows.find((x) => x.hour === h)
+    out.push({ key: String(h), label: hourLabel(h), value: r?.sales ?? 0, detail: `${r?.orders ?? 0} orders` })
+  }
+  return out
+}
+
 function enumerateDays(from: string, to: string) {
   const out: string[] = []
   for (let d = from; d <= to; d = addDays(d, 1)) out.push(d)
@@ -250,7 +260,7 @@ function BarChart({ data }: { data: { key: string; label: string; value: number;
   const step = niceStep(max)
   const top = Math.ceil(max / step) * step
   const ticks = Array.from({ length: Math.floor(top / step) + 1 }, (_, i) => i * step)
-  const showEvery = data.length > 16 ? Math.ceil(data.length / 8) : 1
+  const showEvery = data.length > 7 ? Math.ceil(data.length / 6) : 1
   const current = data.find((d) => d.key === active)
 
   return (
@@ -266,7 +276,7 @@ function BarChart({ data }: { data: { key: string; label: string; value: number;
             <button
               key={d.key}
               type="button"
-              className="group relative flex h-full flex-1 items-end focus:outline-none"
+              className="group relative flex h-full min-w-0 flex-1 items-end focus:outline-none"
               onMouseEnter={() => setActive(d.key)}
               onMouseLeave={() => setActive(null)}
               onFocus={() => setActive(d.key)}
@@ -289,7 +299,7 @@ function BarChart({ data }: { data: { key: string; label: string; value: number;
       </div>
       <div className="mt-1 flex gap-[2px] pl-12" aria-hidden="true">
         {data.map((d, i) => (
-          <span key={d.key} className="flex-1 truncate text-center text-[11px] text-muted">{i % showEvery === 0 ? d.label : ''}</span>
+          <span key={d.key} className="min-w-0 flex-1 overflow-hidden text-center text-[11px] whitespace-nowrap text-muted">{i % showEvery === 0 ? d.label : ''}</span>
         ))}
       </div>
       <figcaption className="sr-only">Sales per period. Hover or focus a bar for its value.</figcaption>

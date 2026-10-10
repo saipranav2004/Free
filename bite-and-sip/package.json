@@ -1,13 +1,22 @@
 {
   "name": "bite-and-sip",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:demo": "VITE_DEMO_MODE=true vite",
     "build": "tsc -b && vite build",
-    "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "lint": "oxlint src tests",
+    "typecheck": "tsc -b",
+    "test": "vitest run --project unit",
+    "test:db": "vitest run --project db",
+    "test:e2e": "playwright test",
+    "test:e2e:supabase": "E2E_BACKEND=supabase playwright test",
+    "seed:generate": "node scripts/generate-seed.mjs",
+    "staff:create": "node scripts/create-staff.mjs",
+    "check": "npm run lint && npm run typecheck && npm test && npm run build"
   },
   "dependencies": {
     "@fontsource-variable/plus-jakarta-sans": "^5.3.0",
@@ -38,5 +47,8 @@
     "typescript": "~6.0.2",
     "vite": "^8.3.0",
     "vitest": "^5.0.3"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }

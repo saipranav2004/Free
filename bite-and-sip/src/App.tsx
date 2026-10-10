@@ -1,4 +1,4 @@
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, HashRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { ToastProvider } from './components/ui'
 import { NotFound } from './pages/NotFound'
 import { LoginPage } from './pages/staff/LoginPage'
@@ -52,12 +52,15 @@ export function Providers({ children }: { children: React.ReactNode }) {
   )
 }
 
+// Hash routing is only for static previews that can't rewrite deep links to index.html.
+const Router = import.meta.env.VITE_ROUTER === 'hash' ? HashRouter : BrowserRouter
+
 export default function App() {
   return (
-    <BrowserRouter>
+    <Router>
       <Providers>
         <AppRoutes />
       </Providers>
-    </BrowserRouter>
+    </Router>
   )
 }

@@ -179,3 +179,20 @@ test('unknown routes and foreign orders are handled', async ({ page }) => {
   await page.goto('/staff/settings')
   await expect(page.getByRole('heading', { name: 'Staff sign in' })).toBeVisible()
 })
+
+test('tablet and small-phone layouts do not overflow', async ({ page }) => {
+  for (const size of [{ width: 820, height: 1180 }, { width: 360, height: 740 }]) {
+    await page.setViewportSize(size)
+    for (const path of ['/', '/cart', '/orders']) {
+      await page.goto(path)
+      await page.waitForLoadState('networkidle')
+      await expectNoHorizontalOverflow(page)
+    }
+    await signIn(page, KITCHEN)
+    for (const path of ['/staff', '/staff/menu']) {
+      await page.goto(path)
+      await page.waitForLoadState('networkidle')
+      await expectNoHorizontalOverflow(page)
+    }
+  }
+})

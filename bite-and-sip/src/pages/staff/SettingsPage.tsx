@@ -14,7 +14,8 @@ import { useStaffSession } from '../../state/staffSession'
 
 export function publicSiteUrl() {
   const configured = import.meta.env.VITE_PUBLIC_SITE_URL as string | undefined
-  return (configured || window.location.origin).replace(/\/$/, '')
+  const origin = (configured || window.location.origin + (import.meta.env.VITE_ROUTER === 'hash' ? window.location.pathname : '')).replace(/\/$/, '')
+  return import.meta.env.VITE_ROUTER === 'hash' ? `${origin}/#` : origin
 }
 
 export function SettingsPage() {

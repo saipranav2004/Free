@@ -293,6 +293,15 @@ describe('staff permissions', () => {
 })
 
 describe('order and payment state machine', () => {
+  it('lets trusted admin tooling (secret key) update orders, still within the state machine', async () => {
+    const { order } = await newOrder()
+    const ok = await admin.from('orders').update({ status: 'preparing' }).eq('id', order.id).select('status').single()
+    expect(ok.error).toBeNull()
+    expect(ok.data?.status).toBe('preparing')
+    const bad = await admin.from('orders').update({ status: 'placed' }).eq('id', order.id)
+    expect(bad.error?.message).toBe('invalid_transition')
+  })
+
   it('follows placed → preparing → ready → completed and rejects skips', async () => {
     const { order } = await newOrder()
     const skip = await kitchen.from('orders').update({ status: 'completed' }).eq('id', order.id)
@@ -403,6 +412,28 @@ describe('sales_summary', () => {
 })
 
 describe('realtime', () => {
+  // After `supabase start`/`db reset` the Realtime service needs a few seconds before
+  // it delivers messages. Warm it up so these tests measure behaviour, not cold start.
+  // (The app itself polls as a fallback for exactly this reason.)
+  beforeAll(async () => {
+    const deadline = Date.now() + 60_000
+    while (Date.now() < deadline) {
+      const { order } = await newOrder()
+      const probe = anonClient()
+      let got = false
+      const ch = probe.channel(`order:${order.track_key}`, { config: { private: false } })
+      ch.on('broadcast', { event: 'order_changed' }, () => (got = true))
+      await new Promise<void>((resolve) => ch.subscribe((s) => (s === 'SUBSCRIBED' || s === 'CHANNEL_ERROR' || s === 'TIMED_OUT') && resolve()))
+      const upd = await admin.from('orders').update({ status: 'cancelled', cancel_reason: 'warm-up' }).eq('id', order.id)
+      if (upd.error) throw new Error(`warm-up update failed: ${upd.error.message}`)
+      const until = Date.now() + 3000
+      while (!got && Date.now() < until) await new Promise((r) => setTimeout(r, 100))
+      await probe.removeChannel(ch)
+      if (got) return
+    }
+    throw new Error('Realtime did not become ready within 60 s')
+  }, 70_000)
+
   it('notifies the student device on its public order topic without personal data', async () => {
     const { order, token } = await newOrder()
     const student = anonClient()
@@ -439,14 +470,19 @@ describe('realtime', () => {
       })
     const k = await subscribe(kitchen, seenByKitchen, 'staff-orders-test')
     const i = await subscribe(intruder, seenByIntruder, 'intruder-orders-test')
-    await new Promise((r) => setTimeout(r, 1000))
-    const { order } = await newOrder()
-    await waitFor(() => seenByKitchen.includes(order.id))
+    // Postgres Changes needs a moment after a cold start; keep placing orders until one arrives.
+    const placed: string[] = []
+    const deadline = Date.now() + 45_000
+    while (!placed.some((id) => seenByKitchen.includes(id))) {
+      if (Date.now() > deadline) throw new Error('staff never received an order event')
+      placed.push((await newOrder()).order.id)
+      await new Promise((r) => setTimeout(r, 2000))
+    }
     await new Promise((r) => setTimeout(r, 1500))
-    expect(seenByIntruder).not.toContain(order.id)
+    for (const id of placed) expect(seenByIntruder).not.toContain(id)
     await kitchen.removeChannel(k)
     await intruder.removeChannel(i)
-  }, 20000)
+  }, 60000)
 })
 
 describe('storage', () => {

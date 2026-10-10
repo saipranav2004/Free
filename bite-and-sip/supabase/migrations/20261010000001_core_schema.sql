@@ -13,7 +13,8 @@
 
 create schema if not exists private;
 revoke all on schema private from public;
-grant usage on schema private to authenticated;
+-- Policies and triggers call private helpers as the requesting role.
+grant usage on schema private to authenticated, service_role;
 
 -- New objects in public must be granted explicitly (Supabase grants all by default).
 alter default privileges for role postgres in schema public revoke all on tables from anon, authenticated;
@@ -166,9 +167,9 @@ as $$ select coalesce(private.current_staff_role() = 'owner', false) $$;
 revoke all on function private.current_staff_role() from public;
 revoke all on function private.is_staff() from public;
 revoke all on function private.is_owner() from public;
-grant execute on function private.current_staff_role() to authenticated;
-grant execute on function private.is_staff() to authenticated;
-grant execute on function private.is_owner() to authenticated;
+grant execute on function private.current_staff_role() to authenticated, service_role;
+grant execute on function private.is_staff() to authenticated, service_role;
+grant execute on function private.is_owner() to authenticated, service_role;
 
 -- Normalises an Indian mobile number; returns null when invalid.
 create function private.normalize_phone(p text)

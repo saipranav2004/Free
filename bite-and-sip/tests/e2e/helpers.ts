@@ -12,12 +12,15 @@ export const KITCHEN = {
 
 export async function signIn(page: Page, who: { email: string; password: string }) {
   await page.goto('/staff/login')
+  const email = page.getByLabel('Email')
   const signOut = page.getByRole('button', { name: 'Sign out' })
-  if (await signOut.isVisible().catch(() => false)) {
+  // Already signed in → the login page redirects to the board; sign out first.
+  await expect(email.or(signOut)).toBeVisible()
+  if (await signOut.isVisible()) {
     await signOut.click()
-    await page.goto('/staff/login')
+    await expect(email).toBeVisible()
   }
-  await page.getByLabel('Email').fill(who.email)
+  await email.fill(who.email)
   await page.getByLabel('Password').fill(who.password)
   await page.getByRole('button', { name: 'Sign in' }).click()
   await expect(page.getByRole('heading', { name: 'Orders' })).toBeVisible()
