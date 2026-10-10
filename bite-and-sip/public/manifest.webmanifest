@@ -1,0 +1,13 @@
+{
+  "name": "Bite & Sip",
+  "short_name": "Bite & Sip",
+  "description": "Order from Bite & Sip, the college café.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FFFBF2",
+  "theme_color": "#111111",
+  "icons": [
+    { "src": "/brand/logo-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/brand/logo-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

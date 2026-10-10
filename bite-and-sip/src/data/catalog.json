@@ -1,0 +1,255 @@
+{
+  "settings": {
+    "cafe_name": "Bite & Sip",
+    "is_open": true,
+    "closed_message": "We're closed right now. Please check back soon.",
+    "upi_id": "demo.bitesip@exampleupi",
+    "upi_payee_name": "Bite & Sip"
+  },
+  "tables": [
+    "T1",
+    "T2",
+    "T3",
+    "T4",
+    "T5",
+    "T6",
+    "T7",
+    "T8",
+    "T9",
+    "T10",
+    "T11",
+    "T12"
+  ],
+  "categories": [
+    {
+      "id": "6c1f0d4e-0001-4a7e-9a10-000000000001",
+      "name": "Beverages",
+      "sort_order": 1
+    },
+    {
+      "id": "6c1f0d4e-0001-4a7e-9a10-000000000002",
+      "name": "Snacks",
+      "sort_order": 2
+    },
+    {
+      "id": "6c1f0d4e-0001-4a7e-9a10-000000000003",
+      "name": "Meals",
+      "sort_order": 3
+    },
+    {
+      "id": "6c1f0d4e-0001-4a7e-9a10-000000000004",
+      "name": "Combos",
+      "sort_order": 4
+    }
+  ],
+  "items": [
+    {
+      "id": "8a2b0c11-0002-4b1e-8c20-000000000001",
+      "category_id": "6c1f0d4e-0001-4a7e-9a10-000000000001",
+      "name": "Masala Chai",
+      "description": "Kadak tea brewed with ginger and cardamom.",
+      "price": 15,
+      "is_veg": true,
+      "is_available": true,
+      "is_popular": true,
+      "sort_order": 1,
+      "addons": []
+    },
+    {
+      "id": "8a2b0c11-0002-4b1e-8c20-000000000002",
+      "category_id": "6c1f0d4e-0001-4a7e-9a10-000000000001",
+      "name": "Filter Coffee",
+      "description": "South Indian decoction coffee with frothy milk.",
+      "price": 20,
+      "is_veg": true,
+      "is_available": true,
+      "is_popular": false,
+      "sort_order": 2,
+      "addons": []
+    },
+    {
+      "id": "8a2b0c11-0002-4b1e-8c20-000000000003",
+      "category_id": "6c1f0d4e-0001-4a7e-9a10-000000000001",
+      "name": "Cold Coffee",
+      "description": "Chilled coffee blended with milk.",
+      "price": 40,
+      "is_veg": true,
+      "is_available": true,
+      "is_popular": false,
+      "sort_order": 3,
+      "addons": [
+        {
+          "id": "b3c4d5e6-0003-4c2f-9d30-000000000005",
+          "name": "Ice cream scoop",
+          "price": 20,
+          "sort_order": 1
+        }
+      ]
+    },
+    {
+      "id": "8a2b0c11-0002-4b1e-8c20-000000000004",
+      "category_id": "6c1f0d4e-0001-4a7e-9a10-000000000001",
+      "name": "Fresh Lime Soda",
+      "description": "Sweet or salted, made to order.",
+      "price": 25,
+      "is_veg": true,
+      "is_available": true,
+      "is_popular": false,
+      "sort_order": 4,
+      "addons": []
+    },
+    {
+      "id": "8a2b0c11-0002-4b1e-8c20-000000000005",
+      "category_id": "6c1f0d4e-0001-4a7e-9a10-000000000001",
+      "name": "Chocolate Shake",
+      "description": "Thick chocolate milkshake.",
+      "price": 45,
+      "is_veg": true,
+      "is_available": true,
+      "is_popular": false,
+      "sort_order": 5,
+      "addons": []
+    },
+    {
+      "id": "8a2b0c11-0002-4b1e-8c20-000000000006",
+      "category_id": "6c1f0d4e-0001-4a7e-9a10-000000000002",
+      "name": "Crispy Samosa",
+      "description": "Two samosas with mint and tamarind chutney.",
+      "price": 15,
+      "is_veg": true,
+      "is_available": true,
+      "is_popular": true,
+      "sort_order": 1,
+      "addons": []
+    },
+    {
+      "id": "8a2b0c11-0002-4b1e-8c20-000000000007",
+      "category_id": "6c1f0d4e-0001-4a7e-9a10-000000000002",
+      "name": "Veg Sandwich",
+      "description": "Grilled sandwich with vegetables and green chutney.",
+      "price": 50,
+      "is_veg": true,
+      "is_available": true,
+      "is_popular": false,
+      "sort_order": 2,
+      "addons": [
+        {
+          "id": "b3c4d5e6-0003-4c2f-9d30-000000000006",
+          "name": "Cheese slice",
+          "price": 15,
+          "sort_order": 1
+        }
+      ]
+    },
+    {
+      "id": "8a2b0c11-0002-4b1e-8c20-000000000008",
+      "category_id": "6c1f0d4e-0001-4a7e-9a10-000000000002",
+      "name": "Paneer Wrap",
+      "description": "Spiced paneer tikka rolled in a soft wrap.",
+      "price": 60,
+      "is_veg": true,
+      "is_available": false,
+      "is_popular": false,
+      "sort_order": 3,
+      "addons": []
+    },
+    {
+      "id": "8a2b0c11-0002-4b1e-8c20-000000000009",
+      "category_id": "6c1f0d4e-0001-4a7e-9a10-000000000002",
+      "name": "Bread Omelette",
+      "description": "Two-egg masala omelette with toasted bread.",
+      "price": 35,
+      "is_veg": false,
+      "is_available": true,
+      "is_popular": false,
+      "sort_order": 4,
+      "addons": []
+    },
+    {
+      "id": "8a2b0c11-0002-4b1e-8c20-000000000010",
+      "category_id": "6c1f0d4e-0001-4a7e-9a10-000000000003",
+      "name": "College Special Maggi",
+      "description": "Spicy college-style Maggi cooked fresh with vegetables.",
+      "price": 40,
+      "is_veg": true,
+      "is_available": true,
+      "is_popular": true,
+      "sort_order": 1,
+      "addons": [
+        {
+          "id": "b3c4d5e6-0003-4c2f-9d30-000000000001",
+          "name": "Extra Cheese",
+          "price": 15,
+          "sort_order": 1
+        },
+        {
+          "id": "b3c4d5e6-0003-4c2f-9d30-000000000002",
+          "name": "Extra Masala",
+          "price": 5,
+          "sort_order": 2
+        },
+        {
+          "id": "b3c4d5e6-0003-4c2f-9d30-000000000003",
+          "name": "Extra Vegetables",
+          "price": 10,
+          "sort_order": 3
+        }
+      ]
+    },
+    {
+      "id": "8a2b0c11-0002-4b1e-8c20-000000000011",
+      "category_id": "6c1f0d4e-0001-4a7e-9a10-000000000003",
+      "name": "Veg Fried Rice",
+      "description": "Wok-tossed rice with vegetables and soy.",
+      "price": 80,
+      "is_veg": true,
+      "is_available": true,
+      "is_popular": false,
+      "sort_order": 2,
+      "addons": [
+        {
+          "id": "b3c4d5e6-0003-4c2f-9d30-000000000004",
+          "name": "Extra Paneer",
+          "price": 25,
+          "sort_order": 1
+        }
+      ]
+    },
+    {
+      "id": "8a2b0c11-0002-4b1e-8c20-000000000012",
+      "category_id": "6c1f0d4e-0001-4a7e-9a10-000000000003",
+      "name": "Egg Fried Rice",
+      "description": "Fried rice with scrambled egg and spring onion.",
+      "price": 90,
+      "is_veg": false,
+      "is_available": true,
+      "is_popular": false,
+      "sort_order": 3,
+      "addons": []
+    },
+    {
+      "id": "8a2b0c11-0002-4b1e-8c20-000000000013",
+      "category_id": "6c1f0d4e-0001-4a7e-9a10-000000000004",
+      "name": "Maggi + Chai Combo",
+      "description": "College Special Maggi with a Masala Chai. Saves ₹5.",
+      "price": 50,
+      "is_veg": true,
+      "is_available": true,
+      "is_popular": false,
+      "sort_order": 1,
+      "addons": []
+    },
+    {
+      "id": "8a2b0c11-0002-4b1e-8c20-000000000014",
+      "category_id": "6c1f0d4e-0001-4a7e-9a10-000000000004",
+      "name": "Samosa + Chai Combo",
+      "description": "Crispy Samosa with a Masala Chai. Saves ₹5.",
+      "price": 25,
+      "is_veg": true,
+      "is_available": true,
+      "is_popular": false,
+      "sort_order": 2,
+      "addons": []
+    }
+  ]
+}
