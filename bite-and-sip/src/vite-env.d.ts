@@ -6,5 +6,5 @@ interface ImportMetaEnv {
   readonly VITE_SUPABASE_ANON_KEY?: string
   readonly VITE_DEMO_MODE?: string
   readonly VITE_PUBLIC_SITE_URL?: string
-  readonly VITE_ROUTER?: 'hash' | 'browser'
+  readonly VITE_ROUTER?: 'hash' | 'memory' | 'browser'
 }

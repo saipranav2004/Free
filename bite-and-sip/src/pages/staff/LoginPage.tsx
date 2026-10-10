@@ -43,7 +43,7 @@ export function LoginPage() {
     <main className="grid min-h-dvh place-items-center bg-ink px-4 py-10">
       <div className="w-full max-w-sm">
         <div className="flex flex-col items-center text-center">
-          <img src="/brand/logo-320.webp" alt="Bite & Sip College Café" width={120} height={120} className="rounded-3xl" />
+          <img src={`${import.meta.env.BASE_URL}brand/logo-320.webp`} alt="Bite & Sip College Café" width={120} height={120} className="rounded-3xl" />
           <h1 className="mt-5 text-2xl font-extrabold text-white">Staff sign in</h1>
           <p className="mt-1 text-sm text-white/65">Kitchen and owner access only.</p>
         </div>
