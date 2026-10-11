@@ -53,7 +53,8 @@
       "is_available": true,
       "is_popular": true,
       "sort_order": 1,
-      "addons": []
+      "addons": [],
+      "image_path": "/menu/masala-chai.webp"
     },
     {
       "id": "8a2b0c11-0002-4b1e-8c20-000000000002",
@@ -65,7 +66,8 @@
       "is_available": true,
       "is_popular": false,
       "sort_order": 2,
-      "addons": []
+      "addons": [],
+      "image_path": "/menu/filter-coffee.webp"
     },
     {
       "id": "8a2b0c11-0002-4b1e-8c20-000000000003",
@@ -84,7 +86,8 @@
           "price": 20,
           "sort_order": 1
         }
-      ]
+      ],
+      "image_path": "/menu/cold-coffee.webp"
     },
     {
       "id": "8a2b0c11-0002-4b1e-8c20-000000000004",
@@ -96,7 +99,8 @@
       "is_available": true,
       "is_popular": false,
       "sort_order": 4,
-      "addons": []
+      "addons": [],
+      "image_path": "/menu/lime-soda.webp"
     },
     {
       "id": "8a2b0c11-0002-4b1e-8c20-000000000005",
@@ -108,7 +112,8 @@
       "is_available": true,
       "is_popular": false,
       "sort_order": 5,
-      "addons": []
+      "addons": [],
+      "image_path": "/menu/chocolate-shake.webp"
     },
     {
       "id": "8a2b0c11-0002-4b1e-8c20-000000000006",
@@ -120,7 +125,8 @@
       "is_available": true,
       "is_popular": true,
       "sort_order": 1,
-      "addons": []
+      "addons": [],
+      "image_path": "/menu/samosa.webp"
     },
     {
       "id": "8a2b0c11-0002-4b1e-8c20-000000000007",
@@ -139,7 +145,8 @@
           "price": 15,
           "sort_order": 1
         }
-      ]
+      ],
+      "image_path": "/menu/veg-sandwich.webp"
     },
     {
       "id": "8a2b0c11-0002-4b1e-8c20-000000000008",
@@ -151,7 +158,8 @@
       "is_available": false,
       "is_popular": false,
       "sort_order": 3,
-      "addons": []
+      "addons": [],
+      "image_path": "/menu/paneer-wrap.webp"
     },
     {
       "id": "8a2b0c11-0002-4b1e-8c20-000000000009",
@@ -163,7 +171,8 @@
       "is_available": true,
       "is_popular": false,
       "sort_order": 4,
-      "addons": []
+      "addons": [],
+      "image_path": "/menu/bread-omelette.webp"
     },
     {
       "id": "8a2b0c11-0002-4b1e-8c20-000000000010",
@@ -194,7 +203,8 @@
           "price": 10,
           "sort_order": 3
         }
-      ]
+      ],
+      "image_path": "/menu/maggi.webp"
     },
     {
       "id": "8a2b0c11-0002-4b1e-8c20-000000000011",
@@ -213,7 +223,8 @@
           "price": 25,
           "sort_order": 1
         }
-      ]
+      ],
+      "image_path": "/menu/veg-fried-rice.webp"
     },
     {
       "id": "8a2b0c11-0002-4b1e-8c20-000000000012",
@@ -225,7 +236,8 @@
       "is_available": true,
       "is_popular": false,
       "sort_order": 3,
-      "addons": []
+      "addons": [],
+      "image_path": "/menu/egg-fried-rice.webp"
     },
     {
       "id": "8a2b0c11-0002-4b1e-8c20-000000000013",
@@ -237,7 +249,8 @@
       "is_available": true,
       "is_popular": false,
       "sort_order": 1,
-      "addons": []
+      "addons": [],
+      "image_path": "/menu/maggi-chai-combo.webp"
     },
     {
       "id": "8a2b0c11-0002-4b1e-8c20-000000000014",
@@ -249,7 +262,8 @@
       "is_available": true,
       "is_popular": false,
       "sort_order": 2,
-      "addons": []
+      "addons": [],
+      "image_path": "/menu/samosa-chai-combo.webp"
     }
   ]
 }

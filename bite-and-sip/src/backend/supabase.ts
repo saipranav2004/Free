@@ -1,5 +1,6 @@
 import { createClient, type RealtimeChannel, type SupabaseClient } from '@supabase/supabase-js'
 import { AppError, toAppError } from '../lib/errors'
+import { bundledImage, isBundledImage } from '../lib/images'
 import { cafeDayStartIso, addDays } from '../lib/format'
 import type {
   CafeSettings, CafeTable, Category, CustomerOrder, MenuItem, PlaceOrderInput, SalesSummary,
@@ -104,6 +105,7 @@ export function createSupabaseBackend(url: string, key: string): Backend {
 
     imageUrl(path) {
       if (!path) return null
+      if (isBundledImage(path)) return bundledImage(path)!.src
       return sb.storage.from(IMAGE_BUCKET).getPublicUrl(path).data.publicUrl
     },
 

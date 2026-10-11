@@ -95,7 +95,7 @@
   }
   .chip {
     @apply inline-flex min-h-11 items-center gap-1.5 rounded-full border border-line-strong bg-surface px-4 text-sm font-bold text-ink-2
-      transition-colors hover:border-ink;
+      transition-[color,background-color,border-color,transform] duration-150 hover:border-ink active:scale-[0.96];
   }
   .chip[aria-pressed='true'] {
     @apply border-ink bg-ink text-brand;
@@ -144,5 +144,208 @@
   }
   body {
     background: white;
+  }
+}
+
+/* ---- Brand intro (src/components/Splash.tsx) ---------------------------- */
+.intro-logo {
+  animation: intro-logo 900ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  /* Feather the square photo's edge into the background. */
+  mask-image: radial-gradient(circle at 50% 50%, #000 66%, transparent 71%);
+}
+@keyframes intro-logo {
+  from {
+    opacity: 0;
+    transform: scale(0.82) rotate(-4deg);
+    filter: blur(14px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) rotate(0);
+    filter: blur(0);
+  }
+}
+.intro-ring circle {
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+  transform-origin: 50% 50%;
+  transform: rotate(-90deg);
+  animation: intro-ring 1100ms 250ms cubic-bezier(0.65, 0, 0.35, 1) forwards;
+}
+@keyframes intro-ring {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+.intro-glow {
+  background: radial-gradient(circle, rgb(252 192 20 / 0.28), rgb(252 192 20 / 0.08) 40%, transparent 68%);
+  animation: intro-glow 2400ms ease-in-out 300ms both;
+}
+@keyframes intro-glow {
+  0% {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.05);
+  }
+  100% {
+    opacity: 0.75;
+    transform: scale(1);
+  }
+}
+.intro-tagline {
+  animation: intro-fade-up 700ms 650ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.intro-bar {
+  animation: intro-fade-up 500ms 900ms ease-out both;
+}
+.intro-bar span {
+  animation: intro-bar 1100ms ease-in-out infinite;
+}
+.intro-skip {
+  animation: intro-fade-up 400ms 1200ms ease-out both;
+}
+@keyframes intro-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes intro-bar {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(300%);
+  }
+}
+.intro[data-phase='exit'] .intro-tagline,
+.intro[data-phase='exit'] .intro-bar,
+.intro[data-phase='exit'] .intro-skip {
+  opacity: 0;
+  transition: opacity 200ms;
+}
+
+/* ---- Page & component motion ------------------------------------------------ */
+::view-transition-old(root) {
+  animation: vt-out 160ms ease-in both;
+}
+::view-transition-new(root) {
+  animation: vt-in 320ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes vt-out {
+  to {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+@keyframes vt-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+.vt-header {
+  view-transition-name: site-header;
+}
+::view-transition-old(site-header),
+::view-transition-new(site-header) {
+  animation: none;
+}
+
+.animate-rise {
+  animation: rise 520ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-bump {
+  animation: bump 420ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes bump {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.045);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.animate-pop {
+  animation: pop 640ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes pop {
+  0% {
+    transform: scale(0.94);
+  }
+  60% {
+    transform: scale(1.02);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.animate-rise-flash {
+  animation:
+    rise 520ms cubic-bezier(0.16, 1, 0.3, 1) both,
+    ring-flash 2.6s ease-out;
+}
+@keyframes ring-flash {
+  0%,
+  30% {
+    box-shadow: 0 0 0 4px rgb(252 192 20 / 0.9);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgb(252 192 20 / 0);
+  }
+}
+.check-draw circle {
+  stroke-dasharray: 160;
+  stroke-dashoffset: 160;
+  animation: draw 600ms cubic-bezier(0.65, 0, 0.35, 1) forwards;
+}
+.check-draw path {
+  stroke-dasharray: 40;
+  stroke-dashoffset: 40;
+  animation: draw 380ms 480ms cubic-bezier(0.65, 0, 0.35, 1) forwards;
+}
+@keyframes draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+.confetti i {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 8px;
+  height: 12px;
+  border-radius: 2px;
+  opacity: 0;
+  animation: confetti 1100ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+@keyframes confetti {
+  0% {
+    opacity: 1;
+    transform: translate(-50%, -50%) rotate(0) scale(0.6);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(calc(-50% + var(--x)), calc(-50% + var(--y))) rotate(var(--r)) scale(1);
   }
 }

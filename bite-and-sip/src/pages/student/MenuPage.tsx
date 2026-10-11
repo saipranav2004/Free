@@ -1,11 +1,12 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { backend } from '../../backend'
 import { FoodImage } from '../../components/FoodArt'
 import { IconArrowRight, IconBag, IconPin, IconRefresh, IconSearch, IconX } from '../../components/icons'
+import { SiteFooter } from '../../components/SiteFooter'
 import { DemoRibbon, StudentHeader } from '../../components/StudentShell'
 import { Banner, Button, EmptyState, QuantityStepper, useToast, VegMark } from '../../components/ui'
 import { money } from '../../lib/format'
+import { flyToCart } from '../../lib/motion'
 import { lineKey, priceCart } from '../../lib/pricing'
 import type { MenuItem } from '../../lib/types'
 import { useCart } from '../../state/cart'
@@ -42,7 +43,17 @@ export function MenuPage() {
   const priced = data ? priceCart(cart.lines, data.menu.items) : null
   const isOpen = data?.settings.is_open ?? true
 
-  const addPlain = (item: MenuItem) => {
+  // Bounce the cart bar whenever something new lands in it.
+  const units = priced?.units ?? 0
+  const prevUnits = useRef(units)
+  const [bump, setBump] = useState(0)
+  useEffect(() => {
+    if (units > prevUnits.current) setBump((b) => b + 1)
+    prevUnits.current = units
+  }, [units])
+
+  const addPlain = (item: MenuItem, from?: Element | null) => {
+    flyToCart(from ?? null)
     cart.add(item.id, [], 1, '')
     toast(`${item.name} added`, 'success')
   }
@@ -64,10 +75,10 @@ export function MenuPage() {
     .filter((g) => g.items.length > 0)
 
   return (
-    <div className="min-h-dvh pb-28">
+    <div className="min-h-dvh">
       <DemoRibbon />
       <StudentHeader />
-      <section className="rounded-b-[1.75rem] bg-ink px-4 pt-2 pb-5 text-white">
+      <section data-hero className="rounded-b-[1.75rem] bg-ink px-4 pt-2 pb-5 text-white">
         <div className="mx-auto max-w-3xl md:px-4">
           <p className="inline-flex min-h-9 items-center gap-1.5 rounded-full bg-brand px-3 text-sm font-bold text-ink">
             <IconPin size={16} />
@@ -127,14 +138,15 @@ export function MenuPage() {
           <section aria-labelledby="popular-h" className="mt-3">
             <h2 id="popular-h" className="text-lg font-extrabold">Popular right now</h2>
             <div className="-mx-4 mt-3 flex snap-x gap-3 overflow-x-auto px-4 pb-2 [scrollbar-width:none]">
-              {popular.map((item) => (
+              {popular.map((item, i) => (
                 <button
                   key={item.id}
                   type="button"
                   onClick={() => setSelected(item)}
-                  className="card w-40 shrink-0 snap-start overflow-hidden text-left transition-transform active:scale-[0.98]"
+                  style={{ animationDelay: `${i * 70}ms` }}
+                  className="card animate-rise w-40 shrink-0 snap-start overflow-hidden text-left transition-transform active:scale-[0.98]"
                 >
-                  <FoodImage name={item.name} category={catName(item.category_id)} url={backend.imageUrl(item.image_path)} className="aspect-[4/3] w-full" />
+                  <FoodImage name={item.name} category={catName(item.category_id)} path={item.image_path} className="aspect-[4/3] w-full" />
                   <span className="block px-3 pt-2 pb-3">
                     <span className="line-clamp-1 text-sm font-bold">{item.name}</span>
                     <span className="tabular text-sm font-semibold text-muted">{money(item.price)}</span>
@@ -158,21 +170,22 @@ export function MenuPage() {
             Try another word, like “chai” or “maggi”.
           </EmptyState>
         ) : (
-          grouped.map(({ category: c, items }) => (
+          grouped.map(({ category: c, items }, gi) => (
             <section key={c.id} aria-labelledby={`cat-${c.id}`} className="mt-6">
               <h2 id={`cat-${c.id}`} className="text-lg font-extrabold">
                 {c.name} <span className="text-sm font-semibold text-subtle">· {items.length}</span>
               </h2>
               <ul className="mt-2 divide-y divide-line">
-                {items.map((item) => (
+                {items.map((item, i) => (
                   <MenuRow
                     key={item.id}
+                    delay={Math.min(gi * 90 + i * 45, 520)}
                     item={item}
                     categoryName={c.name}
                     disabled={!isOpen}
                     plainQty={cart.plainQuantity(item.id)}
                     onOpen={() => setSelected(item)}
-                    onAdd={() => (item.addons.length ? setSelected(item) : addPlain(item))}
+                    onAdd={(from) => (item.addons.length ? setSelected(item) : addPlain(item, from))}
                     onSetPlain={(n) => cart.setQuantity(lineKey(item.id, [], ''), n)}
                   />
                 ))}
@@ -181,6 +194,7 @@ export function MenuPage() {
           ))
         )}
       </main>
+      <SiteFooter />
 
       <ItemSheet
         key={selected?.id ?? 'none'}
@@ -197,16 +211,16 @@ export function MenuPage() {
       />
 
       {priced && priced.units > 0 && (
-        <div className="fixed inset-x-0 bottom-0 z-30 px-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+        <div className="animate-rise fixed inset-x-0 bottom-0 z-30 px-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
           <button
             type="button"
-            onClick={() => navigate('/cart')}
+            onClick={() => navigate('/cart', { viewTransition: true })}
             className="mx-auto flex min-h-15 w-full max-w-3xl items-center gap-3 rounded-2xl bg-ink px-4 text-left text-white shadow-[var(--shadow-float)]"
           >
-            <span className="grid size-9 place-items-center rounded-full bg-brand text-ink">
+            <span key={`bag-${bump}`} data-cart-target className={`grid size-9 place-items-center rounded-full bg-brand text-ink ${bump ? 'animate-bump' : ''}`}>
               <IconBag size={18} />
             </span>
-            <span className="flex-1">
+            <span key={`sum-${bump}`} className={`flex-1 ${bump ? 'animate-bump' : ''}`}>
               <span className="block text-sm font-semibold text-white/75">
                 {priced.units} {priced.units === 1 ? 'item' : 'items'}
               </span>
@@ -223,22 +237,24 @@ export function MenuPage() {
 }
 
 function MenuRow({
-  item, categoryName, plainQty, disabled, onOpen, onAdd, onSetPlain,
+  item, categoryName, plainQty, disabled, delay, onOpen, onAdd, onSetPlain,
 }: {
   item: MenuItem
+  delay: number
   categoryName: string
   plainQty: number
   disabled: boolean
   onOpen: () => void
-  onAdd: () => void
+  onAdd: (from: Element | null) => void
   onSetPlain: (n: number) => void
 }) {
   const customisable = item.addons.length > 0
+  const photo = useRef<HTMLSpanElement>(null)
   return (
-    <li className="flex gap-3 py-4">
+    <li className="animate-rise flex gap-3 py-4" style={{ animationDelay: `${delay}ms` }}>
       <button type="button" onClick={onOpen} className="flex min-w-0 flex-1 gap-3 text-left" aria-label={`${item.name}, ${money(item.price)}. View details`}>
-        <span className="relative size-20 shrink-0 overflow-hidden rounded-2xl ring-1 ring-line sm:size-24">
-          <FoodImage name={item.name} category={categoryName} url={backend.imageUrl(item.image_path)} className={`size-full ${item.is_available ? '' : 'grayscale'}`} />
+        <span ref={photo} className="relative size-20 shrink-0 overflow-hidden rounded-2xl ring-1 ring-line sm:size-24">
+          <FoodImage name={item.name} category={categoryName} path={item.image_path} className={`size-full ${item.is_available ? '' : 'grayscale'}`} />
         </span>
         <span className="min-w-0 flex-1">
           <span className="flex items-center gap-1.5">
@@ -256,7 +272,7 @@ function MenuRow({
         ) : plainQty > 0 && !customisable ? (
           <QuantityStepper size="sm" value={plainQty} min={0} onChange={onSetPlain} label={item.name} />
         ) : (
-          <Button size="sm" variant="secondary" disabled={disabled} onClick={onAdd} className="min-w-20 border-ink font-extrabold" aria-label={`Add ${item.name}`}>
+          <Button size="sm" variant="secondary" disabled={disabled} onClick={() => onAdd(photo.current)} className="min-w-20 border-ink font-extrabold" aria-label={`Add ${item.name}`}>
             Add
           </Button>
         )}

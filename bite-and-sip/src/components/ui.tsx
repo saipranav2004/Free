@@ -32,7 +32,7 @@ export function Button({
       type={type}
       disabled={disabled || loading}
       aria-busy={loading || undefined}
-      className={`inline-flex items-center justify-center font-bold transition-colors select-none ${VARIANTS[variant]} ${SIZES[size]} ${className}`}
+      className={`inline-flex items-center justify-center font-bold transition-[color,background-color,border-color,transform] duration-150 select-none active:scale-[0.97] disabled:active:scale-100 ${VARIANTS[variant]} ${SIZES[size]} ${className}`}
       {...rest}
     >
       {loading && <Spinner className="size-4" />}
@@ -294,7 +294,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           <div
             key={t.id}
             role={t.tone === 'error' ? 'alert' : 'status'}
-            className={`animate-slide-up pointer-events-auto flex max-w-md items-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold shadow-[var(--shadow-float)] ${
+            className={`animate-slide-up pointer-events-none flex max-w-md items-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold shadow-[var(--shadow-float)] ${
               t.tone === 'error' ? 'bg-danger text-white' : 'bg-ink text-white'
             }`}
           >

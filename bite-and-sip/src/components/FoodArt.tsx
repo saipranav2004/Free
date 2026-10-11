@@ -1,3 +1,6 @@
+import { useState } from 'react'
+import { backend } from '../backend'
+import { bundledImage } from '../lib/images'
 // Illustrated fallback used until the owner uploads a real photo.
 type Kind = 'chai' | 'coffee' | 'glass' | 'soda' | 'samosa' | 'sandwich' | 'wrap' | 'egg' | 'noodles' | 'rice' | 'combo' | 'plate'
 
@@ -124,9 +127,33 @@ export function FoodArt({ name, category, className = '' }: { name: string; cate
   )
 }
 
+/**
+ * Menu photo with a graceful load: the illustrated tile shows first, the photo
+ * fades in once decoded, and the tile stays if the photo fails to load.
+ */
 export function FoodImage({
-  name, category, url, className = '',
-}: { name: string; category?: string; url: string | null; className?: string }) {
-  if (url) return <img src={url} alt="" loading="lazy" decoding="async" className={`object-cover ${className}`} />
-  return <FoodArt name={name} category={category} className={className} />
+  name, category, path, className = '', sizes = '(min-width: 640px) 240px, 40vw', eager = false,
+}: { name: string; category?: string; path: string | null; className?: string; sizes?: string; eager?: boolean }) {
+  const [loaded, setLoaded] = useState(false)
+  const [failed, setFailed] = useState(false)
+  const bundled = bundledImage(path)
+  const src = bundled?.src ?? backend.imageUrl(path)
+  return (
+    <span className={`relative block overflow-hidden ${className}`}>
+      {(!src || failed || !loaded) && <FoodArt name={name} category={category} className="absolute inset-0 size-full" />}
+      {src && !failed && (
+        <img
+          src={src}
+          srcSet={bundled?.srcSet}
+          sizes={bundled ? sizes : undefined}
+          alt=""
+          loading={eager ? 'eager' : 'lazy'}
+          decoding="async"
+          onLoad={() => setLoaded(true)}
+          onError={() => setFailed(true)}
+          className={`absolute inset-0 size-full object-cover transition-[opacity,transform] duration-500 ease-out ${loaded ? 'scale-100 opacity-100' : 'scale-[1.03] opacity-0'}`}
+        />
+      )}
+    </span>
+  )
 }

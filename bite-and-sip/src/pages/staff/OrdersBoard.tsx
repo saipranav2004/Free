@@ -26,7 +26,10 @@ export function OrdersBoard() {
   const [soundReady, setSoundReady] = useState(false)
   const [tab, setTab] = useState<Column>('placed')
   const [now, setNow] = useState(() => Date.now())
+  const [freshIds, setFreshIds] = useState<Set<string>>(new Set())
   const { orders, error, live, lastSync, refetch, applyRow } = useStaffOrders((fresh) => {
+    setFreshIds((s) => new Set([...s, ...fresh.map((o) => o.id)]))
+    setTimeout(() => setFreshIds((s) => new Set([...s].filter((id) => !fresh.some((o) => o.id === id)))), 4000)
     chime.current.play()
     toast(fresh.length === 1 ? `New order ${orderCode(fresh[0].order_no)}` : `${fresh.length} new orders`, 'success')
   })
@@ -130,7 +133,7 @@ export function OrdersBoard() {
                 <p className="rounded-2xl border border-dashed border-line-strong px-4 py-8 text-center text-sm text-muted">{c.empty}</p>
               )}
               {byStatus(c.status).map((o) => (
-                <OrderCard key={o.id} order={o} now={now} onChanged={applyRow} onConflict={() => void refetch()} />
+                <OrderCard key={o.id} order={o} now={now} fresh={freshIds.has(o.id)} onChanged={applyRow} onConflict={() => void refetch()} />
               ))}
             </div>
           </section>
@@ -143,8 +146,8 @@ export function OrdersBoard() {
 }
 
 function OrderCard({
-  order, now, onChanged, onConflict,
-}: { order: StaffOrder; now: number; onChanged: (o: StaffOrder) => void; onConflict: () => void }) {
+  order, now, fresh, onChanged, onConflict,
+}: { order: StaffOrder; now: number; fresh: boolean; onChanged: (o: StaffOrder) => void; onConflict: () => void }) {
   const toast = useToast()
   const { profile } = useStaffSession()
   const [busy, setBusy] = useState<string | null>(null)
@@ -180,7 +183,7 @@ function OrderCard({
 
   return (
     <article
-      className={`card overflow-hidden ${pay === 'upi_verifying' ? 'ring-2 ring-brand-strong' : ''}`}
+      className={`card overflow-hidden ${fresh ? 'animate-rise-flash' : 'animate-rise'} ${pay === 'upi_verifying' ? 'ring-2 ring-brand-strong' : ''}`}
       aria-label={`Order ${orderCode(order.order_no)} for ${order.customer_name}`}
     >
       <header className="flex items-start gap-3 border-b border-line px-4 pt-3 pb-2.5">

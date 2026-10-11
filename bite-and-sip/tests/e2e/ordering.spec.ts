@@ -2,6 +2,39 @@ import AxeBuilder from '@axe-core/playwright'
 import { expect, test } from '@playwright/test'
 import { expectNoHorizontalOverflow, KITCHEN, OWNER, showStage, signIn, staffPage, uniquePhone } from './helpers'
 
+// The brand intro plays once per session; skip it except in the test that covers it.
+test.beforeEach(async ({ context }, testInfo) => {
+  if (!testInfo.title.startsWith('brand intro')) {
+    await context.addInitScript(() => sessionStorage.setItem('bitesip-intro-seen', '1'))
+  }
+})
+
+test('brand intro plays once on QR entry, can be skipped, and never shows for staff', async ({ page }) => {
+  await page.goto('/t/T5')
+  const intro = page.getByTestId('intro')
+  await expect(intro).toBeVisible()
+  await expect(page.getByRole('img', { name: 'Bite & Sip College Café' })).toBeVisible()
+  await page.getByRole('button', { name: 'Skip' }).click()
+  await expect(intro).toHaveCount(0)
+  await expect(page.getByText('Table T5 · Pickup at the counter')).toBeVisible()
+  await page.reload()
+  await expect(page.getByRole('heading', { name: /Order from your seat/ })).toBeVisible()
+  await expect(intro).toHaveCount(0)
+  const fresh = await page.context().browser()!.newContext()
+  const staff = await fresh.newPage()
+  await staff.goto(page.url().replace(/\/[^/]*$/, '/staff/login'))
+  await expect(staff.getByRole('heading', { name: 'Staff sign in' })).toBeVisible()
+  await expect(staff.getByTestId('intro')).toHaveCount(0)
+  await fresh.close()
+})
+
+test('brand intro auto: leaves by itself once the menu has loaded', async ({ page }) => {
+  await page.goto('/')
+  await expect(page.getByTestId('intro')).toBeVisible()
+  await expect(page.getByTestId('intro')).toHaveCount(0, { timeout: 6000 })
+  await expect(page.getByRole('button', { name: /Masala Chai, ₹15/ })).toBeVisible()
+})
+
 test('student orders with UPI, kitchen verifies and hands over, student sees each step live', async ({ page, browser }) => {
   const errors: string[] = []
   page.on('pageerror', (e) => errors.push(e.message))

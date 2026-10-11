@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { CheckBurst, Confetti } from '../../components/Celebrate'
 import { Link, useLocation, useParams } from 'react-router-dom'
 import { backend } from '../../backend'
 import { IconCheck, IconCopy, IconExternal, IconRefresh, IconWifiOff } from '../../components/icons'
@@ -21,11 +22,23 @@ export function OrderPage() {
   const token = tokenFor(id)
   const { order, setOrder, error, live, lastSync, refetch } = useOrderTracking(id, token)
   const prevStatus = useRef<string | null>(null)
+  // Celebrate a freshly placed order once, and again when it turns ready.
+  // (Only for an order placed in the last minute, so a page refresh doesn't replay it.)
+  const [celebrate, setCelebrate] = useState(0)
+  const freshOrder = !!order && Date.now() - new Date(order.created_at).getTime() < 60_000
+  const celebratedPlacement = useRef(false)
+  useEffect(() => {
+    if (justPlaced && freshOrder && !celebratedPlacement.current) {
+      celebratedPlacement.current = true
+      setCelebrate((c) => c + 1)
+    }
+  }, [justPlaced, freshOrder])
 
   // Nudge the student when the order becomes ready.
   useEffect(() => {
     if (!order) return
     if (prevStatus.current && prevStatus.current !== 'ready' && order.status === 'ready') {
+      setCelebrate((c) => c + 1)
       try {
         navigator.vibrate?.([200, 100, 200])
       } catch {
@@ -77,18 +90,22 @@ export function OrderPage() {
       <DemoRibbon />
       <StudentHeader back="/" title={`Order ${code}`} />
       <main className="mx-auto max-w-3xl space-y-4 px-4 pt-4">
-        {justPlaced && order.status === 'placed' && (
+        {justPlaced && freshOrder && order.status === 'placed' && (
           <Banner tone="success" title="Order placed!">
             Keep this page open — it updates by itself.
           </Banner>
         )}
 
+        <div className="relative">
+        {celebrate > 0 && <Confetti key={`c${celebrate}`} count={order.status === 'ready' ? 34 : 26} />}
         <section
-          className={`card overflow-hidden ${order.status === 'ready' ? 'border-ink bg-brand' : ''}`}
+          key={`hero-${order.status === 'ready' ? 'ready' : 'base'}`}
+          className={`card overflow-hidden transition-colors duration-500 ${order.status === 'ready' ? 'animate-pop border-ink bg-brand' : ''}`}
           aria-live="polite"
           aria-atomic="true"
         >
           <div className="px-5 pt-5 pb-4 text-center">
+            {justPlaced && freshOrder && order.status === 'placed' && <CheckBurst className="mx-auto mb-2 size-14" />}
             <p className="text-sm font-bold tracking-wider text-ink-2 uppercase">Order number</p>
             <p className="tabular mt-1 text-5xl font-extrabold tracking-tight">{code}</p>
             <p className="mt-1 text-sm font-semibold text-ink-2">
@@ -106,6 +123,7 @@ export function OrderPage() {
           </div>
           {order.status !== 'cancelled' && <Steps order={order} />}
         </section>
+        </div>
 
         <PaymentCard order={order} onUpdated={setOrder} />
 
@@ -151,9 +169,13 @@ function Steps({ order }: { order: CustomerOrder }) {
         const current = i === idx
         return (
           <li key={s.status} className="relative flex flex-col items-center text-center" aria-current={current ? 'step' : undefined}>
-            {i > 0 && <span className={`absolute top-3.5 right-1/2 h-0.5 w-full ${i <= idx ? 'bg-ink' : 'bg-line-strong'}`} aria-hidden="true" />}
+            {i > 0 && (
+              <span className="absolute top-3.5 right-1/2 h-0.5 w-full bg-line-strong" aria-hidden="true">
+                <span className={`block h-full bg-ink transition-[width] duration-700 ease-out ${i <= idx ? 'w-full' : 'w-0'}`} />
+              </span>
+            )}
             <span
-              className={`relative z-10 grid size-7 place-items-center rounded-full border-2 ${
+              className={`relative z-10 grid size-7 place-items-center rounded-full border-2 transition-colors duration-500 ${
                 done ? 'border-ink bg-ink text-brand' : 'border-line-strong bg-surface text-transparent'
               } ${current && s.status !== 'completed' ? 'animate-pulse-ring' : ''}`}
             >

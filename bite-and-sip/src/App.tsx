@@ -1,4 +1,6 @@
-import { BrowserRouter, HashRouter, MemoryRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { useState } from 'react'
+import { BrowserRouter, HashRouter, MemoryRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { shouldShowIntro, Splash } from './components/Splash'
 import { ToastProvider } from './components/ui'
 import { NotFound } from './pages/NotFound'
 import { LoginPage } from './pages/staff/LoginPage'
@@ -10,11 +12,12 @@ import { SettingsPage } from './pages/staff/SettingsPage'
 import { RequireStaff, StaffLayout } from './pages/staff/StaffLayout'
 import { CartPage } from './pages/student/CartPage'
 import { MenuPage } from './pages/student/MenuPage'
+import { CreditsPage } from './pages/student/CreditsPage'
 import { MyOrdersPage } from './pages/student/MyOrdersPage'
 import { OrderPage } from './pages/student/OrderPage'
 import { TableEntry } from './pages/student/TableEntry'
 import { CartProvider } from './state/cart'
-import { PublicDataProvider } from './state/publicData'
+import { PublicDataProvider, usePublicData } from './state/publicData'
 import { StaffSessionProvider } from './state/staffSession'
 
 export function AppRoutes() {
@@ -25,6 +28,7 @@ export function AppRoutes() {
       <Route path="/cart" element={<CartPage />} />
       <Route path="/order/:id" element={<OrderPage />} />
       <Route path="/orders" element={<MyOrdersPage />} />
+      <Route path="/credits" element={<CreditsPage />} />
 
       <Route path="/staff/login" element={<LoginPage />} />
       <Route path="/staff/print-qr" element={<RequireStaff ownerOnly><PrintQrPage /></RequireStaff>} />
@@ -55,11 +59,21 @@ export function Providers({ children }: { children: React.ReactNode }) {
 // Hash/memory routing is only for static previews that can't rewrite deep links to index.html.
 const Router = import.meta.env.VITE_ROUTER === 'hash' ? HashRouter : import.meta.env.VITE_ROUTER === 'memory' ? MemoryRouter : BrowserRouter
 
+/** Brand intro on the first student visit of a session; doubles as the menu loader. */
+function Intro() {
+  const location = useLocation()
+  const [show, setShow] = useState(() => shouldShowIntro(location.pathname))
+  const { data, error } = usePublicData()
+  if (!show) return null
+  return <Splash ready={!!data || !!error} onDone={() => setShow(false)} />
+}
+
 export default function App() {
   return (
     <Router>
       <Providers>
         <AppRoutes />
+        <Intro />
       </Providers>
     </Router>
   )

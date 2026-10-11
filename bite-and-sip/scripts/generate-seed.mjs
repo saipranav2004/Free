@@ -20,9 +20,9 @@ const lines = [
   'insert into public.categories (id, name, sort_order) values',
   catalog.categories.map((c) => `  (${q(c.id)}, ${q(c.name)}, ${c.sort_order})`).join(',\n') + ';',
   '',
-  'insert into public.menu_items (id, category_id, name, description, price, is_veg, is_available, is_popular, sort_order) values',
+  'insert into public.menu_items (id, category_id, name, description, price, is_veg, is_available, is_popular, image_path, sort_order) values',
   catalog.items
-    .map((i) => `  (${q(i.id)}, ${q(i.category_id)}, ${q(i.name)}, ${q(i.description)}, ${i.price}, ${i.is_veg}, ${i.is_available}, ${i.is_popular}, ${i.sort_order})`)
+    .map((i) => `  (${q(i.id)}, ${q(i.category_id)}, ${q(i.name)}, ${q(i.description)}, ${i.price}, ${i.is_veg}, ${i.is_available}, ${i.is_popular}, ${q(i.image_path ?? null)}, ${i.sort_order})`)
     .join(',\n') + ';',
   '',
   'insert into public.addons (id, menu_item_id, name, price, sort_order) values',

@@ -38,7 +38,7 @@ export function StaffLayout() {
           Demo mode — data lives in this browser only. Connect Supabase for the real café.
         </div>
       )}
-      <header className="no-print sticky top-0 z-30 bg-ink text-white">
+      <header className="vt-header no-print sticky top-0 z-30 bg-ink text-white">
         <div className="mx-auto flex h-14 max-w-[1500px] items-center gap-3 px-4">
           <Wordmark onDark className="text-[15px]" />
           <span className="hidden rounded-md bg-white/10 px-2 py-0.5 text-xs font-bold sm:inline">Staff</span>
@@ -89,6 +89,7 @@ function NavItem({ to, label, icon: Icon, end }: { to: string; label: string; ic
     <NavLink
       to={to}
       end={end}
+      viewTransition
       className={({ isActive }) =>
         `inline-flex min-h-10 shrink-0 items-center gap-2 rounded-lg px-3 text-sm font-bold transition-colors ${
           isActive ? 'bg-brand text-ink' : 'text-white/80 hover:bg-white/10 hover:text-white'

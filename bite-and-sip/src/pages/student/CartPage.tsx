@@ -61,7 +61,7 @@ export function CartPage() {
       <>
         <DemoRibbon />
         <StudentHeader back="/" title="Your cart" right={<span />} />
-        <EmptyState icon={<IconBag />} title="Your cart is empty" action={<Button onClick={() => navigate('/')}>Browse the menu</Button>}>
+        <EmptyState icon={<IconBag />} title="Your cart is empty" action={<Button onClick={() => navigate('/', { viewTransition: true })}>Browse the menu</Button>}>
           Add something tasty and it will show up here.
         </EmptyState>
       </>
@@ -123,7 +123,7 @@ export function CartPage() {
       rememberOrder({ id: order.id, token: ids.access_token, order_no: order.order_no, created_at: order.created_at })
       setPendingOrder(null)
       cart.clear()
-      navigate(`/order/${order.id}`, { replace: true, state: { justPlaced: true } })
+      navigate(`/order/${order.id}`, { replace: true, state: { justPlaced: true }, viewTransition: true })
     } catch (err) {
       const appErr = toAppError(err)
       if (appErr.code !== 'network' && appErr.code !== 'unknown') setPendingOrder(null)
@@ -148,13 +148,13 @@ export function CartPage() {
         <section aria-labelledby="items-h" className="card p-4">
           <div className="flex items-center justify-between">
             <h2 id="items-h" className="text-lg font-extrabold">Items</h2>
-            <Link to="/" className="text-sm font-bold underline underline-offset-4">Add more</Link>
+            <Link to="/" viewTransition className="text-sm font-bold underline underline-offset-4">Add more</Link>
           </div>
           <ul className="mt-2 divide-y divide-line">
             {priced.lines.map(({ line, item, addons, unitPrice, lineTotal, issue }) => (
               <li key={line.key} className="flex gap-3 py-3.5">
                 <span className="size-14 shrink-0 overflow-hidden rounded-xl ring-1 ring-line">
-                  <FoodImage name={item?.name ?? 'Item'} url={backend.imageUrl(item?.image_path ?? null)} className="size-full" />
+                  <FoodImage name={item?.name ?? 'Item'} path={item?.image_path ?? null} className="size-full" />
                 </span>
                 <div className="min-w-0 flex-1">
                   <p className="font-bold leading-snug">{item?.name ?? 'Removed item'}</p>

@@ -7,6 +7,7 @@ import { Banner, Button, Dialog, EmptyState, Spinner, Switch, useToast, VegMark 
 import { friendlyError } from '../../lib/errors'
 import { money } from '../../lib/format'
 import { prepareMenuPhoto } from '../../lib/image'
+import { isRemovableImage } from '../../lib/images'
 import type { Category, MenuItem } from '../../lib/types'
 import { cleanText } from '../../lib/validation'
 import { usePublicData } from '../../state/publicData'
@@ -85,7 +86,7 @@ export function MenuManager() {
                   <li key={item.id} className="px-4 py-3">
                     <div className="flex items-center gap-3">
                       <span className="size-14 shrink-0 overflow-hidden rounded-xl ring-1 ring-line">
-                        <FoodImage name={item.name} category={c.name} url={backend.imageUrl(item.image_path)} className={`size-full ${item.is_available ? '' : 'grayscale'}`} />
+                        <FoodImage name={item.name} category={c.name} path={item.image_path} className={`size-full ${item.is_available ? '' : 'grayscale'}`} />
                       </span>
                       <div className="min-w-0 flex-1">
                         <p className="flex items-center gap-1.5 font-bold">
@@ -255,7 +256,7 @@ function ItemEditor({
     try {
       await backend.saveMenuItem(input)
       // Remove the previous photo once the new one is saved.
-      if (item?.image_path && item.image_path !== imagePath) void backend.removeImage(item.image_path)
+      if (item?.image_path && isRemovableImage(item.image_path) && item.image_path !== imagePath) void backend.removeImage(item.image_path)
       for (const p of uploaded.current) if (p !== imagePath) void backend.removeImage(p)
       uploaded.current = []
       await onSaved(item ? `${input.name} updated` : `${input.name} added to the menu`)
@@ -271,7 +272,7 @@ function ItemEditor({
     setSaving(true)
     try {
       await backend.deleteMenuItem(item.id)
-      if (item.image_path) void backend.removeImage(item.image_path)
+      if (item.image_path && isRemovableImage(item.image_path)) void backend.removeImage(item.image_path)
       await onSaved(`${item.name} deleted`)
     } catch (err) {
       toast(friendlyError(err), 'error')
@@ -312,7 +313,7 @@ function ItemEditor({
         <div>
           <span className="label">Photo</span>
           <div className="relative aspect-square overflow-hidden rounded-2xl ring-1 ring-line">
-            <FoodImage name={name || 'item'} url={backend.imageUrl(imagePath)} className="size-full" />
+            <FoodImage name={name || 'item'} path={imagePath} className="size-full" />
             {uploading && <div className="absolute inset-0 grid place-items-center bg-white/70"><Spinner label="Uploading photo" /></div>}
           </div>
           <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" id="photo-input" onChange={(e) => void onPickPhoto(e.target.files?.[0])} />

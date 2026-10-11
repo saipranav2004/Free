@@ -1,9 +1,9 @@
-import { useId, useState } from 'react'
-import { backend } from '../../backend'
+import { useId, useRef, useState } from 'react'
 import { FoodImage } from '../../components/FoodArt'
 import { IconX } from '../../components/icons'
 import { Button, Dialog, QuantityStepper, VegMark } from '../../components/ui'
 import { money } from '../../lib/format'
+import { flyToCart } from '../../lib/motion'
 import { unitPrice } from '../../lib/pricing'
 import type { MenuItem } from '../../lib/types'
 
@@ -21,6 +21,7 @@ export function ItemSheet({
   const [qty, setQty] = useState(1)
   const [note, setNote] = useState('')
   const titleId = useId()
+  const photo = useRef<HTMLDivElement>(null)
   const noteId = useId()
 
   if (!item) return null
@@ -40,6 +41,7 @@ export function ItemSheet({
             className="flex-1"
             disabled={!canAdd}
             onClick={() => {
+              flyToCart(photo.current)
               onAdd(addonIds, qty, note)
               onClose()
             }}
@@ -49,8 +51,8 @@ export function ItemSheet({
         </div>
       }
     >
-      <div className="relative">
-        <FoodImage name={item.name} category={categoryName} url={backend.imageUrl(item.image_path)} className="aspect-[16/9] w-full" />
+      <div ref={photo} className="relative">
+        <FoodImage name={item.name} category={categoryName} path={item.image_path} className="aspect-[16/9] w-full" sizes="(min-width: 640px) 512px, 100vw" eager />
         <button
           type="button"
           onClick={onClose}

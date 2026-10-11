@@ -44,7 +44,7 @@ export function MyOrdersPage() {
         )}
         {!orders && !error && <div className="grid place-items-center py-20"><Spinner label="Loading your orders" /></div>}
         {orders && orders.length === 0 && (
-          <EmptyState icon={<IconReceipt />} title="No orders on this phone yet" action={<Link to="/"><Button>Browse the menu</Button></Link>}>
+          <EmptyState icon={<IconReceipt />} title="No orders on this phone yet" action={<Link to="/" viewTransition className="inline-flex min-h-11 items-center rounded-xl bg-brand px-4 font-bold text-ink hover:bg-brand-strong">Browse the menu</Link>}>
             Orders you place on this phone show up here so you can track them.
           </EmptyState>
         )}
@@ -63,9 +63,9 @@ function OrderList({ title, orders }: { title: string; orders: CustomerOrder[] }
     <section className="mt-4">
       <h2 className="text-sm font-extrabold tracking-wider text-muted uppercase">{title}</h2>
       <ul className="mt-2 space-y-2">
-        {orders.map((o) => (
-          <li key={o.id}>
-            <Link to={`/order/${o.id}`} className="card flex items-center gap-3 p-4 transition-colors hover:border-line-strong">
+        {orders.map((o, i) => (
+          <li key={o.id} className="animate-rise" style={{ animationDelay: `${Math.min(i * 60, 360)}ms` }}>
+            <Link to={`/order/${o.id}`} viewTransition className="card flex items-center gap-3 p-4 transition-colors hover:border-line-strong">
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="tabular font-extrabold">{orderCode(o.order_no)}</span>

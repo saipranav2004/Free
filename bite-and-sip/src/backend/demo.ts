@@ -15,9 +15,10 @@ import type {
 } from '../lib/types'
 import { cleanText, normalizePhone, normalizeTableLabel } from '../lib/validation'
 import { isValidUpiId } from '../lib/upi'
+import { bundledImage, isBundledImage } from '../lib/images'
 import type { Backend, LiveStatus, MenuItemInput, PublicData } from './types'
 
-const STORE_KEY = 'bitesip-demo-v1'
+const STORE_KEY = 'bitesip-demo-v2'
 const SESSION_KEY = 'bitesip-demo-session'
 
 export const DEMO_ACCOUNTS = [
@@ -59,7 +60,7 @@ function seedMenu(): { categories: Category[]; items: MenuItem[] } {
       is_veg: i.is_veg,
       is_available: i.is_available,
       is_popular: i.is_popular,
-      image_path: null,
+      image_path: i.image_path ?? null,
       sort_order: i.sort_order,
       addons: i.addons.map((a) => ({ ...a, menu_item_id: i.id, is_available: true })),
     })),
@@ -393,6 +394,7 @@ export function createDemoBackend(): Backend {
     },
 
     imageUrl(path) {
+      if (isBundledImage(path)) return bundledImage(path)!.src
       return path && path.startsWith('data:') ? path : null
     },
 
