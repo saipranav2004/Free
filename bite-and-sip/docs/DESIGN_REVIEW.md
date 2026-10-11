@@ -44,3 +44,13 @@ Run on 390 px phone, 820 px tablet and 1366 px desktop:
 | Scrollable tables not keyboard-reachable (axe) | Focusable labelled regions |
 | Hero on desktop narrower than header | Full-width black band; content aligned to the menu column |
 | Hourly chart showed only hours with sales | Full 8am–8pm day with empty hours |
+
+### Second review (intro, photos, motion)
+| Finding | Fix |
+|---|---|
+| Illustrated tiles looked generic next to real café competitors | 14 real, licence-checked photos. Veg items are verified to show veg food (two candidate "paneer" wraps were actually chicken rolls and were rejected) |
+| "Added" toast floated over the Add/+ buttons and blocked taps for 3.5 s | Toasts are click-through (they carry no actions) |
+| Intro steam lines duplicated the logo's own steam and looked like stray marks | Removed; ring + glow only |
+| Intro could hold slow-network students on a black screen | Intro doubles as the loader but leaves after ~4 s regardless, and is skippable |
+| Order-placed celebration would replay on page refresh | Only plays for orders placed in the last minute |
+| "Browse the menu" on My orders was a button inside a link (invalid, confusing for screen readers) | Single link styled as a button |

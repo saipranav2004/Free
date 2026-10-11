@@ -75,8 +75,27 @@ Checked automatically: no horizontal overflow on any page at phone (Pixel 7) and
 | Order ticket (staff) | header (number, status, name, phone last 4, table, timer chip), items with add-ons and highlighted notes, total + payment, one primary action |
 | Cart bar | black, count + total, yellow "View cart" |
 
+## Photography
+- Real, openly licensed food photos for every item (`public/menu/`, credits in `IMAGE_CREDITS.md` and on `/credits`). Each is cropped to 4:3 and served as WebP in two sizes (480 px / 960 px via `srcset`), about 30–60 KB each.
+- The illustrated tile renders first. The photo fades and settles in (500 ms) once decoded, and the tile stays if a photo fails. Sold-out items go greyscale with a "Sold out" label.
+- Owner uploads are resized on the device to ≤1000 px WebP before upload.
+
 ## Motion
-Only to explain change: sheet/toast slide-up (220 ms), pulse ring on the current tracking step, colour transitions. `prefers-reduced-motion` disables all of it.
+Motion explains change or marks a moment. It never delays a task, and every effect is decorative (the UI works without it).
+
+| Moment | Treatment | Timing |
+|---|---|---|
+| **Brand intro** (first student visit per session, `/` or `/t/:table`) | Logo sharpens from blur, a yellow ring draws, a glow breathes, then the black panel shrinks into the menu's black hero band | ~1.9 s minimum. Doubles as the loader (waits for the menu, max ~4 s). Tap, Skip or any key exits. Never shown on staff or order pages |
+| Page changes | View Transitions: old page fades up and out, new page rises in. The header stays put | 160 ms out / 320 ms in |
+| Menu load / filter | Rows rise in, staggered | 520 ms, 45 ms stagger, capped at 520 ms |
+| Add to cart | Photo flies along an arc into the cart bar. Bag icon and total bump | 720 ms flight, 420 ms bump |
+| Order placed | Check mark draws, confetti burst (brand colours) | 1.1 s, only within a minute of placing |
+| Order ready | Card turns yellow with a pop, confetti, phone vibrates | 640 ms pop |
+| Tracking steps | Connector lines fill, step dots change colour | 700 ms |
+| Kitchen: new order | Card rises in with a yellow ring flash, plus chime (if on) | 2.6 s flash |
+| Buttons and chips | Press scales to 97% | 150 ms |
+
+Easing: `cubic-bezier(0.16, 1, 0.3, 1)` for entrances, `cubic-bezier(0.65, 0, 0.35, 1)` for exits and morphs, a slight overshoot for bumps and pops. **`prefers-reduced-motion`** disables all animation: the intro becomes a 0.5 s static logo with a fade, and there are no flights or confetti.
 
 ## Accessibility requirements (met and tested)
 WCAG 2.1 AA contrast (computed, plus axe in E2E) · touch targets ≥ 44 px for primary controls · every input labelled · errors announced and linked · focus visible (3 px ink outline) · dialogs trap focus and close on Esc · live regions for status changes and toasts · `lang="en"` · images decorative unless meaningful (QR codes have descriptive alt text) · scrollable regions focusable · no information conveyed by colour alone.

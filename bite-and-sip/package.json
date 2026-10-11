@@ -16,7 +16,9 @@
     "test:e2e:supabase": "E2E_BACKEND=supabase playwright test",
     "seed:generate": "node scripts/generate-seed.mjs",
     "staff:create": "node scripts/create-staff.mjs",
-    "check": "npm run lint && npm run typecheck && npm test && npm run build"
+    "check": "npm run lint && npm run typecheck && npm test && npm run build",
+    "seed:sample-history": "node scripts/seed-sample-history.mjs",
+    "video:record": "node scripts/video/record.mjs http://localhost:4175 /tmp/bitesip-video && node scripts/video/overlays.mjs /tmp/bitesip-video && python3 scripts/video/compose.py /tmp/bitesip-video docs/media/walkthrough.mp4"
   },
   "dependencies": {
     "@fontsource-variable/plus-jakarta-sans": "^5.3.0",

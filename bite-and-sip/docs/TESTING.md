@@ -41,6 +41,7 @@ Set `PLAYWRIGHT_CHROMIUM_PATH` if Chromium is preinstalled elsewhere.
 | | invalid transitions, unauthorised payment changes | DB |
 | | duplicate submissions | DB (sequential and 5× concurrent) |
 | UI | mobile/tablet/desktop, no overflow | E2E |
+| | brand intro: shows on QR entry, skippable, once per session, never for staff, leaves after load | E2E |
 | | accessibility | E2E (axe on 8 pages × 2 viewports), contrast computed in `RESEARCH.md` |
 | | broken routes | E2E |
 
@@ -52,8 +53,8 @@ Set `PLAYWRIGHT_CHROMIUM_PATH` if Chromium is preinstalled elsewhere.
 | `npm test` (unit + component) | **29 / 29 passed** |
 | `npm run build` | pass (~135 KB gzipped JS) |
 | `npm run test:db` (local Supabase) | **47 / 47 passed**, including immediately after `supabase db reset` |
-| `npm run test:e2e` (demo) | **16 / 16 passed** (8 tests × phone + desktop) |
-| `npm run test:e2e:supabase` | **16 / 16 passed** |
+| `npm run test:e2e` (demo) | **20 / 20 passed** (10 tests × phone + desktop, incl. brand intro) |
+| `npm run test:e2e:supabase` | **20 / 20 passed** |
 | CSP smoke test | production build served with `vercel.json` headers: no CSP violations, fonts load, QR renders |
 
 ## Defects found by testing and fixed
@@ -63,6 +64,8 @@ Set `PLAYWRIGHT_CHROMIUM_PATH` if Chromium is preinstalled elsewhere.
 4. Scrollable tables weren't keyboard-focusable (axe `scrollable-region-focusable`).
 5. Field errors persisted after correction. They now clear on edit.
 6. Realtime tests were flaky after a cold start. A warm-up was added. This confirmed the need for the app's polling fallback, which already exists.
+7. The "added" toast blocked taps on the Add/+ buttons. Toasts are now click-through.
+8. A button nested inside a link on My orders. Replaced by a single link.
 
 ## Not covered automatically (manual checks recommended)
 - Real UPI apps (Google Pay, PhonePe, Paytm, BHIM) opening the deep link and scanning the QR with a live UPI ID. Use **Settings → Test with ₹1**.

@@ -2,6 +2,8 @@
 
 _Last updated: 11 Oct 2026 (IST), branch `ccr-e77530a6-crvjkv`._
 
+▶ Walkthrough video: `docs/media/walkthrough.mp4` (recorded on a real local Supabase backend; see `docs/VIDEO.md`).
+
 ## Current phase
 **MVP built and verified locally. Waiting on external accounts (Supabase project + Vercel) for the live deployment.**
 
@@ -14,6 +16,14 @@ _Last updated: 11 Oct 2026 (IST), branch `ccr-e77530a6-crvjkv`._
   - Staff: login, role-aware nav, live board (chime, timers, conflict handling), UPI verification, cash at handover, cancellations, menu CRUD with photos and add-ons, categories, availability, reports + CSV, settings (open/closed, UPI + test QR, tables, printable QR, staff access).
 - Demo backend for interactive mockups and previews (labelled "Demo mode").
 - Vercel config with SPA rewrites and security headers (CSP verified in a browser).
+- **Iteration 2:**
+  - brand intro from the café logo (once per session, skippable, reduced-motion aware, doubles as the loader)
+  - 14 real, licence-checked food photos with credits page
+  - view transitions, staggered reveals, fly-to-cart, order-placed and ready celebrations, kitchen new-order highlight
+  - "How it works" footer
+  - fixes: toasts blocking taps, nested link/button
+  - dev-only sample-history seed
+  - scripted walkthrough video
 
 ## Key decisions
 Counter pickup only · statuses `placed→preparing→ready→completed` + `cancelled` · payment `unpaid/paid` kept separate, with UPI "customer says paid" shown as a claim only · completion requires paid · paid→unpaid owner-only · device-generated 256-bit order secret (hash stored) for anonymous access · prices computed only in SQL · max 3 open orders per phone · IST business day · black = identity, yellow = action. Details: `docs/PRODUCT_SPEC.md`, `docs/SECURITY.md`.
@@ -25,8 +35,8 @@ Counter pickup only · statuses `placed→preparing→ready→completed` + `canc
 | Typecheck, build | pass |
 | Unit + component | 29/29 |
 | DB/security on local Supabase | 47/47 (also from a cold reset) |
-| E2E demo (phone + desktop) | 16/16 |
-| E2E local Supabase (phone + desktop) | 16/16 |
+| E2E demo (phone + desktop) | 20/20 |
+| E2E local Supabase (phone + desktop) | 20/20 |
 Full detail and defects fixed: `docs/TESTING.md`.
 
 ## Outstanding / external dependencies

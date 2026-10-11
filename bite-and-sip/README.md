@@ -1,5 +1,7 @@
 # Bite & Sip — College Café Ordering
 
+▶ **[Watch the 2-minute walkthrough](docs/media/walkthrough.mp4)**, recorded on a real Supabase backend.
+
 Students scan a table QR, order from their phone, pay cash or UPI, and get told when to collect at the counter. Kitchen staff work a live orders board. The owner manages the menu, café status, UPI ID, table QR codes and daily reports.
 
 **Stack:** React 19 · Vite · Tailwind CSS v4 · Supabase (Postgres, Auth, Realtime, Storage) · Vercel.
@@ -42,6 +44,8 @@ See [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) §2 (`npx supabase start`, create
 | [docs/TESTING.md](docs/TESTING.md) | Test strategy and executed results |
 | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Supabase + Vercel setup, operations, troubleshooting, security checklist |
 | [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) | Architecture, future phases |
+| [docs/IMAGE_CREDITS.md](docs/IMAGE_CREDITS.md) | Food photo sources and licences |
+| [docs/VIDEO.md](docs/VIDEO.md) | What the walkthrough shows and how to re-record it |
 
 ## Project layout
 ```
